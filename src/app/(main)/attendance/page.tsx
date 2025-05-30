@@ -6,15 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle } from 'lucide-react';
-import type { Metadata } from 'next'; // Not used directly for dynamic title here
+import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert } from 'lucide-react';
 import Image from 'next/image';
 
-// Not setting static metadata as title will be dynamic
-// export const metadata: Metadata = {
-//   title: 'Attendance - BizFlow',
-//   description: 'Check in and out with live photo and geolocation.',
-// };
+// --- Geofence Settings ---
+// TODO: In a real application, fetch these from a database configured by an admin.
+const OFFICE_LATITUDE = 37.7749; // Example: San Francisco, CA
+const OFFICE_LONGITUDE = -122.4194;
+const GEOFENCE_RADIUS_METERS = 100; // 100 meters radius
+// --- End Geofence Settings ---
 
 interface Location {
   latitude: number;
@@ -27,7 +27,25 @@ interface CheckInOutRecord {
   photoDataUrl: string;
   location: Location | null;
   timestamp: Date;
+  isWithinGeofence: boolean | null; // null if location not available, true/false otherwise
 }
+
+// Helper function to calculate distance between two lat/lon points (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth's radius in meters
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+  const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
+
 
 export default function AttendancePage() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -64,7 +82,6 @@ export default function AttendancePage() {
     getCameraPermission();
 
     return () => {
-      // Stop camera stream when component unmounts
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -130,24 +147,46 @@ export default function AttendancePage() {
     const photoDataUrl = capturePhoto();
     if (!photoDataUrl) {
       setIsSubmitting(false);
-      return; // Error handled in capturePhoto
+      return;
     }
 
     const location = await getGeolocation();
-    // If location is null, an error is already set by getGeolocation
+    let isWithinGeofence: boolean | null = null;
+    let toastDescription = `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}`;
 
+    if (location) {
+      const distance = calculateDistance(
+        location.latitude,
+        location.longitude,
+        OFFICE_LATITUDE,
+        OFFICE_LONGITUDE
+      );
+      isWithinGeofence = distance <= GEOFENCE_RADIUS_METERS;
+      toastDescription += ` from lat: ${location.latitude.toFixed(4)}, lon: ${location.longitude.toFixed(4)}.`;
+      if (!isWithinGeofence) {
+        toastDescription += ` You are outside the office geofence (Distance: ${distance.toFixed(0)}m).`;
+      } else {
+        toastDescription += ` You are within the office geofence.`;
+      }
+    } else {
+      toastDescription += ' (Location not available). Geofence status cannot be determined.';
+    }
+    
     const newRecord: CheckInOutRecord = {
       type,
       photoDataUrl,
       location,
       timestamp: new Date(),
+      isWithinGeofence,
     };
     setLastRecord(newRecord);
     setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
 
     toast({
-      title: `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}!`,
-      description: `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${newRecord.timestamp.toLocaleTimeString()}${location ? ` from lat: ${location.latitude.toFixed(4)}, lon: ${location.longitude.toFixed(4)}` : ' (location not available)'}.`,
+      title: `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}! ${isWithinGeofence === false ? '(Outside Geofence)' : ''}`,
+      description: toastDescription,
+      variant: isWithinGeofence === false ? 'destructive' : 'default',
+      duration: isWithinGeofence === false ? 9000 : 5000,
     });
     setIsSubmitting(false);
   };
@@ -160,7 +199,7 @@ export default function AttendancePage() {
             <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance
           </CardTitle>
           <CardDescription>
-            Use your camera and location to check in or check out.
+            Use your camera and location to check in or check out. Attendance is verified against office geofence (Radius: {GEOFENCE_RADIUS_METERS}m).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -183,13 +222,13 @@ export default function AttendancePage() {
                   className="w-full h-full object-cover"
                   autoPlay
                   muted
-                  playsInline // Important for mobile
+                  playsInline
                 />
                 {hasCameraPermission === false && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
                     <AlertTriangle className="h-12 w-12 mb-2 text-destructive" />
                     <p className="text-center font-semibold">Camera permission denied.</p>
-                    <p className="text-center text-sm">Please enable camera access in your browser settings to use this feature.</p>
+                    <p className="text-center text-sm">Please enable camera access in your browser settings.</p>
                   </div>
                 )}
                  {hasCameraPermission === null && (
@@ -229,10 +268,11 @@ export default function AttendancePage() {
           </div>
 
           {lastRecord && (
-            <Card className="mt-6 bg-muted/30">
+            <Card className={`mt-6 ${lastRecord.isWithinGeofence === false ? 'border-destructive bg-destructive/10' : 'bg-muted/30'}`}>
               <CardHeader>
-                <CardTitle className="text-lg">
-                  Last Action: {lastRecord.type === 'check-in' ? 'Checked In' : 'Checked Out'}
+                <CardTitle className="text-lg flex items-center">
+                  {lastRecord.type === 'check-in' ? 'Checked In' : 'Checked Out'} Details
+                  {lastRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" />}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -269,6 +309,22 @@ export default function AttendancePage() {
                         </p>
                       ) : (
                         <p className="text-muted-foreground">Location data not available or permission denied.</p>
+                      )}
+                    </div>
+                     <div>
+                      <p className="font-semibold flex items-center">
+                        {lastRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <CheckCircle className="mr-1 h-4 w-4 text-green-600" />}
+                        Geofence Status:
+                      </p>
+                      {lastRecord.location === null ? (
+                         <p className="text-muted-foreground">Could not determine (location unavailable).</p>
+                      ): lastRecord.isWithinGeofence ? (
+                        <p className="text-green-600 font-medium">Within office radius.</p>
+                      ) : (
+                        <p className="text-destructive font-medium">
+                          Outside office radius. 
+                          {lastRecord.location && ` (Approx. ${calculateDistance(lastRecord.location.latitude, lastRecord.location.longitude, OFFICE_LATITUDE, OFFICE_LONGITUDE).toFixed(0)}m away)`}
+                        </p>
                       )}
                     </div>
                   </div>

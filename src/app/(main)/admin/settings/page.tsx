@@ -1,10 +1,11 @@
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Building2, Clock, Palette, BellDot } from 'lucide-react';
+import { Building2, Clock, Palette, BellDot, MapPin } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -65,6 +66,40 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
       
+      <Separator />
+
+       <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5 text-primary" /> Geofence Settings</CardTitle>
+          <CardDescription>
+            Define office location and attendance radius. 
+            <span className="block text-xs text-muted-foreground/80 italic mt-1">
+              Note: Backend integration is required for these settings to be functional. Currently, geofence parameters are hardcoded for demonstration.
+            </span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="officeLat">Office Latitude</Label>
+              <Input id="officeLat" defaultValue="37.7749" placeholder="e.g., 37.7749"/>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="officeLon">Office Longitude</Label>
+              <Input id="officeLon" defaultValue="-122.4194" placeholder="e.g., -122.4194"/>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="geofenceRadius">Geofence Radius (meters)</Label>
+            <Input id="geofenceRadius" type="number" defaultValue="100" placeholder="e.g., 100"/>
+          </div>
+          <Button disabled>Save Geofence Settings</Button>
+           <p className="text-xs text-muted-foreground">
+            Employees attempting to check in/out outside this radius will have their attendance flagged.
+          </p>
+        </CardContent>
+      </Card>
+
       <Separator />
 
       <Card className="shadow-sm">
