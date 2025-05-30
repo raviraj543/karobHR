@@ -238,7 +238,9 @@ export default function AttendancePage() {
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
                   <div className="w-full sm:w-1/3">
-                    <p className="font-semibold mb-1">Photo:</p>
+                    <p className="font-semibold mb-1">
+                      {lastRecord.type === 'check-out' ? 'Checkout Photo:' : 'Check-in Photo:'}
+                    </p>
                     <Image
                       src={lastRecord.photoDataUrl}
                       alt={`Captured photo for ${lastRecord.type}`}
@@ -250,12 +252,15 @@ export default function AttendancePage() {
                   </div>
                   <div className="w-full sm:w-2/3 space-y-2">
                     <div>
-                      <p className="font-semibold">Time:</p>
+                      <p className="font-semibold">
+                        {lastRecord.type === 'check-out' ? 'Checkout Time:' : 'Check-in Time:'}
+                      </p>
                       <p>{lastRecord.timestamp.toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="font-semibold flex items-center">
-                        <MapPin className="mr-1 h-4 w-4 text-primary" /> Location:
+                        <MapPin className="mr-1 h-4 w-4 text-primary" /> 
+                        {lastRecord.type === 'check-out' ? 'Checkout Location:' : 'Check-in Location:'}
                       </p>
                       {lastRecord.location ? (
                         <p>
@@ -276,5 +281,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-    
