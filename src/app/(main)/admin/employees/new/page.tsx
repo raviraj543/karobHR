@@ -1,0 +1,237 @@
+
+'use client';
+
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label'; // Use ShadCN Label
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { UserPlus, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+import type { Metadata } from 'next';
+
+// export const metadata: Metadata = { // Metadata must be defined in Server Components
+//   title: 'Add New Employee - Admin - BizFlow',
+//   description: 'Create a new employee account with necessary details.',
+// };
+
+const newEmployeeSchema = z.object({
+  name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
+  employeeId: z.string().min(3, { message: 'Employee ID must be at least 3 characters.' })
+    .regex(/^[a-zA-Z0-9_.-]*$/, { message: 'Employee ID can only contain letters, numbers, and _ . -' }),
+  email: z.string().email({ message: 'Invalid email address.' }).optional().or(z.literal('')),
+  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  department: z.string().min(2, { message: 'Department is required.' }),
+  role: z.enum(['employee', 'admin']).default('employee'),
+  joiningDate: z.string().optional(), // Basic string input for simplicity
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"], // path to field that gets the error
+});
+
+type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
+
+export default function AddNewEmployeePage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  const form = useForm<NewEmployeeFormValues>({
+    resolver: zodResolver(newEmployeeSchema),
+    defaultValues: {
+      name: '',
+      employeeId: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      department: '',
+      role: 'employee',
+      joiningDate: new Date().toISOString().split('T')[0], // Default to today
+    },
+  });
+
+  const onSubmit = async (data: NewEmployeeFormValues) => {
+    setIsLoading(true);
+    // In a real application, you would send this data to your backend
+    // to create the user and store their credentials securely.
+    // For this mock, we'll just simulate success.
+    console.log('New Employee Data:', data);
+
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    toast({
+      title: "Employee Account Created (Mock)",
+      description: `Account for ${data.name} (${data.employeeId}) has been notionally created. In a real app, their credentials would be saved.`,
+    });
+    form.reset(); // Reset form after successful submission
+    setIsLoading(false);
+  };
+  
+  // Update document title (since metadata object isn't usable directly in client components)
+  useState(() => {
+    document.title = 'Add New Employee - Admin - BizFlow';
+  });
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Add New Employee</h1>
+          <p className="text-muted-foreground">Fill in the details to create a new employee account.</p>
+        </div>
+         <Button variant="outline" asChild>
+          <Link href="/admin/employees">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Employees
+          </Link>
+        </Button>
+      </div>
+
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center"><UserPlus className="mr-2 h-5 w-5 text-primary" />Employee Details</CardTitle>
+          <CardDescription>The Employee ID and Password will be used for login.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="employeeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Employee ID (for Login)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., emp123" {...field} />
+                      </FormControl>
+                      <FormDescription>Unique ID for login. No spaces or special chars other than _ . -</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="e.g., john.doe@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="department"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Department</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Engineering" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="joiningDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Joining Date (Optional)</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button type="submit" className="w-full md:w-auto" disabled={isLoading}>
+                {isLoading ? 'Creating Account...' : 'Create Employee Account'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

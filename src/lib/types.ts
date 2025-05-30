@@ -2,12 +2,14 @@
 export type UserRole = 'admin' | 'employee' | null;
 
 export interface User {
-  id: string;
+  id: string; // Unique user record ID (e.g., from Firebase Auth or DB)
+  employeeId: string; // The ID used for login, set by admin
   email?: string | null;
   name?: string | null;
   role: UserRole;
   profilePictureUrl?: string | null;
-  employeeId?: string | null;
+  department?: string | null;
+  joiningDate?: string | null; // Represent as string for simplicity, or Date
 }
 
 // Task structure expected by the AI flow
@@ -19,7 +21,7 @@ export interface AiTask {
 
 // Client-side task structure, potentially with an ID
 export interface ClientTask extends AiTask {
-  id: string; 
+  id: string;
 }
 
 export interface Holiday {
