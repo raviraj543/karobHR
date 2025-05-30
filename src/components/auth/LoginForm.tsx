@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { Eye, EyeOff, LogInIcon, UserCheck, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, LogInIcon, UserCheck, ShieldCheck, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
@@ -91,9 +91,9 @@ export function LoginForm() {
               name="employeeId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Employee ID</FormLabel>
+                  <FormLabel>Employee ID / Admin ID</FormLabel>
                   <FormControl>
-                    <Input type="text" placeholder="Your Employee ID" {...field} />
+                    <Input type="text" placeholder="Your ID" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -152,13 +152,22 @@ export function LoginForm() {
             </Button>
           </form>
         </Form>
+
+        <div className="mt-4 text-center">
+            <Link href="/admin-signup" legacyBehavior>
+              <a className="text-sm text-primary hover:underline inline-flex items-center">
+                <UserPlus className="mr-1 h-4 w-4" /> First time Admin? Create Account
+              </a>
+            </Link>
+          </div>
+
         <div className="mt-6 space-y-2">
-          <p className="text-center text-sm text-muted-foreground">For development:</p>
+          <p className="text-center text-sm text-muted-foreground">For development (Quick Logins):</p>
           <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_EMPLOYEE_ID, QUICK_LOGIN_EMPLOYEE_PASS)} disabled={isLoading}>
-            <UserCheck className="mr-2 h-4 w-4" /> Quick Login as Employee ({QUICK_LOGIN_EMPLOYEE_ID})
+            <UserCheck className="mr-2 h-4 w-4" /> Login as Employee ({QUICK_LOGIN_EMPLOYEE_ID})
           </Button>
           <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_ADMIN_ID, QUICK_LOGIN_ADMIN_PASS)} disabled={isLoading}>
-            <ShieldCheck className="mr-2 h-4 w-4" /> Quick Login as Admin ({QUICK_LOGIN_ADMIN_ID})
+            <ShieldCheck className="mr-2 h-4 w-4" /> Login as Admin ({QUICK_LOGIN_ADMIN_ID})
           </Button>
         </div>
       </CardContent>
