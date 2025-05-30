@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity } from 'lucide-react';
@@ -13,7 +14,7 @@ const adminStats = [
   { title: "Total Employees", value: "75", icon: Users, link: "/admin/employees" },
   { title: "Pending Leave Approvals", value: "5", icon: CalendarOff, link: "/admin/leave-approvals" },
   { title: "Tasks In Progress", value: "23", icon: ListChecks, link: "/admin/tasks" },
-  { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
+  { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" }, // No link for this stat
 ];
 
 export default function AdminDashboardPage() {
@@ -41,9 +42,13 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
-               <Link href={stat.link} className="text-xs text-muted-foreground hover:text-primary transition-colors">
-                Manage &rarr;
-              </Link>
+              {stat.link ? (
+                <Link href={stat.link} className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                  Manage &rarr;
+                </Link>
+              ) : (
+                 <span className="text-xs text-muted-foreground">&nbsp;</span> // Placeholder to maintain layout if needed, or remove if not
+              )}
             </CardContent>
           </Card>
         ))}
