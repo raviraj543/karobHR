@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -33,6 +34,7 @@ import {
   LogOut,
   Briefcase,
   ShieldCheck,
+  Camera as CameraIcon, // Added Camera icon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,11 +51,12 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee'] },
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck, allowedRoles: ['admin'] },
   { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'employee'] },
+  { href: '/attendance', label: 'Attendance', icon: CameraIcon, allowedRoles: ['employee'] }, // New Attendance Link
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee'] },
-  { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin'] }, // Admin might view/approve
+  { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin'] }, 
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
-  { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee'] }, // Employee can view
+  { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee'] }, 
   { href: '/admin/settings', label: 'Settings', icon: Settings, allowedRoles: ['admin'], isBottom: true },
 ];
 
@@ -137,3 +140,5 @@ export function AppShell({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    
