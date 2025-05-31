@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CreditCard, DollarSign, Send, History, Loader2 } from 'lucide-react';
+import { CreditCard, IndianRupee, Send, History, Loader2 } from 'lucide-react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -76,9 +76,9 @@ export default function EmployeePayrollPage() {
 
   const getStatusBadgeVariant = (status: Advance['status']) => {
     switch (status) {
-      case 'approved': return 'default'; // typically green or primary
-      case 'pending': return 'secondary'; // typically yellow or gray
-      case 'rejected': return 'destructive'; // typically red
+      case 'approved': return 'default'; 
+      case 'pending': return 'secondary'; 
+      case 'rejected': return 'destructive'; 
       default: return 'outline';
     }
   };
@@ -110,15 +110,15 @@ export default function EmployeePayrollPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-muted/30 rounded-lg">
               <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
-              <p className="text-2xl font-semibold text-foreground">${(user.baseSalary || 0).toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-foreground">₹{(user.baseSalary || 0).toLocaleString('en-IN')}</p>
             </div>
             <div className="p-4 bg-muted/30 rounded-lg">
               <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
-              <p className="text-2xl font-semibold text-red-600">(${(approvedAdvancesTotal).toLocaleString()})</p>
+              <p className="text-2xl font-semibold text-red-600">(₹{(approvedAdvancesTotal).toLocaleString('en-IN')})</p>
             </div>
             <div className="p-4 bg-primary/10 rounded-lg">
               <Label className="text-sm text-primary/80">Net Payable Amount</Label>
-              <p className="text-2xl font-bold text-primary">${netPayable.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-primary">₹{netPayable.toLocaleString('en-IN')}</p>
             </div>
           </div>
         </CardContent>
@@ -127,17 +127,17 @@ export default function EmployeePayrollPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary" />Request Salary Advance</CardTitle>
+            <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Request Salary Advance</CardTitle>
             <CardDescription>Need an advance? Fill out the form below.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={form.handleSubmit(onSubmitAdvance)} className="space-y-4">
               <div>
-                <Label htmlFor="amount">Amount Requested</Label>
+                <Label htmlFor="amount">Amount Requested (₹)</Label>
                 <Input 
                   id="amount" 
                   type="number" 
-                  placeholder="e.g., 500" 
+                  placeholder="e.g., 5000" 
                   {...form.register("amount")}
                   className={form.formState.errors.amount ? "border-destructive" : ""}
                 />
@@ -172,7 +172,7 @@ export default function EmployeePayrollPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Amount</TableHead>
+                    <TableHead>Amount (₹)</TableHead>
                     <TableHead>Date Requested</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden sm:table-cell">Reason</TableHead>
@@ -181,7 +181,7 @@ export default function EmployeePayrollPage() {
                 <TableBody>
                   {user.advances.slice().reverse().map(advance => ( // Show newest first
                     <TableRow key={advance.id}>
-                      <TableCell className="font-medium">${advance.amount.toLocaleString()}</TableCell>
+                      <TableCell className="font-medium">₹{advance.amount.toLocaleString('en-IN')}</TableCell>
                       <TableCell>{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusBadgeVariant(advance.status)} className="capitalize">{advance.status}</Badge>
@@ -200,4 +200,3 @@ export default function EmployeePayrollPage() {
     </div>
   );
 }
-

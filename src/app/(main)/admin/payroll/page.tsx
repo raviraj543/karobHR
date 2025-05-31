@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { DollarSign, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle } from 'lucide-react';
+import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle } from 'lucide-react';
 import type { Metadata } from 'next'; // Metadata needs to be handled differently for client components
 
 // export const metadata: Metadata = { // Cannot be used in client components
@@ -78,7 +78,7 @@ export default function AdminPayrollPage() {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary" />Employee Salary Overview</CardTitle>
+          <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Employee Salary Overview</CardTitle>
           <CardDescription>
             Summary of employee salaries and deductions.
             <span className="block text-xs text-muted-foreground/80 italic mt-1">
@@ -102,11 +102,11 @@ export default function AdminPayrollPage() {
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.name || user.employeeId}</TableCell>
                   <TableCell className="font-mono text-xs">{user.employeeId}</TableCell>
-                  <TableCell>${(user.baseSalary || 0).toLocaleString()}</TableCell>
+                  <TableCell>₹{(user.baseSalary || 0).toLocaleString('en-IN')}</TableCell>
                   <TableCell className="text-red-600">
-                    (${(user.advances || []).filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0).toLocaleString()})
+                    (₹{(user.advances || []).filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0).toLocaleString('en-IN')})
                   </TableCell>
-                  <TableCell className="font-semibold">${calculateNetPayable(user).toLocaleString()}</TableCell>
+                  <TableCell className="font-semibold">₹{calculateNetPayable(user).toLocaleString('en-IN')}</TableCell>
                 </TableRow>
               ))}
               {allUsers.filter(u => u.role !== 'admin').length === 0 && (
@@ -140,7 +140,7 @@ export default function AdminPayrollPage() {
                 {pendingAdvances.map(advance => (
                   <TableRow key={advance.id}>
                     <TableCell className="font-medium">{advance.userName}</TableCell>
-                    <TableCell>${advance.amount.toLocaleString()}</TableCell>
+                    <TableCell>₹{advance.amount.toLocaleString('en-IN')}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{advance.reason}</TableCell>
                     <TableCell>{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>
                     <TableCell className="space-x-2">

@@ -31,7 +31,7 @@ import {
   Briefcase,
   ShieldCheck,
   Camera as CameraIcon,
-  DollarSign,
+  IndianRupee, // Changed from DollarSign
   CreditCard,
 } from 'lucide-react';
 
@@ -54,7 +54,7 @@ const navItems: NavItem[] = [
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
-  { href: '/admin/payroll', label: 'Payroll', icon: DollarSign, allowedRoles: ['admin'] },
+  { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] }, // Icon changed
   { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee', 'manager'] }, 
   { href: '/admin/settings', label: 'Settings', icon: Settings, allowedRoles: ['admin'], isBottom: true },
 ];

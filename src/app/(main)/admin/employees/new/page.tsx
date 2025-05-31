@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, ArrowLeft, DollarSign } from 'lucide-react';
+import { UserPlus, ArrowLeft, IndianRupee } from 'lucide-react';
 import Link from 'next/link';
 
 const newEmployeeSchema = z.object({
@@ -66,7 +66,7 @@ export default function AddNewEmployeePage() {
 
     toast({
       title: "Employee Account Created (Mock)",
-      description: `Account for ${data.name} (${data.employeeId}) with role ${data.role} and base salary ${data.baseSalary || 'N/A'} has been notionally created.`,
+      description: `Account for ${data.name} (${data.employeeId}) with role ${data.role} and base salary ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'} has been notionally created.`,
     });
     form.reset();
     setIsLoading(false);
@@ -229,7 +229,7 @@ export default function AddNewEmployeePage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center">
-                        <DollarSign className="mr-1 h-4 w-4 text-muted-foreground" /> Base Monthly Salary (Optional)
+                        <IndianRupee className="mr-1 h-4 w-4 text-muted-foreground" /> Base Monthly Salary (Optional)
                       </FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="e.g., 50000" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ''} />
