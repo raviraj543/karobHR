@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface Advance {
@@ -39,6 +40,18 @@ export interface AiTask {
 export interface ClientTask extends AiTask {
   id: string;
 }
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  assigneeId: string; 
+  assigneeName: string; 
+  dueDate: string; 
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
+}
+
 
 export interface Holiday {
   id:string;
