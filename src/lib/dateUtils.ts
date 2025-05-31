@@ -1,6 +1,4 @@
 
-'use server';
-
 import { differenceInMilliseconds, parseISO } from 'date-fns';
 
 /**
