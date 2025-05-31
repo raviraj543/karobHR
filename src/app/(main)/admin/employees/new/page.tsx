@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft, IndianRupee } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth, type NewEmployeeData } from '@/lib/authContext';
+import { useAuth } from '@/hooks/useAuth'; // Corrected import path for useAuth
+import type { NewEmployeeData } from '@/lib/authContext'; // NewEmployeeData is from here
 import type { UserRole } from '@/lib/types';
 
 const newEmployeeSchema = z.object({
@@ -26,9 +27,9 @@ const newEmployeeSchema = z.object({
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   department: z.string().min(2, { message: 'Department is required.' }),
   role: z.enum(['employee', 'admin', 'manager']).default('employee'),
-  joiningDate: z.string().optional(), 
+  joiningDate: z.string().optional(),
   baseSalary: z.preprocess(
-    (val) => (val === "" ? undefined : Number(val)), 
+    (val) => (val === "" ? undefined : Number(val)),
     z.number({ invalid_type_error: 'Base salary must be a number.' }).positive({ message: 'Base salary must be positive.' }).optional()
   ),
 }).refine(data => data.password === data.confirmPassword, {
@@ -60,7 +61,7 @@ export default function AddNewEmployeePage() {
 
   const onSubmit = async (data: NewEmployeeFormValues) => {
     setIsLoading(true);
-    
+
     const employeeDataForContext: NewEmployeeData = {
       name: data.name,
       employeeId: data.employeeId,
@@ -75,7 +76,7 @@ export default function AddNewEmployeePage() {
       await addNewEmployee(employeeDataForContext, data.password);
       toast({
         title: "Employee Account Added",
-        description: `Account for ${data.name} (${data.employeeId}) has been added and they can now log in with the password you set. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}`,
+        description: `Account for ${data.name} (${data.employeeId}) has been added. They can now log in with the password you set. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}`,
         duration: 7000,
       });
       form.reset();
@@ -89,7 +90,7 @@ export default function AddNewEmployeePage() {
         setIsLoading(false);
     }
   };
-  
+
   useEffect(() => {
     document.title = 'Add New Employee - Admin - BizFlow';
   }, []);
@@ -188,7 +189,7 @@ export default function AddNewEmployeePage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -217,7 +218,7 @@ export default function AddNewEmployeePage() {
                   )}
                 />
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -268,3 +269,5 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
+
+    
