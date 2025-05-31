@@ -19,7 +19,7 @@ import type { LeaveApplication } from '@/lib/types';
 import { useAuth } from '@/hooks/useAuth';
 
 // export const metadata: Metadata = { // Metadata not used in client components
-//   title: 'Leave Management - Floattend',
+//   title: 'Leave Management - KarobHR',
 //   description: 'Apply for leave and track your leave balance.',
 // };
 
@@ -51,7 +51,7 @@ export default function LeavePage() {
   const [recentApplications, setRecentApplications] = useState<LeaveApplication[]>(initialRecentApplications);
   
   useEffect(() => {
-    document.title = 'Leave Management - Floattend';
+    document.title = 'Leave Management - KarobHR';
   }, []);
 
   const form = useForm<LeaveFormValues>({

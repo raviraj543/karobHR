@@ -9,8 +9,8 @@ import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2 } from 'luci
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Company Settings - Admin - Floattend',
-  description: 'Configure company-wide settings for Floattend.',
+  title: 'Company Settings - Admin - KarobHR',
+  description: 'Configure company-wide settings for KarobHR.',
 };
 
 export default function AdminSettingsPage() {
@@ -29,7 +29,7 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="companyName">Company Name</Label>
-            <Input id="companyName" defaultValue="Floattend Solutions Inc." />
+            <Input id="companyName" defaultValue="KarobHR Solutions Inc." />
           </div>
           <div className="space-y-1">
             <Label htmlFor="companyAddress">Company Address</Label>

@@ -78,7 +78,7 @@ export default function AdminTasksPage() {
 
 
   useEffect(() => {
-    document.title = 'Manage Tasks - Admin - Floattend';
+    document.title = 'Manage Tasks - Admin - KarobHR';
   }, []);
 
   const assignableUsers = allUsers.filter(u => u.role === 'employee' || u.role === 'manager');
@@ -485,5 +485,3 @@ export default function AdminTasksPage() {
     </div>
   );
 }
-    
-    

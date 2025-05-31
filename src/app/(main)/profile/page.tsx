@@ -16,9 +16,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user?.name) {
-      document.title = `${user.name}'s Profile - Floattend`;
+      document.title = `${user.name}'s Profile - KarobHR`;
     } else {
-      document.title = 'My Profile - Floattend';
+      document.title = 'My Profile - KarobHR';
     }
   }, [user?.name]);
 

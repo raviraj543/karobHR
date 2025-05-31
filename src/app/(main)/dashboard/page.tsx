@@ -15,15 +15,15 @@ import { useEffect } from 'react';
 // Metadata cannot be directly exported from client component in App Router
 // Consider moving to layout or parent server component if static generation is needed
 // export const metadata: Metadata = {
-//   title: 'Dashboard - Floattend',
-//   description: 'Your personal dashboard for Floattend.',
+//   title: 'Dashboard - KarobHR',
+//   description: 'Your personal dashboard for KarobHR.',
 // };
 
 export default function EmployeeDashboardPage() {
   const { user, announcements } = useAuth(); // Get user and announcements
 
   useEffect(() => {
-    document.title = user?.name ? `${user.name}'s Dashboard - Floattend` : 'Dashboard - Floattend';
+    document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
   }, [user?.name]);
 
 

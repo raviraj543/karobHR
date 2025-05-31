@@ -41,7 +41,7 @@ export default function EmployeePayrollPage() {
   });
 
   useEffect(() => {
-    document.title = 'My Payslip - Floattend';
+    document.title = 'My Payslip - KarobHR';
   }, []);
 
   const baseSalary = user?.baseSalary || 0;

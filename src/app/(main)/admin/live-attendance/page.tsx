@@ -39,7 +39,7 @@ export default function AdminLiveAttendancePage() {
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
   useEffect(() => {
-    document.title = 'Live Employee Attendance - Admin - Floattend';
+    document.title = 'Live Employee Attendance - Admin - KarobHR';
   }, []);
 
   const handleRefresh = () => {
@@ -215,4 +215,3 @@ export default function AdminLiveAttendancePage() {
     </div>
   );
 }
-

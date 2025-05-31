@@ -51,7 +51,7 @@ export default function AttendancePage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = 'Attendance - Floattend';
+    document.title = 'Attendance - KarobHR';
     
     const getCameraPermission = async () => {
       try {

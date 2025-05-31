@@ -18,8 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Metadata cannot be exported from client components directly.
 // export const metadata: Metadata = {
-//   title: 'Admin Dashboard - Floattend',
-//   description: 'Manage your organization with Floattend.',
+//   title: 'Admin Dashboard - KarobHR',
+//   description: 'Manage your organization with KarobHR.',
 // };
 
 const adminStats = [
@@ -37,7 +37,7 @@ export default function AdminDashboardPage() {
   const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
 
   useEffect(() => {
-    document.title = 'Admin Dashboard - Floattend';
+    document.title = 'Admin Dashboard - KarobHR';
   }, []);
 
   const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;

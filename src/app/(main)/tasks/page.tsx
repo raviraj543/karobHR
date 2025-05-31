@@ -42,7 +42,7 @@ export default function MyTasksPage() {
 
 
   useEffect(() => {
-    document.title = 'My Tasks - Floattend';
+    document.title = 'My Tasks - KarobHR';
   }, []);
 
   const myTasks = useMemo(() => {
@@ -145,5 +145,3 @@ export default function MyTasksPage() {
     </div>
   );
 }
-    
-    

@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Floattend - Employee Management System',
+  title: 'KarobHR - Employee Management System',
   description: 'Comprehensive Employee Attendance, Payroll, Leave, and Task Management.',
   manifest: '/manifest.json', // Link to the manifest file
 };

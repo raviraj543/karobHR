@@ -48,7 +48,7 @@ export default function AdminEmployeesPage() {
   const [filteredEmployees, setFilteredEmployees] = useState<User[]>([]);
 
   useEffect(() => {
-    document.title = 'Manage Employees - Admin - Floattend';
+    document.title = 'Manage Employees - Admin - KarobHR';
   }, []);
 
   useEffect(() => {

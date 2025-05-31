@@ -76,7 +76,7 @@ export default function AdminSignupPage() {
   };
   
   useEffect(() => {
-    document.title = 'Create Admin Account - Floattend';
+    document.title = 'Create Admin Account - KarobHR';
   }, []);
 
   return (

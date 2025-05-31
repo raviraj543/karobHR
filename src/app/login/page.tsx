@@ -3,8 +3,8 @@ import { LoginForm } from '@/components/auth/LoginForm';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Login - Floattend',
-  description: 'Login to your Floattend account.',
+  title: 'Login - KarobHR',
+  description: 'Login to your KarobHR account.',
 };
 
 export default function LoginPage() {

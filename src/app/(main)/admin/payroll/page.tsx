@@ -17,7 +17,7 @@ export default function AdminPayrollPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = 'Manage Payroll - Admin - Floattend';
+    document.title = 'Manage Payroll - Admin - KarobHR';
   }, []);
 
   const pendingAdvances = useMemo(() => {

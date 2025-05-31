@@ -99,7 +99,7 @@ export function LoginForm() {
         <div className="flex justify-center mb-4">
           <LogInIcon className="w-12 h-12 text-primary" />
         </div>
-        <CardTitle className="text-3xl font-bold">Welcome to Floattend</CardTitle>
+        <CardTitle className="text-3xl font-bold">Welcome to KarobHR</CardTitle>
         <CardDescription>Please sign in with your Employee ID and Password.</CardDescription>
       </CardHeader>
       <CardContent>

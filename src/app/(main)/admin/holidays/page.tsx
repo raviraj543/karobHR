@@ -7,7 +7,7 @@ import { PlusCircle, Edit2, Trash2, CalendarDays as CalendarDaysIcon } from 'luc
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Manage Holidays - Admin - Floattend',
+  title: 'Manage Holidays - Admin - KarobHR',
   description: 'Set up and manage company holidays.',
 };
 

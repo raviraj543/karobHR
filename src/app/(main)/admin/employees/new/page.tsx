@@ -92,7 +92,7 @@ export default function AddNewEmployeePage() {
   };
 
   useEffect(() => {
-    document.title = 'Add New Employee - Admin - Floattend';
+    document.title = 'Add New Employee - Admin - KarobHR';
   }, []);
 
   return (
@@ -269,4 +269,3 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
-    
