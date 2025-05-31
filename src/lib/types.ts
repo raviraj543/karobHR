@@ -24,6 +24,7 @@ export interface User {
     phone?: string | null;
   };
   baseSalary?: number;
+  mockAttendanceFactor?: number; // Represents proportion of salary based on attendance (0.0 to 1.0). Defaults to 1.0 if undefined.
   advances?: Advance[];
 }
 
@@ -40,7 +41,7 @@ export interface ClientTask extends AiTask {
 }
 
 export interface Holiday {
-  id: string;
+  id:string;
   name: string;
   date: Date;
   description?: string;

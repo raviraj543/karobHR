@@ -9,14 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle } from 'lucide-react';
-import type { Metadata } from 'next'; // Metadata needs to be handled differently for client components
-
-// export const metadata: Metadata = { // Cannot be used in client components
-//   title: 'Manage Payroll - Admin - BizFlow',
-//   description: 'Oversee employee salaries and manage advance requests.',
-// };
-
+import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, Percent } from 'lucide-react';
 
 export default function AdminPayrollPage() {
   const { allUsers, processAdvance, loading: authLoading } = useAuth();
@@ -29,7 +22,7 @@ export default function AdminPayrollPage() {
 
   const pendingAdvances = useMemo(() => {
     if (authLoading) return [];
-    return allUsers.flatMap(user => 
+    return allUsers.flatMap(user =>
       (user.advances || []).filter(adv => adv.status === 'pending').map(adv => ({ ...adv, userName: user.name || user.employeeId }))
     );
   }, [allUsers, authLoading]);
@@ -54,12 +47,15 @@ export default function AdminPayrollPage() {
     }
   };
 
-  const calculateNetPayable = (user: User) => {
+  const calculateSalaryDetails = (user: User) => {
     const baseSalary = user.baseSalary || 0;
-    const approvedAdvances = (user.advances || [])
+    const attendanceFactor = user.mockAttendanceFactor !== undefined ? user.mockAttendanceFactor : 1.0;
+    const salaryAfterAttendance = baseSalary * attendanceFactor;
+    const approvedAdvancesTotal = (user.advances || [])
       .filter(adv => adv.status === 'approved')
       .reduce((sum, adv) => sum + adv.amount, 0);
-    return baseSalary - approvedAdvances;
+    const netPayable = salaryAfterAttendance - approvedAdvancesTotal;
+    return { baseSalary, attendanceFactor, salaryAfterAttendance, approvedAdvancesTotal, netPayable };
   };
 
   if (authLoading) {
@@ -80,9 +76,9 @@ export default function AdminPayrollPage() {
         <CardHeader>
           <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Employee Salary Overview</CardTitle>
           <CardDescription>
-            Summary of employee salaries and deductions.
+            Summary of employee salaries.
             <span className="block text-xs text-muted-foreground/80 italic mt-1">
-              Note: Salary calculation is simplified for this mock (Net = Base - Approved Advances). Actual days worked are not factored in yet.
+              Note: Salary is calculated as (Base Salary * Mock Attendance Factor) - Approved Advances. Actual attendance tracking requires backend integration.
             </span>
           </CardDescription>
         </CardHeader>
@@ -93,25 +89,32 @@ export default function AdminPayrollPage() {
                 <TableHead>Employee Name</TableHead>
                 <TableHead><UserCog className="inline-block mr-1 h-4 w-4"/>Employee ID</TableHead>
                 <TableHead>Base Salary</TableHead>
+                <TableHead className="flex items-center"><Percent className="inline-block mr-1 h-3 w-3"/>Attendance Factor (Mock)</TableHead>
+                <TableHead>Salary After Attendance</TableHead>
                 <TableHead>Approved Advances</TableHead>
                 <TableHead>Net Payable</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {allUsers.filter(u => u.role !== 'admin').map(user => ( // Exclude admins from payroll view for now
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name || user.employeeId}</TableCell>
-                  <TableCell className="font-mono text-xs">{user.employeeId}</TableCell>
-                  <TableCell>₹{(user.baseSalary || 0).toLocaleString('en-IN')}</TableCell>
-                  <TableCell className="text-red-600">
-                    (₹{(user.advances || []).filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0).toLocaleString('en-IN')})
-                  </TableCell>
-                  <TableCell className="font-semibold">₹{calculateNetPayable(user).toLocaleString('en-IN')}</TableCell>
-                </TableRow>
-              ))}
+              {allUsers.filter(u => u.role !== 'admin').map(user => {
+                const { baseSalary, attendanceFactor, salaryAfterAttendance, approvedAdvancesTotal, netPayable } = calculateSalaryDetails(user);
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name || user.employeeId}</TableCell>
+                    <TableCell className="font-mono text-xs">{user.employeeId}</TableCell>
+                    <TableCell>₹{baseSalary.toLocaleString('en-IN')}</TableCell>
+                    <TableCell className="text-center">{(attendanceFactor * 100).toFixed(0)}%</TableCell>
+                    <TableCell>₹{salaryAfterAttendance.toLocaleString('en-IN')}</TableCell>
+                    <TableCell className="text-red-600">
+                      (₹{approvedAdvancesTotal.toLocaleString('en-IN')})
+                    </TableCell>
+                    <TableCell className="font-semibold">₹{netPayable.toLocaleString('en-IN')}</TableCell>
+                  </TableRow>
+                );
+              })}
               {allUsers.filter(u => u.role !== 'admin').length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No employee data available.</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employee data available.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -144,18 +147,18 @@ export default function AdminPayrollPage() {
                     <TableCell className="text-sm text-muted-foreground">{advance.reason}</TableCell>
                     <TableCell>{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>
                     <TableCell className="space-x-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleProcessAdvance(advance.employeeId, advance.id, 'approved')}
                         disabled={isLoading}
                         className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700"
                       >
                         <CheckCircle className="mr-1 h-4 w-4" /> Approve
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleProcessAdvance(advance.employeeId, advance.id, 'rejected')}
                         disabled={isLoading}
                         className="text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700"

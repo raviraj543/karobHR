@@ -9,62 +9,66 @@ import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs for advances
 
 // Mock user profiles (without passwords) - In a real app, this would come from a database.
 const mockUserProfiles: Record<string, User> = {
-  'admin001': { 
-    id: 'user_admin_001', 
-    employeeId: 'admin001', 
-    name: 'Jane Admin', 
-    email: 'admin@bizflow.com', 
-    role: 'admin', 
+  'admin001': {
+    id: 'user_admin_001',
+    employeeId: 'admin001',
+    name: 'Jane Admin',
+    email: 'admin@bizflow.com',
+    role: 'admin',
     profilePictureUrl: 'https://placehold.co/100x100.png?text=JA',
     baseSalary: 70000,
+    mockAttendanceFactor: 1.0,
     advances: [],
   },
-  'emp101': { 
-    id: 'user_emp_101', 
-    employeeId: 'emp101', 
-    name: 'John Doe', 
-    email: 'john.doe@bizflow.com', 
-    role: 'employee', 
+  'emp101': {
+    id: 'user_emp_101',
+    employeeId: 'emp101',
+    name: 'John Doe',
+    email: 'john.doe@bizflow.com',
+    role: 'employee',
     profilePictureUrl: 'https://placehold.co/100x100.png?text=JD',
     department: 'Engineering',
     joiningDate: '2023-01-15',
     contactInfo: { phone: '555-1234' },
     baseSalary: 50000,
+    mockAttendanceFactor: 0.9, // Example: 90% attendance
     advances: [
-      { id: uuidv4(), employeeId: 'emp101', amount: 200, reason: 'Urgent need', dateRequested: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), status: 'approved', dateProcessed: new Date().toISOString()},
-      { id: uuidv4(), employeeId: 'emp101', amount: 100, reason: 'Medical bill', dateRequested: new Date().toISOString(), status: 'pending' },
+      { id: uuidv4(), employeeId: 'emp101', amount: 2000, reason: 'Urgent need', dateRequested: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), status: 'approved', dateProcessed: new Date().toISOString()},
+      { id: uuidv4(), employeeId: 'emp101', amount: 1000, reason: 'Medical bill', dateRequested: new Date().toISOString(), status: 'pending' },
     ],
   },
-   'emp102': { 
-    id: 'user_emp_102', 
-    employeeId: 'emp102', 
-    name: 'Alice Smith', 
-    email: 'alice.smith@bizflow.com', 
-    role: 'employee', 
+   'emp102': {
+    id: 'user_emp_102',
+    employeeId: 'emp102',
+    name: 'Alice Smith',
+    email: 'alice.smith@bizflow.com',
+    role: 'employee',
     profilePictureUrl: 'https://placehold.co/100x100.png?text=AS',
     department: 'Marketing',
     joiningDate: '2023-03-20',
     contactInfo: { phone: '555-5678' },
     baseSalary: 52000,
+    mockAttendanceFactor: 1.0, // Full attendance
     advances: [],
   },
-  'man101': { 
-    id: 'user_man_101', 
-    employeeId: 'man101', 
-    name: 'Mike Manager', 
-    email: 'mike.manager@bizflow.com', 
-    role: 'manager', 
+  'man101': {
+    id: 'user_man_101',
+    employeeId: 'man101',
+    name: 'Mike Manager',
+    email: 'mike.manager@bizflow.com',
+    role: 'manager',
     profilePictureUrl: 'https://placehold.co/100x100.png?text=MM',
     department: 'Operations',
     joiningDate: '2022-06-10',
     contactInfo: { phone: '555-8765' },
     baseSalary: 60000,
+    mockAttendanceFactor: 0.95, // Example: 95% attendance
     advances: [],
   },
-  'emp001': { id: 'usr_emp1', employeeId: 'emp001', name: 'Alice Johnson', email: 'alice.j@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=AJ', department: 'Engineering', joiningDate: '2023-01-15', baseSalary: 48000, advances: [] },
-  'emp002': { id: 'usr_emp2', employeeId: 'emp002', name: 'Bob Williams', email: 'bob.w@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=BW', department: 'Design', joiningDate: '2023-02-20', baseSalary: 49000, advances: [] },
-  'emp003': { id: 'usr_emp3', employeeId: 'emp003', name: 'Carol Davis', email: 'carol.d@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=CD', department: 'Management', joiningDate: '2022-11-05', baseSalary: 55000, advances: [] },
-  'emp004': { id: 'usr_emp4', employeeId: 'emp004', name: 'David Brown', email: 'david.b@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=DB', department: 'Engineering', joiningDate: '2023-05-01', baseSalary: 51000, advances: [] },
+  'emp001': { id: 'usr_emp1', employeeId: 'emp001', name: 'Alice Johnson', email: 'alice.j@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=AJ', department: 'Engineering', joiningDate: '2023-01-15', baseSalary: 48000, mockAttendanceFactor: 1.0, advances: [] },
+  'emp002': { id: 'usr_emp2', employeeId: 'emp002', name: 'Bob Williams', email: 'bob.w@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=BW', department: 'Design', joiningDate: '2023-02-20', baseSalary: 49000, mockAttendanceFactor: 0.85, advances: [] }, // Example: 85% attendance
+  'emp003': { id: 'usr_emp3', employeeId: 'emp003', name: 'Carol Davis', email: 'carol.d@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=CD', department: 'Management', joiningDate: '2022-11-05', baseSalary: 55000, mockAttendanceFactor: 1.0, advances: [] },
+  'emp004': { id: 'usr_emp4', employeeId: 'emp004', name: 'David Brown', email: 'david.b@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=DB', department: 'Engineering', joiningDate: '2023-05-01', baseSalary: 51000, mockAttendanceFactor: 1.0, advances: [] },
 };
 
 const mockCredentials: Record<string, string> = {
@@ -103,13 +107,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load all users from localStorage if available (simulates DB)
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
       try {
         const parsedAllUsers = JSON.parse(storedAllUsers) as User[];
         setAllUsersState(parsedAllUsers);
-        // If a user was logged in, find their latest profile from this list
         const storedUser = localStorage.getItem('mockUser');
         if (storedUser) {
           const parsedLoginUser = JSON.parse(storedUser) as User;
@@ -117,28 +119,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           if (currentUserProfile) {
             setUser(currentUserProfile);
           } else {
-             localStorage.removeItem('mockUser'); // Stale logged-in user
+             localStorage.removeItem('mockUser');
           }
         }
       } catch (e) {
         console.error("Failed to parse stored allUsers:", e);
         localStorage.removeItem('mockAllUsers');
-        setAllUsersState(Object.values(mockUserProfiles)); // Reset to default if corrupted
+        // Initialize with defaults if parsing fails
+        const defaultUsers = Object.values(mockUserProfiles);
+        localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
+        setAllUsersState(defaultUsers);
       }
     } else {
-      // Initialize localStorage with default mock users if not present
-      localStorage.setItem('mockAllUsers', JSON.stringify(Object.values(mockUserProfiles)));
+      const defaultUsers = Object.values(mockUserProfiles);
+      localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
+      setAllUsersState(defaultUsers);
     }
-    
-    // Determine logged-in user (as before, but now potentially from updated allUsersState)
+
     const storedUser = localStorage.getItem('mockUser');
-    if (storedUser && !user) { // Check !user to avoid re-setting if already set by above block
+    if (storedUser && !user) {
       try {
         const parsedUser = JSON.parse(storedUser) as User;
+        // Ensure the user loaded from 'mockUser' is consistent with 'allUsersState'
         const currentUserProfile = allUsersState.find(u => u.employeeId === parsedUser.employeeId);
          if (currentUserProfile) {
              setUser(currentUserProfile);
         } else {
+            // If the user in 'mockUser' is not in the 'allUsersState' (e.g., stale data), clear it.
             localStorage.removeItem('mockUser');
         }
       } catch (e) {
@@ -147,37 +154,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     }
     setLoading(false);
-  }, []); // Run once on mount
+  }, []);
 
 
   const updateUserInStorage = (usersArray: User[]) => {
     localStorage.setItem('mockAllUsers', JSON.stringify(usersArray));
-    // If the currently logged-in user is being updated, also update their specific 'mockUser' storage
     if (user) {
         const updatedLoggedInUser = usersArray.find(u => u.employeeId === user.employeeId);
         if (updatedLoggedInUser) {
-            setUser(updatedLoggedInUser);
+            setUser(updatedLoggedInUser); // Update context for current user
             localStorage.setItem('mockUser', JSON.stringify(updatedLoggedInUser));
         }
     }
   };
-  
+
   const updateUserInContext = (updatedUser: User) => {
     setAllUsersState(prevAllUsers => {
         const newAllUsers = prevAllUsers.map(u => u.employeeId === updatedUser.employeeId ? updatedUser : u);
         updateUserInStorage(newAllUsers);
         return newAllUsers;
     });
-    if (user && user.employeeId === updatedUser.employeeId) {
-        setUser(updatedUser);
-    }
+    // This check is now part of updateUserInStorage
+    // if (user && user.employeeId === updatedUser.employeeId) {
+    //     setUser(updatedUser);
+    // }
   };
 
 
   const login = async (employeeId: string, pass: string, _rememberMe?: boolean) => {
     setLoading(true);
-    const expectedPassword = mockCredentials[employeeId];
+    // It's crucial to use allUsersState here, as it's the most up-to-date version
+    // especially after potential updates from localStorage.
     const userProfile = allUsersState.find(u => u.employeeId === employeeId);
+    const expectedPassword = mockCredentials[employeeId];
 
     if (userProfile && expectedPassword && expectedPassword === pass) {
       setUser(userProfile);
@@ -197,19 +206,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.removeItem('mockUser');
     setLoading(false);
   };
-  
+
   const setMockUser = (mockUser: User | null) => {
     setUser(mockUser);
     if (mockUser) {
       localStorage.setItem('mockUser', JSON.stringify(mockUser));
-      // Also update in allUsersState if it's a "new" mock user being set
       const exists = allUsersState.some(u => u.employeeId === mockUser.employeeId);
       if (!exists) {
         const newAllUsers = [...allUsersState, mockUser];
         setAllUsersState(newAllUsers);
         updateUserInStorage(newAllUsers);
       } else {
-        updateUserInContext(mockUser); // if exists, ensure it's updated
+        updateUserInContext(mockUser);
       }
     } else {
       localStorage.removeItem('mockUser');
@@ -228,7 +236,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       dateRequested: new Date().toISOString(),
       status: 'pending',
     };
-    
+
     const updatedUser = {
         ...targetUser,
         advances: [...(targetUser.advances || []), newAdvance],
@@ -242,11 +250,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const advanceExists = targetUser.advances.some(adv => adv.id === advanceId);
     if (!advanceExists) throw new Error("Advance ID not found for this user.");
-    
-    const updatedAdvances = targetUser.advances.map(adv => 
+
+    const updatedAdvances = targetUser.advances.map(adv =>
         adv.id === advanceId ? { ...adv, status: newStatus, dateProcessed: new Date().toISOString() } : adv
     );
-    
+
     const updatedUser = {
         ...targetUser,
         advances: updatedAdvances,
@@ -255,15 +263,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-        user, 
-        allUsers: allUsersState, 
-        role: user?.role || null, 
-        loading, 
-        login, 
-        logout, 
-        setMockUser, 
-        requestAdvance, 
+    <AuthContext.Provider value={{
+        user,
+        allUsers: allUsersState,
+        role: user?.role || null,
+        loading,
+        login,
+        logout,
+        setMockUser,
+        requestAdvance,
         processAdvance,
         updateUserInContext
     }}>

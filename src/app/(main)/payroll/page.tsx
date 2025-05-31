@@ -12,16 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CreditCard, IndianRupee, Send, History, Loader2 } from 'lucide-react';
+import { CreditCard, IndianRupee, Send, History, Loader2, Percent } from 'lucide-react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Metadata } from 'next'; // Metadata needs to be handled differently for client components
-
-// export const metadata: Metadata = { // Cannot be used in client components
-//   title: 'My Payslip - BizFlow',
-//   description: 'View your salary details and manage advance requests.',
-// };
 
 const advanceRequestSchema = z.object({
   amount: z.preprocess(
@@ -45,13 +39,17 @@ export default function EmployeePayrollPage() {
       reason: '',
     },
   });
-  
+
   useEffect(() => {
     document.title = 'My Payslip - BizFlow';
   }, []);
 
+  // Calculate salary details
+  const baseSalary = user?.baseSalary || 0;
+  const attendanceFactor = user?.mockAttendanceFactor !== undefined ? user.mockAttendanceFactor : 1.0;
+  const salaryAfterAttendance = baseSalary * attendanceFactor;
   const approvedAdvancesTotal = user?.advances?.filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0) || 0;
-  const netPayable = (user?.baseSalary || 0) - approvedAdvancesTotal;
+  const netPayable = salaryAfterAttendance - approvedAdvancesTotal;
 
   const onSubmitAdvance: SubmitHandler<AdvanceRequestFormValues> = async (data) => {
     if (!user) return;
@@ -76,13 +74,13 @@ export default function EmployeePayrollPage() {
 
   const getStatusBadgeVariant = (status: Advance['status']) => {
     switch (status) {
-      case 'approved': return 'default'; 
-      case 'pending': return 'secondary'; 
-      case 'rejected': return 'destructive'; 
+      case 'approved': return 'default';
+      case 'pending': return 'secondary';
+      case 'rejected': return 'destructive';
       default: return 'outline';
     }
   };
-  
+
   if (authLoading || !user) {
     return <div className="text-center py-10">Loading your payslip data...</div>;
   }
@@ -100,25 +98,37 @@ export default function EmployeePayrollPage() {
         <CardHeader>
           <CardTitle className="flex items-center"><CreditCard className="mr-2 h-5 w-5 text-primary" />Payslip Summary (Mock)</CardTitle>
           <CardDescription>
-            Your current salary breakdown. 
+            Your current salary breakdown.
             <span className="block text-xs text-muted-foreground/80 italic mt-1">
-             Note: This is a simplified mock. Actual earned salary based on attendance is not yet calculated.
+             Note: This is a simplified mock. Salary is calculated as (Base Salary * Mock Attendance Factor) - Approved Advances. Actual attendance tracking for the factor requires backend integration.
             </span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-muted/30 rounded-lg">
-              <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
-              <p className="text-2xl font-semibold text-foreground">₹{(user.baseSalary || 0).toLocaleString('en-IN')}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+              <div>
+                <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
+                <p className="text-2xl font-semibold text-foreground">₹{baseSalary.toLocaleString('en-IN')}</p>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground flex items-center"><Percent className="inline-block mr-1 h-3 w-3"/> Mock Attendance Factor</Label>
+                <p className="text-2xl font-semibold text-foreground">{(attendanceFactor * 100).toFixed(0)}%</p>
+              </div>
+               <div>
+                <Label className="text-sm text-muted-foreground">Salary After Attendance (Mock)</Label>
+                <p className="text-2xl font-semibold text-foreground">₹{salaryAfterAttendance.toLocaleString('en-IN')}</p>
+              </div>
             </div>
-            <div className="p-4 bg-muted/30 rounded-lg">
-              <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
-              <p className="text-2xl font-semibold text-red-600">(₹{(approvedAdvancesTotal).toLocaleString('en-IN')})</p>
-            </div>
-            <div className="p-4 bg-primary/10 rounded-lg">
-              <Label className="text-sm text-primary/80">Net Payable Amount</Label>
-              <p className="text-2xl font-bold text-primary">₹{netPayable.toLocaleString('en-IN')}</p>
+            <div className="space-y-3 p-4 bg-primary/5 rounded-lg">
+               <div>
+                <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
+                <p className="text-2xl font-semibold text-red-600">(₹{approvedAdvancesTotal.toLocaleString('en-IN')})</p>
+              </div>
+              <div className="pt-2">
+                <Label className="text-sm text-primary/80">Net Payable Amount</Label>
+                <p className="text-3xl font-bold text-primary">₹{netPayable.toLocaleString('en-IN')}</p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -134,10 +144,10 @@ export default function EmployeePayrollPage() {
             <form onSubmit={form.handleSubmit(onSubmitAdvance)} className="space-y-4">
               <div>
                 <Label htmlFor="amount">Amount Requested (₹)</Label>
-                <Input 
-                  id="amount" 
-                  type="number" 
-                  placeholder="e.g., 5000" 
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="e.g., 5000"
                   {...form.register("amount")}
                   className={form.formState.errors.amount ? "border-destructive" : ""}
                 />
@@ -145,10 +155,10 @@ export default function EmployeePayrollPage() {
               </div>
               <div>
                 <Label htmlFor="reason">Reason for Advance</Label>
-                <Textarea 
-                  id="reason" 
-                  placeholder="Briefly explain the reason for your request (min. 10 characters)" 
-                  rows={3} 
+                <Textarea
+                  id="reason"
+                  placeholder="Briefly explain the reason for your request (min. 10 characters)"
+                  rows={3}
                   {...form.register("reason")}
                   className={form.formState.errors.reason ? "border-destructive" : ""}
                 />
