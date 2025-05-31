@@ -48,6 +48,7 @@ export default function AttendancePage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null); // Ref to hold the MediaStream
   const { toast } = useToast();
 
   // Effect for Camera Permission (runs once on mount)
@@ -56,6 +57,7 @@ export default function AttendancePage() {
       setError(null); // Clear previous camera-related errors when re-attempting
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        streamRef.current = stream; // Store the stream in the ref
         setHasCameraPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -71,16 +73,24 @@ export default function AttendancePage() {
         });
       }
     };
+
     getCameraPermission();
 
+    // Cleanup function
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+      console.log("AttendancePage: Unmounting, attempting to stop camera stream...");
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        console.log("AttendancePage: Camera tracks stopped.");
       }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null; // Clear the video element's source
+        console.log("AttendancePage: Video source cleared.");
+      }
+      streamRef.current = null; // Clear the ref to the stream
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []); // Empty dependency array ensures this runs only once on mount and cleans up on unmount
 
   // Effect for setting title and initial attendance status
   useEffect(() => {
@@ -92,7 +102,6 @@ export default function AttendancePage() {
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       if (userEvents.length > 0 && userEvents[0].type === 'check-in') {
         setCheckInStatus('checked-in');
-        // For historical log entries, photoDataUrl will be null
         setLastDisplayRecord({
           type: userEvents[0].type,
           photoDataUrl: null, 
@@ -161,7 +170,7 @@ export default function AttendancePage() {
     }
     setIsSubmitting(true);
     
-    if (hasCameraPermission !== true) { // Stricter check
+    if (hasCameraPermission !== true) { 
       setError('Camera permission is required to proceed.');
       toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required.' });
       setIsSubmitting(false);
@@ -194,7 +203,7 @@ export default function AttendancePage() {
     
     const displayRecord: CheckInOutDisplayRecord = {
       type,
-      photoDataUrl: photoDataUrl, // This will be used for immediate display on this page
+      photoDataUrl: photoDataUrl, 
       location,
       timestamp: new Date(),
       isWithinGeofence,
@@ -202,7 +211,6 @@ export default function AttendancePage() {
     setLastDisplayRecord(displayRecord);
     setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
 
-    // The photoDataUrl passed here will be nulled out by addAttendanceEvent before storage
     await addAttendanceEvent({
         employeeId: user.employeeId,
         type,
