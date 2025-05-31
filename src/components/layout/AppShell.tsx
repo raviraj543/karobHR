@@ -25,13 +25,13 @@ import {
   CalendarOff,
   ListChecks,
   Users,
-  Settings,
+  Settings as SettingsIcon, // Renamed to avoid conflict
   CalendarDays,
   LogOut,
   Briefcase,
   ShieldCheck,
   Camera as CameraIcon,
-  IndianRupee, // Changed from DollarSign
+  IndianRupee, 
   CreditCard,
 } from 'lucide-react';
 
@@ -52,11 +52,12 @@ const navItems: NavItem[] = [
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] }, 
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
+  { href: '/settings', label: 'Settings', icon: SettingsIcon, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
-  { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] }, // Icon changed
+  { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] },
   { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee', 'manager'] }, 
-  { href: '/admin/settings', label: 'Settings', icon: Settings, allowedRoles: ['admin'], isBottom: true },
+  { href: '/admin/settings', label: 'Company Settings', icon: SettingsIcon, allowedRoles: ['admin'], isBottom: true },
 ];
 
 

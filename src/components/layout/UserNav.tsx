@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -70,11 +71,18 @@ export function UserNav() {
               <span>Profile</span>
             </DropdownMenuItem>
           </Link>
-          {role === 'admin' && (
+          {role === 'admin' ? (
             <Link href="/admin/settings" passHref>
               <DropdownMenuItem>
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
+                <span>Company Settings</span>
+              </DropdownMenuItem>
+            </Link>
+          ) : (
+            <Link href="/settings" passHref>
+              <DropdownMenuItem>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>My Settings</span>
               </DropdownMenuItem>
             </Link>
           )}
