@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType } from '@/lib/types';
+import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType, AttendanceEvent } from '@/lib/types';
 import { initialTasks } from '@/lib/taskData';
 import { summarizeEmployeePerformance } from '@/ai/flows/summarize-employee-performance';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,20 +16,22 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; 
-import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { format, parseISO, isToday, formatDistanceToNow } from 'date-fns';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock } from 'lucide-react';
 
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { allUsers, loading: authLoading, updateUserInContext } = useAuth();
+  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog } = useAuth();
   const employeeId = params.employeeId as string;
   const { toast } = useToast();
 
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  
+
   const [isEditingSalary, setIsEditingSalary] = useState(false);
   const [editedSalary, setEditedSalary] = useState<string | number>('');
 
@@ -37,11 +39,11 @@ export default function EmployeeDetailPage() {
   const employee = useMemo(() => {
     if (authLoading || !allUsers.length) return null;
     const foundEmployee = allUsers.find(u => u.employeeId === employeeId) || null;
-    if (foundEmployee && !isEditingSalary) { 
-        setEditedSalary(foundEmployee.baseSalary || '');
+    if (foundEmployee && !isEditingSalary) {
+      setEditedSalary(foundEmployee.baseSalary || '');
     }
     return foundEmployee;
-  }, [allUsers, employeeId, authLoading, isEditingSalary]); 
+  }, [allUsers, employeeId, authLoading, isEditingSalary]);
 
   useEffect(() => {
     if (employee?.name) {
@@ -61,6 +63,17 @@ export default function EmployeeDetailPage() {
     if (!employee || !employee.leaves) return [];
     return employee.leaves || [];
   }, [employee]);
+
+  const employeeAttendanceEvents = useMemo(() => {
+    if (!employee || authLoading) return [];
+    return attendanceLog
+      .filter(event => event.employeeId === employee.employeeId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [employee, attendanceLog, authLoading]);
+
+  const todaysAttendanceEvents = useMemo(() => {
+    return employeeAttendanceEvents.filter(event => isToday(parseISO(event.timestamp)));
+  }, [employeeAttendanceEvents]);
 
 
   const handleGenerateSummary = async () => {
@@ -86,7 +99,7 @@ export default function EmployeeDetailPage() {
       setIsSummaryLoading(false);
     }
   };
-  
+
   const handleSaveSalary = async () => {
     if (!employee) return;
     const newSalary = parseFloat(String(editedSalary));
@@ -101,7 +114,7 @@ export default function EmployeeDetailPage() {
   };
 
 
-  if (authLoading && !employee) { 
+  if (authLoading && !employee) {
     return <div className="text-center py-10"><Loader2 className="mx-auto h-8 w-8 animate-spin" /> Loading employee details...</div>;
   }
 
@@ -143,13 +156,16 @@ export default function EmployeeDetailPage() {
   };
 
   const getStatusBadgeVariant = (status: string) => {
-    switch (status?.toLowerCase()) {
+    status = status || ''; // Ensure status is not null/undefined
+    switch (status.toLowerCase()) {
       case 'completed': return 'default';
       case 'in progress': return 'secondary';
       case 'pending': return 'outline';
       case 'blocked': return 'destructive';
       case 'approved': return 'default';
       case 'rejected': return 'destructive';
+      case 'check-in': return 'default';
+      case 'check-out': return 'secondary';
       default: return 'default';
     }
   };
@@ -186,7 +202,7 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
             <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} />
           </div>
-          
+
           <Separator />
 
           <Card className="shadow-sm">
@@ -217,8 +233,8 @@ export default function EmployeeDetailPage() {
                   />
                   <Button size="sm" onClick={handleSaveSalary}>Save</Button>
                   <Button variant="outline" size="sm" onClick={() => {
-                      setIsEditingSalary(false);
-                      setEditedSalary(employee?.baseSalary || ''); 
+                    setIsEditingSalary(false);
+                    setEditedSalary(employee?.baseSalary || '');
                   }}>Cancel</Button>
                 </div>
               ) : (
@@ -228,27 +244,109 @@ export default function EmployeeDetailPage() {
               )}
             </CardContent>
           </Card>
-          
+
           <Separator />
 
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center text-xl"><IndianRupee className="mr-2 h-5 w-5 text-primary"/>Payout Summary (Mock)</CardTitle>
-               <CardDescription className="text-xs text-muted-foreground">
+              <CardTitle className="flex items-center text-xl"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Payout Summary (Mock)</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">
                 Net Payable = (Base Salary × Mock Attendance Factor) - Approved Advances.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm p-4 bg-muted/30 rounded-md">
-                <div><span className="font-medium">Salary (Post-Attendance):</span> ₹{salaryAfterAttendance.toLocaleString('en-IN')}</div>
-                <div><span className="font-medium">Approved Advances:</span> ₹{approvedAdvancesTotal.toLocaleString('en-IN')}</div>
-                <div className="font-semibold text-lg"><span className="font-medium">Net Payable:</span> ₹{netPayable.toLocaleString('en-IN')}</div>
+              <div><span className="font-medium">Salary (Post-Attendance):</span> ₹{salaryAfterAttendance.toLocaleString('en-IN')}</div>
+              <div><span className="font-medium">Approved Advances:</span> ₹{approvedAdvancesTotal.toLocaleString('en-IN')}</div>
+              <div className="font-semibold text-lg"><span className="font-medium">Net Payable:</span> ₹{netPayable.toLocaleString('en-IN')}</div>
             </CardContent>
           </Card>
+
+          <Separator />
+
+           <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center text-xl"><Clock className="mr-2 h-5 w-5 text-primary" />Attendance Log</CardTitle>
+              <CardDescription>Full attendance history for {employee.name || employee.employeeId}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {todaysAttendanceEvents.length > 0 && (
+                <div className="mb-4 p-4 border rounded-md bg-primary/5">
+                  <h4 className="font-semibold text-md text-primary mb-2">Today's Activity ({format(new Date(), 'PPP')})</h4>
+                  <ul className="space-y-2 text-sm">
+                    {todaysAttendanceEvents.map(event => (
+                      <li key={event.id} className="flex items-center justify-between">
+                        <div>
+                          <Badge variant={getStatusBadgeVariant(event.type)} className="capitalize mr-2">
+                            {event.type === 'check-in' ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
+                            {event.type}
+                          </Badge>
+                           at {format(parseISO(event.timestamp), 'p')}
+                        </div>
+                        <span className="text-xs text-muted-foreground">({formatDistanceToNow(parseISO(event.timestamp), { addSuffix: true })})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {employeeAttendanceEvents.length > 0 ? (
+                <ScrollArea className="h-[400px] border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Geofence</TableHead>
+                        <TableHead className="hidden md:table-cell">Location</TableHead>
+                        <TableHead className="text-center">Photo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {employeeAttendanceEvents.map(event => (
+                        <TableRow key={event.id}>
+                          <TableCell>{format(parseISO(event.timestamp), 'MMM d, yyyy')}</TableCell>
+                          <TableCell>{format(parseISO(event.timestamp), 'p')}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(event.type)} className="capitalize">
+                             {event.type === 'check-in' ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
+                              {event.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {event.isWithinGeofence === undefined || event.isWithinGeofence === null ? <Badge variant="outline">N/A</Badge> :
+                             event.isWithinGeofence ?
+                             <Badge variant="default" className="bg-green-600 hover:bg-green-700"><Wifi className="mr-1 h-3 w-3"/> Within</Badge> :
+                             <Badge variant="destructive"><WifiOff className="mr-1 h-3 w-3"/> Outside</Badge>}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                            {event.location ? `${event.location.latitude.toFixed(3)}, ${event.location.longitude.toFixed(3)}` : 'N/A'}
+                            {event.location?.accuracy && ` (±${event.location.accuracy.toFixed(0)}m)`}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {event.photoDataUrl ? (
+                              <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
+                                <AvatarImage src={event.photoDataUrl} alt="Attendance photo" />
+                                <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
+                              </Avatar>
+                            ) : <span className="text-xs text-muted-foreground">-</span>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              ) : (
+                <p className="text-muted-foreground text-center py-4">No attendance records found for this employee.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Separator />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="flex items-center text-xl"><ListChecks className="mr-2 h-5 w-5 text-primary"/>Assigned Tasks</CardTitle>
+                <CardTitle className="flex items-center text-xl"><ListChecks className="mr-2 h-5 w-5 text-primary" />Assigned Tasks</CardTitle>
               </CardHeader>
               <CardContent>
                 {employeeTasks.length > 0 ? (
@@ -280,7 +378,7 @@ export default function EmployeeDetailPage() {
 
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="flex items-center text-xl"><CalendarOff className="mr-2 h-5 w-5 text-primary"/>Leave Applications</CardTitle>
+                <CardTitle className="flex items-center text-xl"><CalendarOff className="mr-2 h-5 w-5 text-primary" />Leave Applications</CardTitle>
               </CardHeader>
               <CardContent>
                 {(employee.leaves && employee.leaves.length > 0) ? (
@@ -308,12 +406,12 @@ export default function EmployeeDetailPage() {
               </CardContent>
             </Card>
           </div>
-          
+
           <Separator />
 
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center text-xl"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>AI Performance Summary</CardTitle>
+              <CardTitle className="flex items-center text-xl"><BarChart3 className="mr-2 h-5 w-5 text-primary" />AI Performance Summary</CardTitle>
               <CardDescription>Generates a summary based on tasks, leaves, and attendance.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -322,7 +420,7 @@ export default function EmployeeDetailPage() {
                 Generate AI Performance Summary
               </Button>
               {isSummaryLoading && <p className="text-muted-foreground mt-2">Generating summary, please wait...</p>}
-              {summaryError && <Alert variant="destructive" className="mt-4"><AlertTriangle className="h-4 w-4"/><AlertDescription>{summaryError}</AlertDescription></Alert>}
+              {summaryError && <Alert variant="destructive" className="mt-4"><AlertTriangle className="h-4 w-4" /><AlertDescription>{summaryError}</AlertDescription></Alert>}
               {aiSummary && !isSummaryLoading && (
                 <div className="mt-4 p-4 border rounded-md bg-muted/50 shadow-inner">
                   <h4 className="font-semibold mb-2 text-foreground">Summary:</h4>
@@ -358,3 +456,4 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
+
