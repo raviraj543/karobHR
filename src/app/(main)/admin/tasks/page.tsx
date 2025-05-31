@@ -12,7 +12,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Search, Briefcase, User, CalendarDays, AlertCircle, Loader2 } from 'lucide-react';
-import type { Metadata } from 'next';
+// Metadata is not typically used in client components directly for document.title
+// import type { Metadata } from 'next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,24 +21,22 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import type { User as AuthUser } from '@/lib/types'; // Renamed to avoid conflict with Lucide User
 import { v4 as uuidv4 } from 'uuid';
+import type { Task as TaskType } from '@/lib/types'; // Import the shared Task type
 
-// export const metadata: Metadata = { // Metadata not used in client components
-//   title: 'Manage Tasks - Admin - BizFlow',
-//   description: 'Assign, track, and manage employee tasks.',
-// };
+// Ensure this Task interface is compatible or uses the one from lib/types
+// For consistency, we'll use the TaskType imported from @/lib/types
+// interface Task {
+//   id: string;
+//   title: string;
+//   description: string;
+//   assigneeId: string;
+//   assigneeName: string;
+//   dueDate: string;
+//   priority: 'Low' | 'Medium' | 'High' | 'Critical';
+//   status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
+// }
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  assigneeId: string;
-  assigneeName: string;
-  dueDate: string;
-  priority: 'Low' | 'Medium' | 'High' | 'Critical';
-  status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
-}
-
-const initialTasks: Task[] = [
+export const initialTasks: TaskType[] = [
   { id: 'task_101', title: 'Develop new marketing campaign', description: 'Plan and execute Q4 marketing strategy.', assigneeId: 'emp101', assigneeName: 'John Doe', dueDate: '2024-11-10', priority: 'High', status: 'In Progress' },
   { id: 'task_102', title: 'Onboard new clients for Q4', description: 'Welcome and set up new clients.', assigneeId: 'emp102', assigneeName: 'Alice Smith', dueDate: '2024-11-15', priority: 'Medium', status: 'Pending' },
   { id: 'task_103', title: 'Finalize budget for 2025', description: 'Review all department budgets and finalize.', assigneeId: 'man101', assigneeName: 'Mike Manager', dueDate: '2024-10-30', priority: 'High', status: 'Completed' },
@@ -57,7 +56,7 @@ const taskFormSchema = z.object({
 type TaskFormValues = z.infer<typeof taskFormSchema>;
 
 
-const getPriorityBadgeVariant = (priority: Task['priority']) => {
+const getPriorityBadgeVariant = (priority: TaskType['priority']) => {
   switch (priority.toLowerCase()) {
     case 'critical': return 'destructive';
     case 'high': return 'destructive'; // Or a different shade if needed
@@ -66,7 +65,7 @@ const getPriorityBadgeVariant = (priority: Task['priority']) => {
     default: return 'default';
   }
 };
-const getStatusBadgeVariant = (status: Task['status']) => {
+const getStatusBadgeVariant = (status: TaskType['status']) => {
   switch (status.toLowerCase()) {
     case 'completed': return 'default'; 
     case 'in progress': return 'secondary';
@@ -78,7 +77,7 @@ const getStatusBadgeVariant = (status: Task['status']) => {
 
 
 export default function AdminTasksPage() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<TaskType[]>(initialTasks);
   const [isAssignTaskDialogOpen, setIsAssignTaskDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -108,7 +107,7 @@ export default function AdminTasksPage() {
         return;
     }
 
-    const newTask: Task = {
+    const newTask: TaskType = {
       id: uuidv4(),
       title: data.title,
       description: data.description,
@@ -309,3 +308,5 @@ export default function AdminTasksPage() {
     </div>
   );
 }
+
+    
