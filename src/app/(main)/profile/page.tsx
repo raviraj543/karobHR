@@ -8,8 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Edit3, Mail, Phone, Briefcase, User as UserIcon, ShieldCheck, UserCog } from 'lucide-react';
-// import type { Metadata } from 'next'; // Cannot be used in client component directly for dynamic titles
+import { Edit3, Mail, Phone, Briefcase, User as UserIcon, ShieldCheck, UserCog, DollarSign } from 'lucide-react';
 import { useEffect } from 'react';
 
 export default function ProfilePage() {
@@ -107,10 +106,15 @@ export default function ProfilePage() {
                 </Label>
                 <Input id="joiningDate" value={user.joiningDate || 'Not specified'} readOnly disabled className="bg-muted/20"/>
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="baseSalary" className="flex items-center text-muted-foreground">
+                  <DollarSign className="mr-2 h-4 w-4" /> Base Monthly Salary
+                </Label>
+                <Input id="baseSalary" value={user.baseSalary ? `$${user.baseSalary.toLocaleString()}` : 'Not set'} readOnly disabled className="bg-muted/20"/>
+              </div>
             </div>
           </div>
           
-          {/* Placeholder for future sections like address, emergency contact, etc. */}
         </CardContent>
       </Card>
     </div>

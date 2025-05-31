@@ -1,6 +1,16 @@
 
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
+export interface Advance {
+  id: string;
+  employeeId: string; // To know who this advance belongs to, useful for admin view
+  amount: number;
+  reason: string;
+  dateRequested: string; // ISO Date string
+  status: 'pending' | 'approved' | 'rejected';
+  dateProcessed?: string; // ISO Date string
+}
+
 export interface User {
   id: string; // Unique user record ID (e.g., from Firebase Auth or DB)
   employeeId: string; // The ID used for login, set by admin
@@ -10,10 +20,11 @@ export interface User {
   profilePictureUrl?: string | null;
   department?: string | null;
   joiningDate?: string | null; // Represent as string for simplicity, or Date
-  contactInfo?: { // Added for profile page display
+  contactInfo?: {
     phone?: string | null;
-    // address?: string | null; // Example for future extension
   };
+  baseSalary?: number;
+  advances?: Advance[];
 }
 
 // Task structure expected by the AI flow
@@ -45,4 +56,3 @@ export interface LeaveApplication {
   status: 'pending' | 'approved' | 'rejected';
   supportingDocumentUrl?: string;
 }
-

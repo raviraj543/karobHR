@@ -7,14 +7,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Use ShadCN Label
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, ArrowLeft } from 'lucide-react';
+import { UserPlus, ArrowLeft, DollarSign } from 'lucide-react';
 import Link from 'next/link';
-// import type { Metadata } from 'next'; // Metadata must be defined in Server Components
 
 const newEmployeeSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -25,10 +24,14 @@ const newEmployeeSchema = z.object({
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   department: z.string().min(2, { message: 'Department is required.' }),
   role: z.enum(['employee', 'admin', 'manager']).default('employee'),
-  joiningDate: z.string().optional(), // Basic string input for simplicity
+  joiningDate: z.string().optional(), 
+  baseSalary: z.preprocess(
+    (val) => (val === "" ? undefined : Number(val)), // Convert empty string to undefined, then to number
+    z.number({ invalid_type_error: 'Base salary must be a number.' }).positive({ message: 'Base salary must be positive.' }).optional()
+  ),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"], // path to field that gets the error
+  path: ["confirmPassword"],
 });
 
 type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
@@ -47,29 +50,28 @@ export default function AddNewEmployeePage() {
       confirmPassword: '',
       department: '',
       role: 'employee',
-      joiningDate: new Date().toISOString().split('T')[0], // Default to today
+      joiningDate: new Date().toISOString().split('T')[0],
+      baseSalary: undefined,
     },
   });
 
   const onSubmit = async (data: NewEmployeeFormValues) => {
     setIsLoading(true);
-    // In a real application, you would send this data to your backend
-    // to create the user and store their credentials securely.
-    // For this mock, we'll just simulate success.
     console.log('New Employee Data:', data);
 
-    // Simulate API call
+    // In a real app, you would send this data to your backend.
+    // For this mock, we'll just simulate success.
+    // The AuthContext would need updating to actually add this user to the mockUserProfiles and mockCredentials.
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     toast({
       title: "Employee Account Created (Mock)",
-      description: `Account for ${data.name} (${data.employeeId}) with role ${data.role} has been notionally created. In a real app, their credentials would be saved.`,
+      description: `Account for ${data.name} (${data.employeeId}) with role ${data.role} and base salary ${data.baseSalary || 'N/A'} has been notionally created.`,
     });
-    form.reset(); // Reset form after successful submission
+    form.reset();
     setIsLoading(false);
   };
   
-  // Update document title (since metadata object isn't usable directly in client components)
   useState(() => {
     document.title = 'Add New Employee - Admin - BizFlow';
   });
@@ -119,7 +121,7 @@ export default function AddNewEmployeePage() {
                       <FormControl>
                         <Input placeholder="e.g., emp123" {...field} />
                       </FormControl>
-                      <FormDescription>Unique ID for login. No spaces or special chars other than _ . -</FormDescription>
+                      <FormDescription>Unique ID for login.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -198,28 +200,45 @@ export default function AddNewEmployeePage() {
                 />
               </div>
               
-              <FormField
-                control={form.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Role</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="employee">Employee</SelectItem>
+                          <SelectItem value="manager">Manager</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="baseSalary"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        <DollarSign className="mr-1 h-4 w-4 text-muted-foreground" /> Base Monthly Salary (Optional)
+                      </FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a role" />
-                        </SelectTrigger>
+                        <Input type="number" placeholder="e.g., 50000" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ''} />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <Button type="submit" className="w-full md:w-auto" disabled={isLoading}>
                 {isLoading ? 'Creating Account...' : 'Create Employee Account'}

@@ -13,12 +13,8 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  // SidebarMenuSub, // Not used currently
-  // SidebarMenuSubItem, // Not used currently
-  // SidebarMenuSubButton, // Not used currently
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppLogo } from './AppLogo';
 import { UserNav } from './UserNav';
@@ -35,8 +31,9 @@ import {
   Briefcase,
   ShieldCheck,
   Camera as CameraIcon,
+  DollarSign,
+  CreditCard,
 } from 'lucide-react';
-// import { cn } from '@/lib/utils'; // Not used currently
 
 interface NavItem {
   href: string;
@@ -54,8 +51,10 @@ const navItems: NavItem[] = [
   { href: '/attendance', label: 'Attendance', icon: CameraIcon, allowedRoles: ['employee', 'manager'] },
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] }, 
+  { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
+  { href: '/admin/payroll', label: 'Payroll', icon: DollarSign, allowedRoles: ['admin'] },
   { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee', 'manager'] }, 
   { href: '/admin/settings', label: 'Settings', icon: Settings, allowedRoles: ['admin'], isBottom: true },
 ];
@@ -65,7 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { role, logout } = useAuth();
   const pathname = usePathname();
 
-  const filteredNavItems = navItems.filter(item => item.allowedRoles.includes(role!));
+  const filteredNavItems = navItems.filter(item => role && item.allowedRoles.includes(role));
   const topNavItems = filteredNavItems.filter(item => !item.isBottom);
   const bottomNavItems = filteredNavItems.filter(item => item.isBottom);
 
@@ -92,7 +91,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar side="left" variant="sidebar" collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground">
           <SidebarHeader className="p-2 h-16 flex items-center justify-between">
              <AppLogo />
-             {/* Mobile trigger shown when sidebar is collapsed by icon */}
              <div className="md:hidden group-data-[collapsible=icon]:hidden"> 
                <SidebarTrigger />
              </div>
@@ -120,15 +118,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex flex-1 flex-col overflow-hidden">
           <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
             <div className="flex items-center gap-2">
-               {/* Desktop trigger */}
               <div className="hidden md:block">
                 <SidebarTrigger/>
               </div>
-               {/* Mobile trigger shown when sidebar is not collapsed by icon */}
               <div className="md:hidden group-data-[collapsible=icon]:block">
                  <SidebarTrigger />
               </div>
-              <h1 className="text-lg font-semibold text-foreground">{/* Page Title Could Go Here */}</h1>
+              <h1 className="text-lg font-semibold text-foreground"></h1>
             </div>
             <UserNav />
           </header>
