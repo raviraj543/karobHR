@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Edit3, Mail, Phone, Briefcase, User as UserIcon, ShieldCheck, UserCog, IndianRupee } from 'lucide-react';
+import { Edit3, Mail, Phone, Briefcase, User as UserIcon, ShieldCheck, UserCog, IndianRupee, CalendarDays } from 'lucide-react';
 import { useEffect } from 'react';
 
 export default function ProfilePage() {
@@ -24,7 +24,7 @@ export default function ProfilePage() {
 
 
   if (!user) {
-    return <p className="text-center text-muted-foreground">Loading profile...</p>;
+    return <p className="text-center text-muted-foreground py-10">Loading profile...</p>;
   }
 
   const initials = user.name
@@ -49,12 +49,12 @@ export default function ProfilePage() {
           <p className="text-muted-foreground">View and manage your personal information.</p>
         </div>
         <Button variant="outline">
-          <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
+          <Edit3 className="mr-2 h-4 w-4" /> Edit Profile (Mock)
         </Button>
       </div>
       
       <Card className="shadow-lg">
-        <CardHeader className="bg-muted/30 p-6 rounded-t-lg">
+        <CardHeader className="bg-muted/30 p-6 rounded-t-lg border-b">
           <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
             <Avatar className="h-20 w-20 border-2 border-primary">
               <AvatarImage src={user.profilePictureUrl || undefined} alt={user.name || 'User Avatar'} data-ai-hint="profile person" />
@@ -72,19 +72,19 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           <div>
-            <h3 className="text-lg font-semibold mb-2 text-primary">Contact Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold mb-3 text-primary">Contact Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1">
-                <Label htmlFor="email" className="flex items-center text-muted-foreground">
+                <Label htmlFor="email" className="flex items-center text-sm text-muted-foreground">
                   <Mail className="mr-2 h-4 w-4" /> Email Address
                 </Label>
-                <Input id="email" value={user.email || 'Not set'} readOnly disabled className="bg-muted/20"/>
+                <Input id="email" value={user.email || 'Not set'} readOnly disabled className="bg-muted/40 border-muted/60"/>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="phone" className="flex items-center text-muted-foreground">
+                <Label htmlFor="phone" className="flex items-center text-sm text-muted-foreground">
                   <Phone className="mr-2 h-4 w-4" /> Phone Number
                 </Label>
-                <Input id="phone" value={user.contactInfo?.phone || 'Not set'} readOnly disabled className="bg-muted/20"/>
+                <Input id="phone" value={user.contactInfo?.phone || 'Not set'} readOnly disabled className="bg-muted/40 border-muted/60"/>
               </div>
             </div>
           </div>
@@ -92,26 +92,28 @@ export default function ProfilePage() {
           <Separator />
 
           <div>
-            <h3 className="text-lg font-semibold mb-2 text-primary">Employment Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold mb-3 text-primary">Employment Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1">
-                <Label htmlFor="department" className="flex items-center text-muted-foreground">
+                <Label htmlFor="department" className="flex items-center text-sm text-muted-foreground">
                   <Briefcase className="mr-2 h-4 w-4" /> Department
                 </Label>
-                <Input id="department" value={user.department || 'Not specified'} readOnly disabled className="bg-muted/20"/>
+                <Input id="department" value={user.department || 'Not specified'} readOnly disabled className="bg-muted/40 border-muted/60"/>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="joiningDate" className="flex items-center text-muted-foreground">
-                  <UserIcon className="mr-2 h-4 w-4" /> Joining Date
+                <Label htmlFor="joiningDate" className="flex items-center text-sm text-muted-foreground">
+                  <CalendarDays className="mr-2 h-4 w-4" /> Joining Date
                 </Label>
-                <Input id="joiningDate" value={user.joiningDate || 'Not specified'} readOnly disabled className="bg-muted/20"/>
+                <Input id="joiningDate" value={user.joiningDate ? new Date(user.joiningDate).toLocaleDateString() : 'Not specified'} readOnly disabled className="bg-muted/40 border-muted/60"/>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="baseSalary" className="flex items-center text-muted-foreground">
-                  <IndianRupee className="mr-2 h-4 w-4" /> Base Monthly Salary
-                </Label>
-                <Input id="baseSalary" value={user.baseSalary ? `₹${user.baseSalary.toLocaleString('en-IN')}` : 'Not set'} readOnly disabled className="bg-muted/20"/>
-              </div>
+              {user.role !== 'admin' && (
+                <div className="space-y-1">
+                  <Label htmlFor="baseSalary" className="flex items-center text-sm text-muted-foreground">
+                    <IndianRupee className="mr-2 h-4 w-4" /> Base Monthly Salary
+                  </Label>
+                  <Input id="baseSalary" value={user.baseSalary ? `₹${user.baseSalary.toLocaleString('en-IN')}` : 'Not set'} readOnly disabled className="bg-muted/40 border-muted/60"/>
+                </div>
+              )}
             </div>
           </div>
           

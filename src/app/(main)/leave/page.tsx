@@ -9,7 +9,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { CalendarPlus, History, BarChartHorizontalBig, Info } from 'lucide-react';
+import { CalendarPlus, History, BarChartHorizontalBig, Info, CalendarDays as CalendarIcon } from 'lucide-react';
 import type { Metadata } from 'next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -40,8 +40,8 @@ const leaveApplicationSchema = z.object({
 type LeaveFormValues = z.infer<typeof leaveApplicationSchema>;
 
 const initialRecentApplications: LeaveApplication[] = [
-    { id: '1', userId: 'mockUser', leaveType: 'Casual Leave', startDate: '2023-10-20', endDate: '2023-10-22', reason: 'Family function', status: 'Approved', color: 'text-green-500' },
-    { id: '2', userId: 'mockUser', leaveType: 'Sick Leave', startDate: '2023-11-05', endDate: '2023-11-05', reason: 'Feeling unwell', status: 'Pending', color: 'text-yellow-500' },
+    { id: '1', userId: 'mockUser', leaveType: 'Casual Leave', startDate: '2023-10-20', endDate: '2023-10-22', reason: 'Family function', status: 'Approved', color: 'bg-green-100 text-green-700 border-green-300' },
+    { id: '2', userId: 'mockUser', leaveType: 'Sick Leave', startDate: '2023-11-05', endDate: '2023-11-05', reason: 'Feeling unwell', status: 'Pending', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
 ];
 
 export default function LeavePage() {
@@ -73,7 +73,7 @@ export default function LeavePage() {
       endDate: data.endDate,
       reason: data.reason,
       status: 'pending',
-      color: 'text-yellow-500', // Default for pending
+      color: 'bg-yellow-100 text-yellow-700 border-yellow-300', // Default for pending
     };
     setRecentApplications(prev => [newApplication, ...prev]);
     toast({
@@ -84,10 +84,9 @@ export default function LeavePage() {
     form.reset();
   };
 
-  // Placeholder data - in a real app, this would come from user data and admin settings
-  const configuredMonthlyAllowance = 4; // Example: As set by admin
-  const configuredYearlyAllowance = 48; // Example: As set by admin
-  const currentLeaveBalanceMock = 10; // Example: Employee's actual remaining balance
+  const configuredMonthlyAllowance = 4; 
+  const configuredYearlyAllowance = 48; 
+  const currentLeaveBalanceMock = 10;
 
 
   return (
@@ -192,7 +191,7 @@ export default function LeavePage() {
           <CardDescription>Your current leave allowances and balance.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-4 bg-muted/30 rounded-lg shadow space-y-2">
+          <div className="p-4 bg-muted/30 rounded-lg shadow-inner space-y-2 border">
             <h3 className="text-md font-semibold text-foreground">Configured Allowances</h3>
             <div className="flex justify-between items-center text-sm">
               <span className="text-muted-foreground">Default Monthly Allowance:</span>
@@ -206,7 +205,7 @@ export default function LeavePage() {
               <Info className="inline-block mr-1 h-3 w-3" /> These are the default allowances set by the company admin. Your actual accrual might vary.
             </p>
           </div>
-           <div className="p-4 bg-primary/10 rounded-lg shadow text-center">
+           <div className="p-4 bg-primary/10 rounded-lg shadow text-center border border-primary/30">
               <p className="text-sm font-medium capitalize text-muted-foreground">Your Remaining Leave (Mock)</p>
               <p className="text-4xl font-bold text-primary">{currentLeaveBalanceMock}</p>
               <p className="text-xs text-muted-foreground">days available</p>
@@ -223,7 +222,7 @@ export default function LeavePage() {
           {recentApplications.length > 0 ? (
             <ul className="space-y-3">
               {recentApplications.map(app => (
-                <li key={app.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-md shadow-sm">
+                <li key={app.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-md shadow-sm border">
                   <div>
                     <p className="font-semibold">{app.leaveType}</p>
                     <p className="text-sm text-muted-foreground">
@@ -231,7 +230,7 @@ export default function LeavePage() {
                     </p>
                     <p className="text-xs text-muted-foreground italic mt-0.5">Reason: {app.reason}</p>
                   </div>
-                  <span className={`text-sm font-medium px-2 py-1 rounded-full ${app.color || 'text-yellow-500'} bg-opacity-10`}>{app.status}</span>
+                  <span className={`text-sm font-medium px-3 py-1 rounded-full border ${app.color || 'bg-yellow-100 text-yellow-700 border-yellow-300'}`}>{app.status}</span>
                 </li>
               ))}
             </ul>
@@ -243,12 +242,11 @@ export default function LeavePage() {
       
        <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>Company Holiday Calendar</CardTitle>
-          <CardDescription>Upcoming company holidays for this year.</CardDescription>
+            <CardTitle className="flex items-center"><CalendarIcon className="mr-2 h-5 w-5 text-primary" />Company Holiday Calendar</CardTitle>
+            <CardDescription>Upcoming company holidays for this year.</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Placeholder for holiday calendar view */}
-          <div className="h-64 bg-muted rounded-md flex items-center justify-center" data-ai-hint="calendar schedule">
+          <div className="h-64 bg-muted rounded-md flex items-center justify-center border" data-ai-hint="calendar schedule">
              <p className="text-muted-foreground">Holiday calendar will be displayed here.</p>
           </div>
         </CardContent>

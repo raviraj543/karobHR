@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, Trash2, Loader2, CheckCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CheckCircle, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 
@@ -21,7 +21,7 @@ export function TaskSummarizer() {
   const [summary, setSummary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth(); // Get the current user for notification
+  const { user } = useAuth(); 
 
   const handleTaskChange = (id: string, field: keyof AiTask, value: string) => {
     setTasks(tasks.map(task => task.id === id ? { ...task, [field]: value } : task));
@@ -79,15 +79,15 @@ export function TaskSummarizer() {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto shadow-lg">
+    <Card className="w-full max-w-2xl mx-auto shadow-sm">
       <CardHeader>
-        <CardTitle className="text-2xl font-semibold">Daily Task Report & Checkout</CardTitle>
-        <CardDescription>List your tasks for the day. Completed tasks will be summarized.</CardDescription>
+        <CardTitle className="text-2xl font-semibold flex items-center"><FileText className="mr-2 h-6 w-6 text-primary"/>Daily Task Report & Checkout</CardTitle>
+        <CardDescription>List your tasks for the day. Completed tasks will be summarized and submitted.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {tasks.map((task, index) => (
-            <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative">
+            <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label htmlFor={`task-title-${task.id}`}>Task Title</Label>
@@ -132,7 +132,7 @@ export function TaskSummarizer() {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeTask(task.id)}
-                    className="absolute top-2 right-2 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
+                    className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
                     aria-label="Remove task"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -141,25 +141,25 @@ export function TaskSummarizer() {
             </div>
           ))}
 
-          <div className="flex justify-between items-center">
-            <Button type="button" variant="outline" onClick={addTask} className="text-sm">
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Task
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={addTask} className="text-sm w-full sm:w-auto">
+              <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
             </Button>
-            <Button type="submit" disabled={isLoading} className="min-w-[150px]">
+            <Button type="submit" disabled={isLoading} className="min-w-[180px] w-full sm:w-auto">
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <CheckCircle className="mr-2 h-4 w-4" />
               )}
-              {isLoading ? 'Generating...' : 'Summarize & Checkout'}
+              {isLoading ? 'Generating...' : 'Summarize & Submit Report'}
             </Button>
           </div>
         </form>
 
         {summary && (
-          <div className="mt-8 p-4 border border-primary/50 rounded-lg bg-primary/5 shadow-md">
-            <h3 className="text-lg font-semibold text-primary mb-2">Completed Tasks Summary:</h3>
-            <div className="prose prose-sm max-w-none text-foreground" dangerouslySetInnerHTML={{ __html: summary.replace(/\n/g, '<br />') }}>
+          <div className="mt-8 p-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 shadow-inner">
+            <h3 className="text-lg font-semibold text-primary mb-2">Completed Tasks Summary (Submitted):</h3>
+            <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: summary.replace(/\n/g, '<br />') }}>
             </div>
           </div>
         )}

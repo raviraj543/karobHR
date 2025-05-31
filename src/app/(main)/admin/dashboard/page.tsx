@@ -117,7 +117,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">Employee activity data will be shown here.</p>
-            <div className="mt-4 h-64 bg-muted rounded-md flex items-center justify-center" data-ai-hint="bar chart employee activity">
+            <div className="mt-4 h-64 bg-muted rounded-md flex items-center justify-center border" data-ai-hint="bar chart employee activity">
                 <BarChart3 className="h-16 w-16 text-muted-foreground/50"/>
             </div>
           </CardContent>
@@ -178,10 +178,10 @@ export default function AdminDashboardPage() {
         </CardHeader>
         <CardContent>
           {announcements && announcements.length > 0 ? (
-            <ScrollArea className="h-72">
+            <ScrollArea className="h-72 border rounded-md p-4 bg-background">
               <ul className="space-y-4">
                 {announcements.map((ann) => (
-                  <li key={ann.id} className="p-4 border rounded-md bg-muted/50">
+                  <li key={ann.id} className="p-4 border rounded-md bg-muted/50 shadow-sm">
                     <h4 className="font-semibold text-foreground">{ann.title}</h4>
                     <p className="text-xs text-muted-foreground">
                       Posted by {ann.postedBy} on {new Date(ann.postedAt).toLocaleDateString()} at {new Date(ann.postedAt).toLocaleTimeString()}
@@ -204,7 +204,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">Task overview data will be shown here.</p>
-             <div className="mt-4 h-64 bg-muted rounded-md flex items-center justify-center" data-ai-hint="pie chart task status">
+             <div className="mt-4 h-64 bg-muted rounded-md flex items-center justify-center border" data-ai-hint="pie chart task status">
                  <BarChart3 className="h-16 w-16 text-muted-foreground/50"/>
             </div>
           </CardContent>

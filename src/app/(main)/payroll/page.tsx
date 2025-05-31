@@ -44,7 +44,6 @@ export default function EmployeePayrollPage() {
     document.title = 'My Payslip - BizFlow';
   }, []);
 
-  // Calculate salary details
   const baseSalary = user?.baseSalary || 0;
   const attendanceFactor = user?.mockAttendanceFactor !== undefined ? user.mockAttendanceFactor : 1.0;
   const salaryAfterAttendance = baseSalary * attendanceFactor;
@@ -100,13 +99,13 @@ export default function EmployeePayrollPage() {
           <CardDescription>
             Your current salary breakdown.
             <span className="block text-xs text-muted-foreground/80 italic mt-1">
-             Note: This is a simplified mock. Salary is calculated as (Base Salary * Mock Attendance Factor) - Approved Advances. Actual attendance tracking for the factor requires backend integration.
+             Note: This is a simplified mock. Salary is calculated as (Base Salary * Mock Attendance Factor) - Approved Advances.
             </span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+            <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
               <div>
                 <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
                 <p className="text-2xl font-semibold text-foreground">₹{baseSalary.toLocaleString('en-IN')}</p>
@@ -120,10 +119,10 @@ export default function EmployeePayrollPage() {
                 <p className="text-2xl font-semibold text-foreground">₹{salaryAfterAttendance.toLocaleString('en-IN')}</p>
               </div>
             </div>
-            <div className="space-y-3 p-4 bg-primary/5 rounded-lg">
+            <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
                <div>
                 <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
-                <p className="text-2xl font-semibold text-red-600">(₹{approvedAdvancesTotal.toLocaleString('en-IN')})</p>
+                <p className="text-2xl font-semibold text-destructive">(₹{approvedAdvancesTotal.toLocaleString('en-IN')})</p>
               </div>
               <div className="pt-2">
                 <Label className="text-sm text-primary/80">Net Payable Amount</Label>
@@ -149,7 +148,7 @@ export default function EmployeePayrollPage() {
                   type="number"
                   placeholder="e.g., 5000"
                   {...form.register("amount")}
-                  className={form.formState.errors.amount ? "border-destructive" : ""}
+                  className={form.formState.errors.amount ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
                 {form.formState.errors.amount && <p className="text-sm text-destructive mt-1">{form.formState.errors.amount.message}</p>}
               </div>
@@ -160,7 +159,7 @@ export default function EmployeePayrollPage() {
                   placeholder="Briefly explain the reason for your request (min. 10 characters)"
                   rows={3}
                   {...form.register("reason")}
-                  className={form.formState.errors.reason ? "border-destructive" : ""}
+                  className={form.formState.errors.reason ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
                  {form.formState.errors.reason && <p className="text-sm text-destructive mt-1">{form.formState.errors.reason.message}</p>}
               </div>
@@ -189,10 +188,10 @@ export default function EmployeePayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {user.advances.slice().reverse().map(advance => ( // Show newest first
-                    <TableRow key={advance.id}>
+                  {user.advances.slice().reverse().map(advance => ( 
+                    <TableRow key={advance.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">₹{advance.amount.toLocaleString('en-IN')}</TableCell>
-                      <TableCell>{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusBadgeVariant(advance.status)} className="capitalize">{advance.status}</Badge>
                       </TableCell>

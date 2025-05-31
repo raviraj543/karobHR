@@ -16,7 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Kept for AI summary error
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; 
 import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2 } from 'lucide-react';
 
 export default function EmployeeDetailPage() {
@@ -37,11 +37,11 @@ export default function EmployeeDetailPage() {
   const employee = useMemo(() => {
     if (authLoading || !allUsers.length) return null;
     const foundEmployee = allUsers.find(u => u.employeeId === employeeId) || null;
-    if (foundEmployee && !isEditingSalary) { // Initialize editedSalary when employee loads and not in edit mode
+    if (foundEmployee && !isEditingSalary) { 
         setEditedSalary(foundEmployee.baseSalary || '');
     }
     return foundEmployee;
-  }, [allUsers, employeeId, authLoading, isEditingSalary]); // isEditingSalary added to dependencies
+  }, [allUsers, employeeId, authLoading, isEditingSalary]); 
 
   useEffect(() => {
     if (employee?.name) {
@@ -101,7 +101,7 @@ export default function EmployeeDetailPage() {
   };
 
 
-  if (authLoading && !employee) { // Show loading only if employee data isn't available yet
+  if (authLoading && !employee) { 
     return <div className="text-center py-10"><Loader2 className="mx-auto h-8 w-8 animate-spin" /> Loading employee details...</div>;
   }
 
@@ -163,7 +163,7 @@ export default function EmployeeDetailPage() {
       </div>
 
       <Card className="shadow-lg">
-        <CardHeader className="bg-muted/30 p-6 rounded-t-lg">
+        <CardHeader className="bg-muted/30 p-6 rounded-t-lg border-b">
           <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
             <Avatar className="h-24 w-24 border-2 border-primary">
               <AvatarImage src={employee.profilePictureUrl || undefined} alt={employee.name || 'User Avatar'} data-ai-hint="profile person" />
@@ -184,16 +184,15 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Phone" icon={Phone} value={employee.contactInfo?.phone || 'N/A'} />
             <InfoCard title="Department" icon={Briefcase} value={employee.department || 'N/A'} />
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
-            {/* Base Salary moved to its own editable card below */}
             <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} />
           </div>
           
           <Separator />
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center">
+                <CardTitle className="flex items-center text-xl">
                   <IndianRupee className="mr-2 h-5 w-5 text-primary" /> Base Salary
                 </CardTitle>
                 {!isEditingSalary ? (
@@ -219,7 +218,7 @@ export default function EmployeeDetailPage() {
                   <Button size="sm" onClick={handleSaveSalary}>Save</Button>
                   <Button variant="outline" size="sm" onClick={() => {
                       setIsEditingSalary(false);
-                      setEditedSalary(employee?.baseSalary || ''); // Reset on cancel
+                      setEditedSalary(employee?.baseSalary || ''); 
                   }}>Cancel</Button>
                 </div>
               ) : (
@@ -232,14 +231,14 @@ export default function EmployeeDetailPage() {
           
           <Separator />
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary"/>Payout Summary (Till Date - Mock)</CardTitle>
+              <CardTitle className="flex items-center text-xl"><IndianRupee className="mr-2 h-5 w-5 text-primary"/>Payout Summary (Mock)</CardTitle>
                <CardDescription className="text-xs text-muted-foreground">
-                Net Payable = (Base Salary × Mock Attendance Factor) - Approved Advances. Updates in real-time if base salary or attendance factor (mock) are changed.
+                Net Payable = (Base Salary × Mock Attendance Factor) - Approved Advances.
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm p-4 bg-muted/30 rounded-md">
                 <div><span className="font-medium">Salary (Post-Attendance):</span> ₹{salaryAfterAttendance.toLocaleString('en-IN')}</div>
                 <div><span className="font-medium">Approved Advances:</span> ₹{approvedAdvancesTotal.toLocaleString('en-IN')}</div>
                 <div className="font-semibold text-lg"><span className="font-medium">Net Payable:</span> ₹{netPayable.toLocaleString('en-IN')}</div>
@@ -247,9 +246,9 @@ export default function EmployeeDetailPage() {
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary"/>Assigned Tasks</CardTitle>
+                <CardTitle className="flex items-center text-xl"><ListChecks className="mr-2 h-5 w-5 text-primary"/>Assigned Tasks</CardTitle>
               </CardHeader>
               <CardContent>
                 {employeeTasks.length > 0 ? (
@@ -279,9 +278,9 @@ export default function EmployeeDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="flex items-center"><CalendarOff className="mr-2 h-5 w-5 text-primary"/>Leave Applications</CardTitle>
+                <CardTitle className="flex items-center text-xl"><CalendarOff className="mr-2 h-5 w-5 text-primary"/>Leave Applications</CardTitle>
               </CardHeader>
               <CardContent>
                 {(employee.leaves && employee.leaves.length > 0) ? (
@@ -312,9 +311,9 @@ export default function EmployeeDetailPage() {
           
           <Separator />
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>AI Performance Summary</CardTitle>
+              <CardTitle className="flex items-center text-xl"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>AI Performance Summary</CardTitle>
               <CardDescription>Generates a summary based on tasks, leaves, and attendance.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -325,7 +324,7 @@ export default function EmployeeDetailPage() {
               {isSummaryLoading && <p className="text-muted-foreground mt-2">Generating summary, please wait...</p>}
               {summaryError && <Alert variant="destructive" className="mt-4"><AlertTriangle className="h-4 w-4"/><AlertDescription>{summaryError}</AlertDescription></Alert>}
               {aiSummary && !isSummaryLoading && (
-                <div className="mt-4 p-4 border rounded-md bg-muted/50">
+                <div className="mt-4 p-4 border rounded-md bg-muted/50 shadow-inner">
                   <h4 className="font-semibold mb-2 text-foreground">Summary:</h4>
                   <div
                     className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap"
@@ -359,6 +358,3 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
-
-
-    

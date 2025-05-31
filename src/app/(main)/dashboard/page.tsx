@@ -93,10 +93,10 @@ export default function EmployeeDashboardPage() {
           </CardHeader>
           <CardContent>
             {announcements && announcements.length > 0 ? (
-              <ScrollArea className="h-64"> {/* Limit height and make scrollable */}
+              <ScrollArea className="h-64 border rounded-md p-4 bg-background"> 
                 <ul className="space-y-4">
                   {announcements.slice(0, 5).map((ann) => ( // Show latest 5 or so
-                    <li key={ann.id} className="p-3 border-l-4 border-primary bg-primary/5 rounded-r-md">
+                    <li key={ann.id} className="p-3 border-l-4 border-primary bg-primary/5 rounded-r-md shadow-sm">
                       <h4 className="font-semibold text-foreground">{ann.title}</h4>
                       <p className="text-xs text-muted-foreground">
                         Posted by {ann.postedBy} on {new Date(ann.postedAt).toLocaleDateString()}

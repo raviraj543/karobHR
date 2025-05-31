@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,99 +9,99 @@ body {
 
 @layer base {
   :root {
-    --background: 280 60% 95%; /* Light Lavender */
-    --foreground: 261 30% 25%; /* Dark Grayish Violet */
+    --background: 220 20% 96.5%; /* Very light grayish blue */
+    --foreground: 220 15% 25%; /* Dark grayish blue */
 
-    --card: 280 60% 95%;
-    --card-foreground: 261 30% 25%;
+    --card: 220 20% 96.5%;
+    --card-foreground: 220 15% 25%;
 
-    --popover: 280 60% 95%;
-    --popover-foreground: 261 30% 25%;
+    --popover: 220 20% 96.5%;
+    --popover-foreground: 220 15% 25%;
 
-    --primary: 261 50% 50%; /* Deep Violet */
-    --primary-foreground: 280 60% 98%; /* Near White */
+    --primary: 240 50% 58%;    /* Professional Indigo/Blue */
+    --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 280 50% 90%; /* Lighter Lavender */
-    --secondary-foreground: 261 40% 35%; /* Darker Violet for contrast */
+    --secondary: 220 15% 90%;  /* Lighter grayish blue */
+    --secondary-foreground: 220 15% 30%; /* Darker text for secondary */
 
-    --muted: 280 50% 90%;
-    --muted-foreground: 261 25% 45%; /* Muted Violet text */
+    --muted: 220 15% 90%;
+    --muted-foreground: 220 10% 45%; /* Muted text color */
 
-    --accent: 262 47% 63%; /* Soft Purple */
-    --accent-foreground: 280 60% 98%; /* Near White */
+    --accent: 240 55% 70%;     /* Lighter Indigo/Blue for accents */
+    --accent-foreground: 220 15% 15%; /* Dark text for accent background */
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 75% 55%; /* A slightly desaturated red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 280 30% 85%; /* Lavender border */
-    --input: 280 30% 88%; /* Lavender input background */
-    --ring: 262 47% 63%; /* Soft Purple for focus rings */
+    --border: 220 15% 88%; /* Border color */
+    --input: 220 15% 92%; /* Input background */
+    --ring: 240 50% 65%; /* Ring color (related to primary) */
 
     --radius: 0.5rem;
 
-    /* Chart colors - can be adjusted to fit the theme later if charts are used */
-    --chart-1: 261 50% 50%; /* primary */
-    --chart-2: 262 47% 63%; /* accent */
-    --chart-3: 270 50% 60%; /* A generic purple */
-    --chart-4: 250 50% 65%; /* Another purple shade */
-    --chart-5: 280 50% 70%; /* A lighter purple/lavender */
+    /* Chart colors */
+    --chart-1: 240 50% 58%; /* primary */
+    --chart-2: 240 55% 70%; /* accent */
+    --chart-3: 230 45% 65%; /* Another blue shade */
+    --chart-4: 250 48% 62%; /* A slightly purplish blue */
+    --chart-5: 220 40% 55%; /* A muted blue */
 
     /* Sidebar specific colors */
-    --sidebar-background: 261 40% 35%; /* Darker Deep Violet */
-    --sidebar-foreground: 280 60% 90%; /* Light Lavender text on dark sidebar */
-    --sidebar-primary: 262 47% 63%; /* Soft Purple for active/primary items in sidebar */
-    --sidebar-primary-foreground: 280 60% 98%; /* Near white text on sidebar primary */
-    --sidebar-accent: 261 50% 50%; /* Deep Violet for hover/accent in sidebar */
-    --sidebar-accent-foreground: 280 60% 98%; /* Near white text on sidebar accent */
-    --sidebar-border: 261 30% 45%; /* Border color for sidebar elements */
-    --sidebar-ring: 262 47% 63%; /* Ring color for sidebar focus */
+    --sidebar-background: 220 15% 18%; /* Darker grayish blue for sidebar */
+    --sidebar-foreground: 220 10% 88%; /* Light text on dark sidebar */
+    --sidebar-primary: 240 55% 70%;    /* Accent color for active/primary items in sidebar */
+    --sidebar-primary-foreground: 220 15% 10%; /* Dark text on sidebar primary */
+    --sidebar-accent: 240 50% 58%;     /* Main primary for hover/accent in sidebar */
+    --sidebar-accent-foreground: 0 0% 100%;    /* White text on sidebar accent */
+    --sidebar-border: 220 15% 30%;    /* Border color for sidebar elements */
+    --sidebar-ring: 240 55% 70%;       /* Ring color for sidebar focus */
   }
 
   .dark {
-    --background: 261 30% 10%; /* Very Dark Violet */
-    --foreground: 280 50% 85%; /* Light Lavender/Grey text */
+    --background: 220 15% 10%;   /* Very dark grayish blue */
+    --foreground: 220 10% 88%;   /* Light gray for text */
 
-    --card: 261 30% 12%;
-    --card-foreground: 280 50% 85%;
+    --card: 220 15% 12%;
+    --card-foreground: 220 10% 88%;
 
-    --popover: 261 30% 8%;
-    --popover-foreground: 280 50% 85%;
+    --popover: 220 15% 8%;
+    --popover-foreground: 220 10% 88%;
 
-    --primary: 262 47% 63%; /* Soft Purple (primary in dark) */
-    --primary-foreground: 261 30% 10%; /* Very Dark Violet text on Soft Purple */
+    --primary: 240 55% 70%;     /* Light theme accent becomes dark primary */
+    --primary-foreground: 220 15% 10%; /* Dark text on primary */
 
-    --secondary: 261 25% 20%; /* Darker Muted Violet */
-    --secondary-foreground: 280 50% 80%;
+    --secondary: 220 15% 20%;  /* Darker grayish blue */
+    --secondary-foreground: 220 10% 80%;
 
-    --muted: 261 25% 20%;
-    --muted-foreground: 280 40% 60%;
+    --muted: 220 15% 20%;
+    --muted-foreground: 220 10% 60%;
 
-    --accent: 261 50% 50%; /* Deep Violet (accent in dark) */
-    --accent-foreground: 280 60% 95%; /* Near White */
+    --accent: 240 50% 60%;      /* Light theme primary becomes dark accent */
+    --accent-foreground: 0 0% 98%; /* White text on accent */
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 261 25% 25%;
-    --input: 261 25% 22%;
-    --ring: 262 47% 63%; /* Soft Purple for rings */
+    --border: 220 15% 25%;
+    --input: 220 15% 22%;
+    --ring: 240 55% 70%;
 
     /* Chart colors for dark theme */
-    --chart-1: 262 47% 63%; /* Soft Purple */
-    --chart-2: 261 50% 50%; /* Deep Violet */
-    --chart-3: 270 60% 70%; /* A lighter purple for dark bg */
-    --chart-4: 250 60% 75%; /* Another lighter purple shade */
-    --chart-5: 280 60% 80%; /* A very light purple/lavender */
+    --chart-1: 240 55% 70%;
+    --chart-2: 240 50% 60%;
+    --chart-3: 230 60% 75%;
+    --chart-4: 250 58% 72%;
+    --chart-5: 220 50% 65%;
 
     /* Sidebar specific colors for dark theme */
-    --sidebar-background: 261 25% 18%; /* Slightly darker than main dark bg */
-    --sidebar-foreground: 280 50% 80%; /* Light text for sidebar */
-    --sidebar-primary: 262 47% 63%; /* Soft Purple for active items */
-    --sidebar-primary-foreground: 261 30% 10%; /* Dark text on Soft Purple */
-    --sidebar-accent: 261 50% 50%; /* Deep Violet for hover */
-    --sidebar-accent-foreground: 280 60% 95%; /* Light text on Deep Violet */
-    --sidebar-border: 261 20% 28%; /* Border for sidebar elements */
-    --sidebar-ring: 262 47% 63%; /* Ring color for sidebar focus */
+    --sidebar-background: 220 15% 8%;  /* Even darker for sidebar */
+    --sidebar-foreground: 220 10% 85%; /* Light text for sidebar */
+    --sidebar-primary: 240 50% 60%;    /* Accent color for active items */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
+    --sidebar-accent: 240 55% 70%;     /* Main primary for hover */
+    --sidebar-accent-foreground: 220 15% 10%; /* Dark text on accent */
+    --sidebar-border: 220 15% 18%;    /* Border for sidebar elements */
+    --sidebar-ring: 240 55% 70%;       /* Ring color for sidebar focus */
   }
 }
 

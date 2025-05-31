@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Search, Briefcase, User, CalendarDays, AlertCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Search, Briefcase, User, CalendarDays, AlertCircle, Loader2, Edit2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -240,7 +240,7 @@ export default function AdminTasksPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <CardTitle className="flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary" />All Tasks</CardTitle>
             <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                   type="search" 
                   placeholder="Search tasks by title, assignee, status..." 
@@ -266,10 +266,10 @@ export default function AdminTasksPage() {
             </TableHeader>
             <TableBody>
               {filteredTasks.map(task => (
-                <TableRow key={task.id}>
+                <TableRow key={task.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
-                  <TableCell>{task.assigneeName}</TableCell>
-                  <TableCell>{new Date(task.dueDate).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-muted-foreground">{task.assigneeName}</TableCell>
+                  <TableCell className="text-muted-foreground">{new Date(task.dueDate).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge>
                   </TableCell>
@@ -277,7 +277,9 @@ export default function AdminTasksPage() {
                     <Badge variant={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm">Edit</Button> {/* Mock action */}
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Task (Mock Action)">
+                        <Edit2 className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
