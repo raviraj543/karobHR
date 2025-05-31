@@ -19,7 +19,7 @@ const GEOFENCE_RADIUS_METERS = 100;
 
 interface CheckInOutDisplayRecord { // For local display of the last action
   type: 'check-in' | 'check-out';
-  photoDataUrl: string | null; // Photo might not be stored long-term, but shown immediately
+  photoDataUrl: string | null; 
   location: Location | null;
   timestamp: Date;
   isWithinGeofence: boolean | null;
@@ -54,9 +54,11 @@ export default function AttendancePage() {
     document.title = 'Attendance - KarobHR';
     
     const getCameraPermission = async () => {
+      setError(null); // Clear previous camera-related errors when re-attempting
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         setHasCameraPermission(true);
+        // setError(null); // Cleared at the start, or could be specific to success here
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -81,13 +83,14 @@ export default function AttendancePage() {
         setCheckInStatus('checked-in');
         setLastDisplayRecord({
           type: userEvents[0].type,
-          // Note: userEvents[0].photoDataUrl will be null if retrieved from localStorage
-          // This is fine for status, but the photo itself won't show here from historical log.
           photoDataUrl: null, 
           location: userEvents[0].location,
           timestamp: new Date(userEvents[0].timestamp),
           isWithinGeofence: userEvents[0].isWithinGeofence,
         });
+      } else {
+        setCheckInStatus('checked-out');
+        setLastDisplayRecord(null);
       }
     }
 
@@ -98,7 +101,7 @@ export default function AttendancePage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast, user, attendanceLog]);
+  }, [user, attendanceLog]); // Removed toast from dependencies as it's stable
 
   const capturePhoto = (): string | null => {
     if (!videoRef.current || !canvasRef.current || !hasCameraPermission) {
@@ -112,7 +115,7 @@ export default function AttendancePage() {
     canvas.height = video.videoHeight;
     const context = canvas.getContext('2d');
     if (!context) {
-        setError('Could not get canvas context.');
+        setError('Could not get canvas context for photo capture.');
         return null;
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -128,6 +131,7 @@ export default function AttendancePage() {
       }
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          setError(null); // Clear previous location errors on success
           resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -151,19 +155,17 @@ export default function AttendancePage() {
       return;
     }
     setIsSubmitting(true);
-    setError(null);
+    // setError(null); // Error state is handled per operation (camera, location)
 
     if (!hasCameraPermission) {
-      setError('Camera permission is required to proceed.');
+      setError('Camera permission is required to proceed.'); // This message might be overwritten by specific errors below
       toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required.' });
       setIsSubmitting(false);
       return;
     }
 
     const photoDataUrl = capturePhoto();
-    if (!photoDataUrl) {
-       toast({ variant: 'destructive', title: 'Photo Capture Failed', description: 'Photo will not be part of this record, but attendance will be logged.' });
-    }
+    // No need to toast if photoDataUrl is null, capturePhoto already does and sets error.
 
     const location = await getGeolocation();
     let isWithinGeofence: boolean | null = null;
@@ -185,12 +187,12 @@ export default function AttendancePage() {
       }
     } else {
       toastDescription += ' (Location not available). Geofence status cannot be determined.';
+      // setError might be set by getGeolocation here
     }
     
-    // This record is for immediate display and includes the photo
     const displayRecord: CheckInOutDisplayRecord = {
       type,
-      photoDataUrl: photoDataUrl, // Show the photo immediately
+      photoDataUrl: photoDataUrl, 
       location,
       timestamp: new Date(),
       isWithinGeofence,
@@ -198,11 +200,10 @@ export default function AttendancePage() {
     setLastDisplayRecord(displayRecord);
     setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
 
-    // Add to global attendance log (photoDataUrl will be nulled out by AuthContext for localStorage)
     await addAttendanceEvent({
         employeeId: user.employeeId,
         type,
-        photoDataUrl, // Pass the photo here; AuthContext handles storage decision
+        photoDataUrl, 
         location,
         isWithinGeofence
     });
@@ -302,7 +303,7 @@ export default function AttendancePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoDataUrl && ( // Check if photoDataUrl exists for display
+                  {lastDisplayRecord.photoDataUrl && ( 
                     <div className="w-full sm:w-1/3">
                       <p className="font-semibold mb-1">
                         {lastDisplayRecord.type === 'check-out' ? 'Checkout Photo:' : 'Check-in Photo:'}
@@ -364,3 +365,4 @@ export default function AttendancePage() {
     </div>
   );
 }
+
