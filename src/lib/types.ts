@@ -49,11 +49,12 @@ export interface Holiday {
 
 export interface LeaveApplication {
   id: string;
-  userId: string;
+  userId: string; // Could be employeeId or user.id
   leaveType: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: string; // Using string for form simplicity, could be Date
+  endDate: string;   // Using string for form simplicity, could be Date
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
-  supportingDocumentUrl?: string;
+  supportingDocumentUrl?: string; // Optional
+  color?: string; // For UI display, not part of core data model necessarily
 }
