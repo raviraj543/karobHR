@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft, IndianRupee } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth, type NewEmployeeData } from '@/lib/authContext'; // Import NewEmployeeData
+import { useAuth, type NewEmployeeData } from '@/lib/authContext';
 import type { UserRole } from '@/lib/types';
 
 const newEmployeeSchema = z.object({
@@ -66,7 +66,7 @@ export default function AddNewEmployeePage() {
       employeeId: data.employeeId,
       email: data.email,
       department: data.department,
-      role: data.role as UserRole, // Cast role to UserRole
+      role: data.role as UserRole,
       joiningDate: data.joiningDate,
       baseSalary: data.baseSalary,
     };
@@ -75,18 +75,8 @@ export default function AddNewEmployeePage() {
       await addNewEmployee(employeeDataForContext, data.password);
       toast({
         title: "Employee Account Added",
-        description: (
-            <div>
-                <p>{`Account for ${data.name} (${data.employeeId}) has been added to the system for this session.`}</p>
-                <p className="text-xs mt-2">Salary: {data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}</p>
-                <p className="text-xs mt-2 text-amber-700 font-semibold">
-                    IMPORTANT: For this new employee to log in, you must manually add their Employee ID ('{data.employeeId}') 
-                    and Password ('{data.password}') to the `mockCredentials` object in the file 
-                    `src/lib/authContext.tsx` and then restart the application.
-                </p>
-            </div>
-        ),
-        duration: 15000, // Longer duration for detailed message
+        description: `Account for ${data.name} (${data.employeeId}) has been added and they can now log in with the password you set. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}`,
+        duration: 7000,
       });
       form.reset();
     } catch (error) {
@@ -121,7 +111,7 @@ export default function AddNewEmployeePage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><UserPlus className="mr-2 h-5 w-5 text-primary" />Employee Details</CardTitle>
-          <CardDescription>The Employee ID and Password will be used for login (after manual setup for prototype).</CardDescription>
+          <CardDescription>The Employee ID and Password will be used for login.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -278,5 +268,3 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
-
-    

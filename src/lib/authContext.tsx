@@ -4,10 +4,10 @@
 import type { ReactNode } from 'react';
 import { createContext, useState, useEffect }
 from 'react';
-import type { User, UserRole, Advance, Announcement, LeaveApplication } from '@/lib/types'; // Added Announcement
-import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
+import type { User, UserRole, Advance, Announcement, LeaveApplication } from '@/lib/types';
+import { v4 as uuidv4 } from 'uuid';
 
-// Mock user profiles (without passwords) - In a real app, this would come from a database.
+// Initial mock user profiles (without passwords)
 const initialMockUserProfiles: Record<string, User> = {
   'admin001': {
     id: 'user_admin_001',
@@ -31,7 +31,7 @@ const initialMockUserProfiles: Record<string, User> = {
     joiningDate: '2023-01-15',
     contactInfo: { phone: '555-1234' },
     baseSalary: 50000,
-    mockAttendanceFactor: 0.9, // Example: 90% attendance
+    mockAttendanceFactor: 0.9,
     advances: [
       { id: uuidv4(), employeeId: 'emp101', amount: 2000, reason: 'Urgent need', dateRequested: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), status: 'approved', dateProcessed: new Date().toISOString()},
       { id: uuidv4(), employeeId: 'emp101', amount: 1000, reason: 'Medical bill', dateRequested: new Date().toISOString(), status: 'pending' },
@@ -52,7 +52,7 @@ const initialMockUserProfiles: Record<string, User> = {
     joiningDate: '2023-03-20',
     contactInfo: { phone: '555-5678' },
     baseSalary: 52000,
-    mockAttendanceFactor: 1.0, // Full attendance
+    mockAttendanceFactor: 1.0,
     advances: [],
     leaves: []
   },
@@ -67,7 +67,7 @@ const initialMockUserProfiles: Record<string, User> = {
     joiningDate: '2022-06-10',
     contactInfo: { phone: '555-8765' },
     baseSalary: 60000,
-    mockAttendanceFactor: 0.95, // Example: 95% attendance
+    mockAttendanceFactor: 0.95,
     advances: [],
     leaves: [
        { id: uuidv4(), userId: 'man101', leaveType: 'Vacation', startDate: '2024-09-01', endDate: '2024-09-07', reason: 'Annual leave', status: 'approved' }
@@ -79,7 +79,8 @@ const initialMockUserProfiles: Record<string, User> = {
   'emp004': { id: 'usr_emp4', employeeId: 'emp004', name: 'David Brown', email: 'david.b@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=DB', department: 'Engineering', joiningDate: '2023-05-01', baseSalary: 51000, mockAttendanceFactor: 1.0, advances: [], leaves: [] },
 };
 
-const mockCredentials: Record<string, string> = {
+// Initial mock credentials
+const initialMockCredentials: Record<string, string> = {
   'admin001': 'adminpass',
   'emp101': 'employeepass',
   'emp102': 'alicespass',
@@ -100,13 +101,12 @@ export interface NewEmployeeData {
   baseSalary?: number;
 }
 
-
 export interface AuthContextType {
   user: User | null;
   allUsers: User[];
   role: UserRole;
   loading: boolean;
-  announcements: Announcement[]; // Added
+  announcements: Announcement[];
   login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
   setMockUser: (user: User | null) => void;
@@ -114,7 +114,7 @@ export interface AuthContextType {
   processAdvance: (targetEmployeeId: string, advanceId: string, newStatus: 'approved' | 'rejected') => Promise<void>;
   updateUserInContext: (updatedUser: User) => void;
   addNewEmployee: (employeeData: NewEmployeeData, passwordToSet: string) => Promise<void>;
-  addAnnouncement: (title: string, content: string) => Promise<void>; // Added
+  addAnnouncement: (title: string, content: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -125,42 +125,19 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
-  const [allUsersState, setAllUsersState] = useState<User[]>(() => {
-    if (typeof window !== 'undefined') {
-      const storedAllUsers = localStorage.getItem('mockAllUsers');
-      if (storedAllUsers) {
-        try {
-          return JSON.parse(storedAllUsers);
-        } catch (e) {
-          console.error("Failed to parse stored allUsers from localStorage:", e);
-          return Object.values(initialMockUserProfiles);
-        }
-      }
-    }
-    return Object.values(initialMockUserProfiles);
-  });
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => { // Added announcements state
-    if (typeof window !== 'undefined') {
-      const storedAnnouncements = localStorage.getItem('mockAnnouncements');
-      if (storedAnnouncements) {
-        try {
-          return JSON.parse(storedAnnouncements);
-        } catch (e) {
-          console.error("Failed to parse stored announcements from localStorage:", e);
-          return [];
-        }
-      }
-    }
-    return [];
-  });
+  const [allUsersState, setAllUsersState] = useState<User[]>([]);
+  const [mockCredentialsState, setMockCredentialsState] = useState<Record<string, string>>({});
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Load allUsers
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
       try {
         const parsedAllUsers = JSON.parse(storedAllUsers) as User[];
         setAllUsersState(parsedAllUsers);
+        // Load current user if available and consistent with allUsers
         const storedUser = localStorage.getItem('mockUser');
         if (storedUser) {
           const parsedLoginUser = JSON.parse(storedUser) as User;
@@ -180,7 +157,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setAllUsersState(defaultUsers);
     }
 
-    const storedAnnouncements = localStorage.getItem('mockAnnouncements'); // Load announcements
+    // Load mockCredentials
+    const storedCredentials = localStorage.getItem('mockCredentials');
+    if (storedCredentials) {
+      try {
+        setMockCredentialsState(JSON.parse(storedCredentials));
+      } catch (e) {
+        console.error("Failed to parse stored credentials:", e);
+        localStorage.removeItem('mockCredentials');
+        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
+        setMockCredentialsState(initialMockCredentials);
+      }
+    } else {
+      localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
+      setMockCredentialsState(initialMockCredentials);
+    }
+
+    // Load announcements
+    const storedAnnouncements = localStorage.getItem('mockAnnouncements');
     if (storedAnnouncements) {
       try {
         setAnnouncements(JSON.parse(storedAnnouncements));
@@ -189,11 +183,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.removeItem('mockAnnouncements');
         setAnnouncements([]);
       }
+    } else {
+       localStorage.setItem('mockAnnouncements', JSON.stringify([])); // Initialize if not present
+       setAnnouncements([]);
     }
 
     setLoading(false);
   }, []);
-
 
   const updateUserInStorage = (usersArray: User[]) => {
     localStorage.setItem('mockAllUsers', JSON.stringify(usersArray));
@@ -206,7 +202,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const updateAnnouncementsInStorage = (announcementsArray: Announcement[]) => { // Added
+  const updateCredentialsInStorage = (credentialsMap: Record<string, string>) => {
+    localStorage.setItem('mockCredentials', JSON.stringify(credentialsMap));
+  };
+
+  const updateAnnouncementsInStorage = (announcementsArray: Announcement[]) => {
     localStorage.setItem('mockAnnouncements', JSON.stringify(announcementsArray));
   };
 
@@ -218,11 +218,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     });
   };
 
-
   const login = async (employeeId: string, pass: string, _rememberMe?: boolean): Promise<User | null> => {
     setLoading(true);
     const userProfile = allUsersState.find(u => u.employeeId === employeeId);
-    const expectedPassword = mockCredentials[employeeId];
+    const expectedPassword = mockCredentialsState[employeeId]; // Use stateful credentials
 
     if (userProfile && expectedPassword && expectedPassword === pass) {
       setUser(userProfile);
@@ -328,10 +327,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAllUsersState(updatedAllUsers);
     updateUserInStorage(updatedAllUsers);
 
-    console.log(`New employee ${newUser.name} created with Employee ID: ${newUser.employeeId} and Password: ${passwordToSet}. Add to mockCredentials to enable login.`);
+    // Update mockCredentialsState
+    const updatedCredentials = { ...mockCredentialsState, [newUser.employeeId]: passwordToSet };
+    setMockCredentialsState(updatedCredentials);
+    updateCredentialsInStorage(updatedCredentials);
+
+    console.log(`New employee ${newUser.name} (ID: ${newUser.employeeId}) added and is now loggable with the provided password.`);
   };
 
-  const addAnnouncement = async (title: string, content: string) => { // Added
+  const addAnnouncement = async (title: string, content: string) => {
     if (!user || user.role !== 'admin') {
       throw new Error("Only admins can post announcements.");
     }
@@ -342,11 +346,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       postedAt: new Date().toISOString(),
       postedBy: user.name || user.employeeId,
     };
-    const updatedAnnouncements = [newAnnouncement, ...announcements]; // Add to the beginning
+    const updatedAnnouncements = [newAnnouncement, ...announcements];
     setAnnouncements(updatedAnnouncements);
     updateAnnouncementsInStorage(updatedAnnouncements);
   };
-
 
   return (
     <AuthContext.Provider value={{
@@ -354,7 +357,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         allUsers: allUsersState,
         role: user?.role || null,
         loading,
-        announcements, // Added
+        announcements,
         login,
         logout,
         setMockUser,
@@ -362,7 +365,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         processAdvance,
         updateUserInContext,
         addNewEmployee,
-        addAnnouncement // Added
+        addAnnouncement
     }}>
       {children}
     </AuthContext.Provider>

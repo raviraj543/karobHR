@@ -107,11 +107,7 @@ export default function AdminEmployeesPage() {
             </div>
           </div>
           <CardDescription>
-            View, edit, and manage employee details. Newly added employees will appear here.
-            <span className="block text-xs text-amber-700 font-semibold mt-1">
-                Note for prototype: To enable login for newly added employees, their Employee ID and Password must be manually added
-                to `mockCredentials` in `src/lib/authContext.tsx`, followed by an application restart.
-            </span>
+            View, edit, and manage employee details. Newly added employees will appear here and can log in with the credentials you set.
           </CardDescription>
         </CardHeader>
         <CardContent>
