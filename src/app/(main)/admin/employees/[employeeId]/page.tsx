@@ -336,11 +336,17 @@ export default function EmployeeDetailPage() {
                           </TableCell>
                           <TableCell className="text-center">
                             {event.photoDataUrl ? (
-                              <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
-                                <AvatarImage src={event.photoDataUrl} alt="Attendance photo" />
-                                <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
-                              </Avatar>
-                            ) : <span className="text-xs text-muted-foreground">-</span>}
+                                // This will try to display an image, but it will be broken if photoDataUrl is null from localStorage
+                                <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
+                                    <AvatarImage src={event.photoDataUrl} alt="Attendance photo" />
+                                    <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
+                                </Avatar>
+                            ) : (
+                                // If photoDataUrl is null (as it will be from localStorage), show camera icon as placeholder
+                                <div className="flex justify-center items-center h-9 w-9">
+                                  <CameraIcon className="h-5 w-5 text-muted-foreground" title="Photo taken (not stored in log)" />
+                                </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -468,5 +474,6 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
+    
     
     

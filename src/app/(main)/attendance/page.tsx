@@ -19,7 +19,7 @@ const GEOFENCE_RADIUS_METERS = 100;
 
 interface CheckInOutDisplayRecord { // For local display of the last action
   type: 'check-in' | 'check-out';
-  photoDataUrl: string;
+  photoDataUrl: string | null; // Photo might not be stored long-term, but shown immediately
   location: Location | null;
   timestamp: Date;
   isWithinGeofence: boolean | null;
@@ -73,24 +73,23 @@ export default function AttendancePage() {
     };
     getCameraPermission();
 
-    // Determine initial check-in status based on the log for the current user
     if (user) {
       const userEvents = attendanceLog
         .filter(event => event.employeeId === user.employeeId)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       if (userEvents.length > 0 && userEvents[0].type === 'check-in') {
         setCheckInStatus('checked-in');
-        // Optionally set lastDisplayRecord from this event too
-         setLastDisplayRecord({
+        setLastDisplayRecord({
           type: userEvents[0].type,
-          photoDataUrl: userEvents[0].photoDataUrl || '',
+          // Note: userEvents[0].photoDataUrl will be null if retrieved from localStorage
+          // This is fine for status, but the photo itself won't show here from historical log.
+          photoDataUrl: null, 
           location: userEvents[0].location,
           timestamp: new Date(userEvents[0].timestamp),
           isWithinGeofence: userEvents[0].isWithinGeofence,
         });
       }
     }
-
 
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
@@ -99,7 +98,7 @@ export default function AttendancePage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast, user, attendanceLog]); // Added attendanceLog to deps to re-evaluate status if log changes externally
+  }, [toast, user, attendanceLog]);
 
   const capturePhoto = (): string | null => {
     if (!videoRef.current || !canvasRef.current || !hasCameraPermission) {
@@ -162,11 +161,9 @@ export default function AttendancePage() {
     }
 
     const photoDataUrl = capturePhoto();
-    // We allow proceeding even if photo capture fails, but log it as null
     if (!photoDataUrl) {
-       toast({ variant: 'destructive', title: 'Photo Capture Failed', description: 'Continuing without photo.' });
+       toast({ variant: 'destructive', title: 'Photo Capture Failed', description: 'Photo will not be part of this record, but attendance will be logged.' });
     }
-
 
     const location = await getGeolocation();
     let isWithinGeofence: boolean | null = null;
@@ -190,9 +187,10 @@ export default function AttendancePage() {
       toastDescription += ' (Location not available). Geofence status cannot be determined.';
     }
     
+    // This record is for immediate display and includes the photo
     const displayRecord: CheckInOutDisplayRecord = {
       type,
-      photoDataUrl: photoDataUrl || '', // Store empty string if null for display
+      photoDataUrl: photoDataUrl, // Show the photo immediately
       location,
       timestamp: new Date(),
       isWithinGeofence,
@@ -200,11 +198,11 @@ export default function AttendancePage() {
     setLastDisplayRecord(displayRecord);
     setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
 
-    // Add to global attendance log
+    // Add to global attendance log (photoDataUrl will be nulled out by AuthContext for localStorage)
     await addAttendanceEvent({
         employeeId: user.employeeId,
         type,
-        photoDataUrl, // Can be null
+        photoDataUrl, // Pass the photo here; AuthContext handles storage decision
         location,
         isWithinGeofence
     });
@@ -304,7 +302,7 @@ export default function AttendancePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoDataUrl && (
+                  {lastDisplayRecord.photoDataUrl && ( // Check if photoDataUrl exists for display
                     <div className="w-full sm:w-1/3">
                       <p className="font-semibold mb-1">
                         {lastDisplayRecord.type === 'check-out' ? 'Checkout Photo:' : 'Check-in Photo:'}
@@ -367,3 +365,4 @@ export default function AttendancePage() {
   );
 }
 
+    

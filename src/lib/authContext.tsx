@@ -315,13 +315,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const addAttendanceEvent = async (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => {
     if (!user) throw new Error("User not found for logging attendance.");
-    const newEvent: AttendanceEvent = {
+    
+    // Create the event for potential immediate UI use (e.g., on attendance page)
+    const fullEvent: AttendanceEvent = {
       ...eventData,
       id: uuidv4(),
       timestamp: new Date().toISOString(),
       userName: user.name || user.employeeId,
     };
-    const updatedLog = [newEvent, ...attendanceLog];
+
+    // Create a version of the event for storage, omitting the photoDataUrl
+    const eventForStorage: AttendanceEvent = {
+      ...fullEvent,
+      photoDataUrl: null, // Or a placeholder string like "photo_taken" if you prefer
+    };
+
+    const updatedLog = [eventForStorage, ...attendanceLog];
     setAttendanceLog(updatedLog);
     updateAttendanceLogInStorage(updatedLog);
   };
