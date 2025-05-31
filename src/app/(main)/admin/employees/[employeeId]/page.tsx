@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType, AttendanceEvent } from '@/lib/types';
-import { initialTasks } from '@/lib/taskData';
+// import { initialTasks } from '@/lib/taskData'; // No longer needed, tasks come from context
 import { summarizeEmployeePerformance } from '@/ai/flows/summarize-employee-performance';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDay
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog } = useAuth();
+  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog, tasks: allContextTasks } = useAuth(); // Added tasks from context
   const employeeId = params.employeeId as string;
   const { toast } = useToast();
 
@@ -55,9 +55,9 @@ export default function EmployeeDetailPage() {
 
 
   const employeeTasks = useMemo(() => {
-    if (!employee) return [];
-    return initialTasks.filter(task => task.assigneeId === employee.employeeId);
-  }, [employee]);
+    if (!employee || !allContextTasks) return [];
+    return allContextTasks.filter(task => task.assigneeId === employee.employeeId);
+  }, [employee, allContextTasks]);
 
   const employeeLeaves: LeaveApplicationType[] = useMemo(() => {
     if (!employee || !employee.leaves) return [];
@@ -82,10 +82,20 @@ export default function EmployeeDetailPage() {
     setAiSummary(null);
     setSummaryError(null);
 
+    // Use employeeTasks (derived from context) for the AI summary
+    const tasksForSummary = employeeTasks.map(t => ({
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        description: t.description,
+        dueDate: t.dueDate
+    }));
+
+
     try {
       const performanceInput = {
         employeeName: employee.name || employee.employeeId,
-        tasks: employeeTasks.map(t => ({ title: t.title, status: t.status, priority: t.priority, description: t.description, dueDate: t.dueDate })),
+        tasks: tasksForSummary,
         leaveApplications: (employee.leaves || []).map(l => ({ leaveType: l.leaveType, status: l.status, startDate: l.startDate, endDate: l.endDate, reason: l.reason })),
         attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0,
         baseSalary: employee.baseSalary || 0,
@@ -139,14 +149,16 @@ export default function EmployeeDetailPage() {
   const netPayable = salaryAfterAttendance - approvedAdvancesTotal;
 
   const getRoleDisplayName = (role: typeof employee.role) => {
+    if (!role) return 'N/A';
     if (role === 'admin') return 'Administrator';
     if (role === 'manager') return 'Manager';
     if (role === 'employee') return 'Employee';
     return 'User';
   };
 
-  const getPriorityBadgeVariant = (priority: TaskType['priority']) => {
-    switch (priority?.toLowerCase()) {
+  const getPriorityBadgeVariant = (priority?: TaskType['priority']) => {
+    if (!priority) return 'default';
+    switch (priority.toLowerCase()) {
       case 'critical': return 'destructive';
       case 'high': return 'destructive';
       case 'medium': return 'secondary';
@@ -155,8 +167,9 @@ export default function EmployeeDetailPage() {
     }
   };
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getStatusBadgeVariant = (status?: string) => {
     status = status || ''; // Ensure status is not null/undefined
+    if (!status) return 'default';
     switch (status.toLowerCase()) {
       case 'completed': return 'default';
       case 'in progress': return 'secondary';
@@ -456,4 +469,4 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
-
+    

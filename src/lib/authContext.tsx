@@ -4,10 +4,10 @@
 import type { ReactNode } from 'react';
 import { createContext, useState, useEffect }
 from 'react';
-import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, LocationInfo } from '@/lib/types';
+import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, LocationInfo, Task as TaskType } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
-// Initial mock user profiles (without passwords)
+// Initial mock user profiles (without passwords) - ONLY ADMIN
 const initialMockUserProfiles: Record<string, User> = {
   'admin001': {
     id: 'user_admin_001',
@@ -19,76 +19,13 @@ const initialMockUserProfiles: Record<string, User> = {
     baseSalary: 70000,
     mockAttendanceFactor: 1.0,
     advances: [],
+    leaves: [],
   },
-  'emp101': {
-    id: 'user_emp_101',
-    employeeId: 'emp101',
-    name: 'John Doe',
-    email: 'john.doe@bizflow.com',
-    role: 'employee',
-    profilePictureUrl: 'https://placehold.co/100x100.png?text=JD',
-    department: 'Engineering',
-    joiningDate: '2023-01-15',
-    contactInfo: { phone: '555-1234' },
-    baseSalary: 50000,
-    mockAttendanceFactor: 0.9,
-    advances: [
-      { id: uuidv4(), employeeId: 'emp101', amount: 2000, reason: 'Urgent need', dateRequested: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), status: 'approved', dateProcessed: new Date().toISOString()},
-      { id: uuidv4(), employeeId: 'emp101', amount: 1000, reason: 'Medical bill', dateRequested: new Date().toISOString(), status: 'pending' },
-    ],
-     leaves: [
-      { id: uuidv4(), userId: 'emp101', leaveType: 'Casual Leave', startDate: '2024-07-10', endDate: '2024-07-12', reason: 'Family event', status: 'approved' },
-      { id: uuidv4(), userId: 'emp101', leaveType: 'Sick Leave', startDate: '2024-08-01', endDate: '2024-08-01', reason: 'Fever', status: 'pending' },
-    ]
-  },
-   'emp102': {
-    id: 'user_emp_102',
-    employeeId: 'emp102',
-    name: 'Alice Smith',
-    email: 'alice.smith@bizflow.com',
-    role: 'employee',
-    profilePictureUrl: 'https://placehold.co/100x100.png?text=AS',
-    department: 'Marketing',
-    joiningDate: '2023-03-20',
-    contactInfo: { phone: '555-5678' },
-    baseSalary: 52000,
-    mockAttendanceFactor: 1.0,
-    advances: [],
-    leaves: []
-  },
-  'man101': {
-    id: 'user_man_101',
-    employeeId: 'man101',
-    name: 'Mike Manager',
-    email: 'mike.manager@bizflow.com',
-    role: 'manager',
-    profilePictureUrl: 'https://placehold.co/100x100.png?text=MM',
-    department: 'Operations',
-    joiningDate: '2022-06-10',
-    contactInfo: { phone: '555-8765' },
-    baseSalary: 60000,
-    mockAttendanceFactor: 0.95,
-    advances: [],
-    leaves: [
-       { id: uuidv4(), userId: 'man101', leaveType: 'Vacation', startDate: '2024-09-01', endDate: '2024-09-07', reason: 'Annual leave', status: 'approved' }
-    ]
-  },
-  'emp001': { id: 'usr_emp1', employeeId: 'emp001', name: 'Alice Johnson', email: 'alice.j@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=AJ', department: 'Engineering', joiningDate: '2023-01-15', baseSalary: 48000, mockAttendanceFactor: 1.0, advances: [], leaves: [] },
-  'emp002': { id: 'usr_emp2', employeeId: 'emp002', name: 'Bob Williams', email: 'bob.w@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=BW', department: 'Design', joiningDate: '2023-02-20', baseSalary: 49000, mockAttendanceFactor: 0.85, advances: [], leaves: [] },
-  'emp003': { id: 'usr_emp3', employeeId: 'emp003', name: 'Carol Davis', email: 'carol.d@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=CD', department: 'Management', joiningDate: '2022-11-05', baseSalary: 55000, mockAttendanceFactor: 1.0, advances: [], leaves: [] },
-  'emp004': { id: 'usr_emp4', employeeId: 'emp004', name: 'David Brown', email: 'david.b@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=DB', department: 'Engineering', joiningDate: '2023-05-01', baseSalary: 51000, mockAttendanceFactor: 1.0, advances: [], leaves: [] },
 };
 
-// Initial mock credentials
+// Initial mock credentials - ONLY ADMIN
 const initialMockCredentials: Record<string, string> = {
   'admin001': 'adminpass',
-  'emp101': 'employeepass',
-  'emp102': 'alicespass',
-  'man101': 'managerpass',
-  'emp001': 'password123',
-  'emp002': 'password456',
-  'emp003': 'password789',
-  'emp004': 'password000',
 };
 
 export interface NewEmployeeData {
@@ -108,6 +45,7 @@ export interface AuthContextType {
   loading: boolean;
   announcements: Announcement[];
   attendanceLog: AttendanceEvent[];
+  tasks: TaskType[]; // Added tasks to context
   login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
   setMockUser: (user: User | null) => void;
@@ -117,6 +55,8 @@ export interface AuthContextType {
   addNewEmployee: (employeeData: NewEmployeeData, passwordToSet: string) => Promise<void>;
   addAnnouncement: (title: string, content: string) => Promise<void>;
   addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => Promise<void>;
+  addTask: (task: TaskType) => Promise<void>; // Added addTask
+  updateTask: (updatedTask: TaskType) => Promise<void>; // Added updateTask
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -131,9 +71,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [mockCredentialsState, setMockCredentialsState] = useState<Record<string, string>>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[]>([]);
+  const [tasks, setTasks] = useState<TaskType[]>([]); // Task state
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Load All Users
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
       try {
@@ -148,16 +90,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } catch (e) {
         console.error("Failed to parse stored allUsers:", e);
         localStorage.removeItem('mockAllUsers');
-        const defaultUsers = Object.values(initialMockUserProfiles);
+        const defaultUsers = Object.values(initialMockUserProfiles); // Now only admin
         localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
         setAllUsersState(defaultUsers);
       }
     } else {
-      const defaultUsers = Object.values(initialMockUserProfiles);
+      const defaultUsers = Object.values(initialMockUserProfiles); // Now only admin
       localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
       setAllUsersState(defaultUsers);
     }
 
+    // Load Credentials
     const storedCredentials = localStorage.getItem('mockCredentials');
     if (storedCredentials) {
       try {
@@ -165,41 +108,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } catch (e) {
         console.error("Failed to parse stored credentials:", e);
         localStorage.removeItem('mockCredentials');
-        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
+        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials)); // Now only admin
         setMockCredentialsState(initialMockCredentials);
       }
     } else {
-      localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
+      localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials)); // Now only admin
       setMockCredentialsState(initialMockCredentials);
     }
 
+    // Load Announcements
     const storedAnnouncements = localStorage.getItem('mockAnnouncements');
     if (storedAnnouncements) {
       try {
         setAnnouncements(JSON.parse(storedAnnouncements));
-      } catch (e) {
-        console.error("Failed to parse stored announcements:", e);
-        localStorage.removeItem('mockAnnouncements');
-        setAnnouncements([]);
-      }
+      } catch (e) { console.error("Failed to parse stored announcements:", e); localStorage.removeItem('mockAnnouncements'); setAnnouncements([]); }
     } else {
-       localStorage.setItem('mockAnnouncements', JSON.stringify([]));
-       setAnnouncements([]);
+       localStorage.setItem('mockAnnouncements', JSON.stringify([])); setAnnouncements([]);
     }
 
+    // Load Attendance Log
     const storedAttendanceLog = localStorage.getItem('mockAttendanceLog');
     if (storedAttendanceLog) {
-        try {
-            setAttendanceLog(JSON.parse(storedAttendanceLog));
-        } catch (e) {
-            console.error("Failed to parse stored attendance log:", e);
-            localStorage.removeItem('mockAttendanceLog');
-            setAttendanceLog([]);
-        }
+        try { setAttendanceLog(JSON.parse(storedAttendanceLog)); }
+        catch (e) { console.error("Failed to parse stored attendance log:", e); localStorage.removeItem('mockAttendanceLog'); setAttendanceLog([]); }
     } else {
-        localStorage.setItem('mockAttendanceLog', JSON.stringify([]));
-        setAttendanceLog([]);
+        localStorage.setItem('mockAttendanceLog', JSON.stringify([])); setAttendanceLog([]);
     }
+
+    // Load Tasks
+    const storedTasks = localStorage.getItem('mockTasks');
+    if (storedTasks) {
+        try { setTasks(JSON.parse(storedTasks)); }
+        catch (e) { console.error("Failed to parse stored tasks:", e); localStorage.removeItem('mockTasks'); setTasks([]); }
+    } else {
+        localStorage.setItem('mockTasks', JSON.stringify([])); setTasks([]);
+    }
+
 
     setLoading(false);
   }, []);
@@ -209,7 +153,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (user) {
         const updatedLoggedInUser = usersArray.find(u => u.employeeId === user.employeeId);
         if (updatedLoggedInUser) {
-            setUser(updatedLoggedInUser);
+            setUser(updatedLoggedInUser); // Ensure local user state is also updated if it's the current user
             localStorage.setItem('mockUser', JSON.stringify(updatedLoggedInUser));
         }
     }
@@ -225,6 +169,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const updateAttendanceLogInStorage = (log: AttendanceEvent[]) => {
     localStorage.setItem('mockAttendanceLog', JSON.stringify(log));
+  };
+
+  const updateTasksInStorage = (tasksArray: TaskType[]) => {
+    localStorage.setItem('mockTasks', JSON.stringify(tasksArray));
   };
 
 
@@ -379,6 +327,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     updateAttendanceLogInStorage(updatedLog);
   };
 
+  const addTask = async (task: TaskType) => {
+    const newTasks = [task, ...tasks];
+    setTasks(newTasks);
+    updateTasksInStorage(newTasks);
+  };
+
+  const updateTask = async (updatedTask: TaskType) => {
+    const newTasks = tasks.map(task => task.id === updatedTask.id ? updatedTask : task);
+    setTasks(newTasks);
+    updateTasksInStorage(newTasks);
+  };
+
+
   return (
     <AuthContext.Provider value={{
         user,
@@ -387,6 +348,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         loading,
         announcements,
         attendanceLog,
+        tasks, // Provide tasks
         login,
         logout,
         setMockUser,
@@ -395,10 +357,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         updateUserInContext,
         addNewEmployee,
         addAnnouncement,
-        addAttendanceEvent
+        addAttendanceEvent,
+        addTask, // Provide addTask
+        updateTask // Provide updateTask
     }}>
       {children}
     </AuthContext.Provider>
   );
 };
-
+    

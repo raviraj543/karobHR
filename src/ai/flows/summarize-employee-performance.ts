@@ -11,27 +11,29 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'zod'; // Ensure this is 'zod'
 import type {
-  Task as TaskType, // These types are for reference, not directly used by Zod schemas here
+  Task as TaskType,
   LeaveApplication as LeaveApplicationType,
 } from '@/lib/types';
+
+// Using Zod object for Task within the input schema
+const TaskSchemaForAI = z.object({
+  title: z.string(),
+  status: z.enum(['Pending', 'In Progress', 'Completed', 'Blocked']),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']),
+  description: z.string().optional(),
+  dueDate: z.string().optional(), // Keep as string for simplicity in AI prompt
+});
+
 
 const SummarizeEmployeePerformanceInputSchema = z.object({
   employeeName: z.string().describe('The name of the employee.'),
   tasks: z
-    .array(
-      z.object({
-        title: z.string(),
-        status: z.enum(['Pending', 'In Progress', 'Completed', 'Blocked']),
-        priority: z.enum(['Low', 'Medium', 'High', 'Critical']),
-        description: z.string().optional(),
-        dueDate: z.string().optional(),
-      })
-    )
+    .array(TaskSchemaForAI) // Use the defined Task schema
     .describe('List of tasks assigned to the employee.'),
   leaveApplications: z
     .array(
       z.object({
-        leaveType: z.string(), // Changed from 'type' to 'leaveType' for consistency
+        leaveType: z.string(),
         status: z.enum(['pending', 'approved', 'rejected']),
         startDate: z.string(),
         endDate: z.string(),
@@ -84,14 +86,14 @@ Focus on facts derived from the data.
 
 Tasks:
 {{#each tasks}}
-- Title: {{this.title}} (Priority: {{this.priority}}, Status: {{this.status}}, Due: {{this.dueDate}})
-  Description: {{this.description}}
+- Title: {{this.title}} (Priority: {{this.priority}}, Status: {{this.status}}{{#if this.dueDate}}, Due: {{this.dueDate}}{{/if}})
+  {{#if this.description}}Description: {{this.description}}{{/if}}
 {{/each}}
 
 Leave Applications:
 {{#each leaveApplications}}
 - Type: {{this.leaveType}} (Status: {{this.status}}, From: {{this.startDate}} To: {{this.endDate}})
-  Reason: {{this.reason}}
+  {{#if this.reason}}Reason: {{this.reason}}{{/if}}
 {{/each}}
 `,
 });
@@ -110,3 +112,4 @@ const summarizeEmployeePerformanceFlow = ai.defineFlow(
     return output;
   }
 );
+    
