@@ -12,36 +12,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { PlusCircle, Search, Briefcase, User, CalendarDays, AlertCircle, Loader2 } from 'lucide-react';
-// Metadata is not typically used in client components directly for document.title
-// import type { Metadata } from 'next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import type { User as AuthUser } from '@/lib/types'; // Renamed to avoid conflict with Lucide User
+import type { User as AuthUser } from '@/lib/types'; 
 import { v4 as uuidv4 } from 'uuid';
-import type { Task as TaskType } from '@/lib/types'; // Import the shared Task type
-
-// Ensure this Task interface is compatible or uses the one from lib/types
-// For consistency, we'll use the TaskType imported from @/lib/types
-// interface Task {
-//   id: string;
-//   title: string;
-//   description: string;
-//   assigneeId: string;
-//   assigneeName: string;
-//   dueDate: string;
-//   priority: 'Low' | 'Medium' | 'High' | 'Critical';
-//   status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
-// }
-
-export const initialTasks: TaskType[] = [
-  { id: 'task_101', title: 'Develop new marketing campaign', description: 'Plan and execute Q4 marketing strategy.', assigneeId: 'emp101', assigneeName: 'John Doe', dueDate: '2024-11-10', priority: 'High', status: 'In Progress' },
-  { id: 'task_102', title: 'Onboard new clients for Q4', description: 'Welcome and set up new clients.', assigneeId: 'emp102', assigneeName: 'Alice Smith', dueDate: '2024-11-15', priority: 'Medium', status: 'Pending' },
-  { id: 'task_103', title: 'Finalize budget for 2025', description: 'Review all department budgets and finalize.', assigneeId: 'man101', assigneeName: 'Mike Manager', dueDate: '2024-10-30', priority: 'High', status: 'Completed' },
-  { id: 'task_104', title: 'Update server infrastructure', description: 'Migrate to new cloud servers.', assigneeId: 'emp001', assigneeName: 'Alice Johnson', dueDate: '2024-12-01', priority: 'Critical', status: 'Blocked' },
-];
+import type { Task as TaskType } from '@/lib/types'; 
+import { initialTasks } from '@/lib/taskData'; // Import from shared location
 
 const taskFormSchema = z.object({
   title: z.string().min(3, "Task title must be at least 3 characters."),
@@ -59,7 +38,7 @@ type TaskFormValues = z.infer<typeof taskFormSchema>;
 const getPriorityBadgeVariant = (priority: TaskType['priority']) => {
   switch (priority.toLowerCase()) {
     case 'critical': return 'destructive';
-    case 'high': return 'destructive'; // Or a different shade if needed
+    case 'high': return 'destructive'; 
     case 'medium': return 'secondary';
     case 'low': return 'outline';
     default: return 'default';
@@ -77,7 +56,7 @@ const getStatusBadgeVariant = (status: TaskType['status']) => {
 
 
 export default function AdminTasksPage() {
-  const [tasks, setTasks] = useState<TaskType[]>(initialTasks);
+  const [tasks, setTasks] = useState<TaskType[]>(initialTasks); // Initialize with imported data
   const [isAssignTaskDialogOpen, setIsAssignTaskDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -117,7 +96,9 @@ export default function AdminTasksPage() {
       priority: data.priority,
       status: 'Pending',
     };
-    setTasks(prev => [newTask, ...prev]);
+    setTasks(prev => [newTask, ...prev]); // Add to local state
+    // In a real app, this would also persist to a backend.
+    // For now, initialTasks in taskData.ts won't be updated by this action.
     toast({
       title: 'Task Assigned!',
       description: `Task "${data.title}" assigned to ${selectedUser.name || selectedUser.employeeId}.`,
@@ -263,7 +244,7 @@ export default function AdminTasksPage() {
                 />
             </div>
           </div>
-          <CardDescription>View, edit, and track the status of all assigned tasks.</CardDescription>
+          <CardDescription>View, edit, and track the status of all assigned tasks. Newly assigned tasks are added to this view.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -308,5 +289,3 @@ export default function AdminTasksPage() {
     </div>
   );
 }
-
-    
