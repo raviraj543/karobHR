@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft, IndianRupee } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth, type NewEmployeeData } from '@/lib/authContext'; // Import NewEmployeeData
+import type { UserRole } from '@/lib/types';
 
 const newEmployeeSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -26,7 +28,7 @@ const newEmployeeSchema = z.object({
   role: z.enum(['employee', 'admin', 'manager']).default('employee'),
   joiningDate: z.string().optional(), 
   baseSalary: z.preprocess(
-    (val) => (val === "" ? undefined : Number(val)), // Convert empty string to undefined, then to number
+    (val) => (val === "" ? undefined : Number(val)), 
     z.number({ invalid_type_error: 'Base salary must be a number.' }).positive({ message: 'Base salary must be positive.' }).optional()
   ),
 }).refine(data => data.password === data.confirmPassword, {
@@ -39,6 +41,7 @@ type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
 export default function AddNewEmployeePage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { addNewEmployee } = useAuth();
 
   const form = useForm<NewEmployeeFormValues>({
     resolver: zodResolver(newEmployeeSchema),
@@ -57,24 +60,49 @@ export default function AddNewEmployeePage() {
 
   const onSubmit = async (data: NewEmployeeFormValues) => {
     setIsLoading(true);
-    console.log('New Employee Data:', data);
+    
+    const employeeDataForContext: NewEmployeeData = {
+      name: data.name,
+      employeeId: data.employeeId,
+      email: data.email,
+      department: data.department,
+      role: data.role as UserRole, // Cast role to UserRole
+      joiningDate: data.joiningDate,
+      baseSalary: data.baseSalary,
+    };
 
-    // In a real app, you would send this data to your backend.
-    // For this mock, we'll just simulate success.
-    // The AuthContext would need updating to actually add this user to the mockUserProfiles and mockCredentials.
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    toast({
-      title: "Employee Account Created (Mock)",
-      description: `Account for ${data.name} (${data.employeeId}) with role ${data.role} and base salary ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'} has been notionally created.`,
-    });
-    form.reset();
-    setIsLoading(false);
+    try {
+      await addNewEmployee(employeeDataForContext, data.password);
+      toast({
+        title: "Employee Account Added",
+        description: (
+            <div>
+                <p>{`Account for ${data.name} (${data.employeeId}) has been added to the system for this session.`}</p>
+                <p className="text-xs mt-2">Salary: {data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}</p>
+                <p className="text-xs mt-2 text-amber-700 font-semibold">
+                    IMPORTANT: For this new employee to log in, you must manually add their Employee ID ('{data.employeeId}') 
+                    and Password ('{data.password}') to the `mockCredentials` object in the file 
+                    `src/lib/authContext.tsx` and then restart the application.
+                </p>
+            </div>
+        ),
+        duration: 15000, // Longer duration for detailed message
+      });
+      form.reset();
+    } catch (error) {
+        toast({
+            title: "Error Adding Employee",
+            description: (error as Error).message || "Could not add employee.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsLoading(false);
+    }
   };
   
-  useState(() => {
+  useEffect(() => {
     document.title = 'Add New Employee - Admin - BizFlow';
-  });
+  }, []);
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -93,7 +121,7 @@ export default function AddNewEmployeePage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><UserPlus className="mr-2 h-5 w-5 text-primary" />Employee Details</CardTitle>
-          <CardDescription>The Employee ID and Password will be used for login.</CardDescription>
+          <CardDescription>The Employee ID and Password will be used for login (after manual setup for prototype).</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -241,7 +269,7 @@ export default function AddNewEmployeePage() {
               </div>
 
               <Button type="submit" className="w-full md:w-auto" disabled={isLoading}>
-                {isLoading ? 'Creating Account...' : 'Create Employee Account'}
+                {isLoading ? 'Adding Account...' : 'Add Employee Account'}
               </Button>
             </form>
           </Form>
@@ -250,3 +278,5 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
+
+    
