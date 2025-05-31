@@ -7,7 +7,7 @@ from 'react';
 import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, LocationInfo, Task as TaskType } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
-// Initial mock user profiles (without passwords) - ONLY ADMIN
+// Initial mock user profiles - ONLY ADMIN
 const initialMockUserProfiles: Record<string, User> = {
   'admin001': {
     id: 'user_admin_001',
@@ -45,7 +45,7 @@ export interface AuthContextType {
   loading: boolean;
   announcements: Announcement[];
   attendanceLog: AttendanceEvent[];
-  tasks: TaskType[]; // Added tasks to context
+  tasks: TaskType[];
   login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
   setMockUser: (user: User | null) => void;
@@ -55,8 +55,8 @@ export interface AuthContextType {
   addNewEmployee: (employeeData: NewEmployeeData, passwordToSet: string) => Promise<void>;
   addAnnouncement: (title: string, content: string) => Promise<void>;
   addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => Promise<void>;
-  addTask: (task: TaskType) => Promise<void>; // Added addTask
-  updateTask: (updatedTask: TaskType) => Promise<void>; // Added updateTask
+  addTask: (task: TaskType) => Promise<void>;
+  updateTask: (updatedTask: TaskType) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -71,10 +71,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [mockCredentialsState, setMockCredentialsState] = useState<Record<string, string>>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[]>([]);
-  const [tasks, setTasks] = useState<TaskType[]>([]); // Task state
+  const [tasks, setTasks] = useState<TaskType[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     // Load All Users
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
@@ -90,12 +91,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } catch (e) {
         console.error("Failed to parse stored allUsers:", e);
         localStorage.removeItem('mockAllUsers');
-        const defaultUsers = Object.values(initialMockUserProfiles); // Now only admin
+        const defaultUsers = Object.values(initialMockUserProfiles);
         localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
         setAllUsersState(defaultUsers);
       }
     } else {
-      const defaultUsers = Object.values(initialMockUserProfiles); // Now only admin
+      const defaultUsers = Object.values(initialMockUserProfiles);
       localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
       setAllUsersState(defaultUsers);
     }
@@ -108,11 +109,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       } catch (e) {
         console.error("Failed to parse stored credentials:", e);
         localStorage.removeItem('mockCredentials');
-        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials)); // Now only admin
+        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
         setMockCredentialsState(initialMockCredentials);
       }
     } else {
-      localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials)); // Now only admin
+      localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
       setMockCredentialsState(initialMockCredentials);
     }
 
@@ -144,7 +145,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.setItem('mockTasks', JSON.stringify([])); setTasks([]);
     }
 
-
     setLoading(false);
   }, []);
 
@@ -153,7 +153,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (user) {
         const updatedLoggedInUser = usersArray.find(u => u.employeeId === user.employeeId);
         if (updatedLoggedInUser) {
-            setUser(updatedLoggedInUser); // Ensure local user state is also updated if it's the current user
+            setUser(updatedLoggedInUser); 
             localStorage.setItem('mockUser', JSON.stringify(updatedLoggedInUser));
         }
     }
@@ -174,7 +174,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const updateTasksInStorage = (tasksArray: TaskType[]) => {
     localStorage.setItem('mockTasks', JSON.stringify(tasksArray));
   };
-
 
   const updateUserInContext = (updatedUser: User) => {
     setAllUsersState(prevAllUsers => {
@@ -339,7 +338,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     updateTasksInStorage(newTasks);
   };
 
-
   return (
     <AuthContext.Provider value={{
         user,
@@ -348,7 +346,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         loading,
         announcements,
         attendanceLog,
-        tasks, // Provide tasks
+        tasks,
         login,
         logout,
         setMockUser,
@@ -358,11 +356,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         addNewEmployee,
         addAnnouncement,
         addAttendanceEvent,
-        addTask, // Provide addTask
-        updateTask // Provide updateTask
+        addTask,
+        updateTask
     }}>
       {children}
     </AuthContext.Provider>
   );
 };
+    
     

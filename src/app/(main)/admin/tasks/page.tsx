@@ -20,19 +20,30 @@ import { useAuth } from '@/hooks/useAuth';
 import type { User as AuthUser } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import type { Task as TaskType } from '@/lib/types';
-// Removed: import { initialTasks } from '@/lib/taskData';
 
 const taskFormSchema = z.object({
   title: z.string().min(3, "Task title must be at least 3 characters."),
   description: z.string().min(10, "Description must be at least 10 characters.").max(500, "Description too long."),
   assigneeId: z.string().min(1, "Assignee is required."),
-  dueDate: z.string().refine((date) => new Date(date).toString() !== 'Invalid Date', {
+  dueDate: z.string().refine((date) => {
+    try {
+      const d = new Date(date);
+      return !isNaN(d.getTime());
+    } catch {
+      return false;
+    }
+  }, {
     message: "Due date is required and must be valid.",
   }),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']),
 });
 
 type TaskFormValues = z.infer<typeof taskFormSchema>;
+
+const editTaskFormSchema = taskFormSchema.extend({
+  status: z.enum(['Pending', 'In Progress', 'Completed', 'Blocked']),
+});
+type EditTaskFormValues = z.infer<typeof editTaskFormSchema>;
 
 
 const getPriorityBadgeVariant = (priority: TaskType['priority']) => {
@@ -59,7 +70,7 @@ const getStatusBadgeVariant = (status: TaskType['status']) => {
 
 export default function AdminTasksPage() {
   const { toast } = useToast();
-  const { allUsers, loading: authLoading, tasks, addTask, updateTask } = useAuth(); // Use tasks and addTask from context
+  const { allUsers, loading: authLoading, tasks, addTask, updateTask } = useAuth();
   const [isAssignTaskDialogOpen, setIsAssignTaskDialogOpen] = useState(false);
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskType | null>(null);
@@ -72,7 +83,7 @@ export default function AdminTasksPage() {
 
   const assignableUsers = allUsers.filter(u => u.role === 'employee' || u.role === 'manager');
 
-  const form = useForm<TaskFormValues>({
+  const assignForm = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
     defaultValues: {
       title: '',
@@ -83,8 +94,8 @@ export default function AdminTasksPage() {
     },
   });
 
-  const editForm = useForm<TaskFormValues & { status: TaskType['status'] }>({
-    resolver: zodResolver(taskFormSchema.extend({ status: z.enum(['Pending', 'In Progress', 'Completed', 'Blocked']) })),
+  const editForm = useForm<EditTaskFormValues>({
+    resolver: zodResolver(editTaskFormSchema),
     defaultValues: {
       title: '',
       description: '',
@@ -107,7 +118,7 @@ export default function AdminTasksPage() {
       title: data.title,
       description: data.description,
       assigneeId: data.assigneeId,
-      assigneeName: selectedUser.name || selectedUser.employeeId, // Store assigneeName
+      assigneeName: selectedUser.name || selectedUser.employeeId,
       dueDate: data.dueDate,
       priority: data.priority,
       status: 'Pending',
@@ -118,7 +129,6 @@ export default function AdminTasksPage() {
       title: 'Task Assigned!',
       description: `Task "${data.title}" assigned to ${selectedUser.name || selectedUser.employeeId}.`,
     });
-    // Mock notification to employee
     toast({
         title: 'Mock Employee Notification',
         description: `You (as ${selectedUser.name || selectedUser.employeeId}) have been assigned a new task: "${data.title}".`,
@@ -126,7 +136,7 @@ export default function AdminTasksPage() {
         duration: 7000,
     });
     setIsAssignTaskDialogOpen(false);
-    form.reset();
+    assignForm.reset();
   };
 
   const handleEditTask = (task: TaskType) => {
@@ -135,14 +145,14 @@ export default function AdminTasksPage() {
         title: task.title,
         description: task.description,
         assigneeId: task.assigneeId,
-        dueDate: task.dueDate,
+        dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
         priority: task.priority,
         status: task.status,
     });
     setIsEditTaskDialogOpen(true);
   };
 
-  const onEditTaskSubmit = async (data: TaskFormValues & { status: TaskType['status'] }) => {
+  const onEditTaskSubmit = async (data: EditTaskFormValues) => {
     if (!editingTask) return;
     const selectedUser = assignableUsers.find(u => u.employeeId === data.assigneeId);
      if (!selectedUser) {
@@ -153,7 +163,7 @@ export default function AdminTasksPage() {
     const updatedTaskData: TaskType = {
         ...editingTask,
         ...data,
-        assigneeName: selectedUser.name || selectedUser.employeeId, // Ensure assigneeName is updated
+        assigneeName: selectedUser.name || selectedUser.employeeId,
     };
     await updateTask(updatedTaskData);
     toast({
@@ -169,7 +179,7 @@ export default function AdminTasksPage() {
     task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (task.assigneeName && task.assigneeName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     task.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ).sort((a,b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
 
 
   return (
@@ -190,10 +200,10 @@ export default function AdminTasksPage() {
               <DialogTitle className="flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary"/>Assign New Task</DialogTitle>
               <DialogDescription>Fill in the details to assign a task to an employee or manager.</DialogDescription>
             </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onAssignTaskSubmit)} className="space-y-4 py-2">
+            <Form {...assignForm}>
+              <form onSubmit={assignForm.handleSubmit(onAssignTaskSubmit)} className="space-y-4 py-2">
                 <FormField
-                  control={form.control}
+                  control={assignForm.control}
                   name="title"
                   render={({ field }) => (
                     <FormItem>
@@ -204,7 +214,7 @@ export default function AdminTasksPage() {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={assignForm.control}
                   name="description"
                   render={({ field }) => (
                     <FormItem>
@@ -216,7 +226,7 @@ export default function AdminTasksPage() {
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
-                    control={form.control}
+                    control={assignForm.control}
                     name="assigneeId"
                     render={({ field }) => (
                       <FormItem>
@@ -241,7 +251,7 @@ export default function AdminTasksPage() {
                     )}
                   />
                   <FormField
-                    control={form.control}
+                    control={assignForm.control}
                     name="dueDate"
                     render={({ field }) => (
                       <FormItem>
@@ -253,7 +263,7 @@ export default function AdminTasksPage() {
                   />
                 </div>
                 <FormField
-                  control={form.control}
+                  control={assignForm.control}
                   name="priority"
                   render={({ field }) => (
                     <FormItem>
@@ -277,8 +287,8 @@ export default function AdminTasksPage() {
                 />
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsAssignTaskDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit" disabled={form.formState.isSubmitting}>
-                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Button type="submit" disabled={assignForm.formState.isSubmitting}>
+                    {assignForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Assign Task
                   </Button>
                 </DialogFooter>
@@ -447,7 +457,7 @@ export default function AdminTasksPage() {
                 <TableRow key={task.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
                   <TableCell className="text-muted-foreground">{task.assigneeName || 'N/A'}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(task.dueDate).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-muted-foreground">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</TableCell>
                   <TableCell>
                     <Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge>
                   </TableCell>
@@ -475,4 +485,5 @@ export default function AdminTasksPage() {
     </div>
   );
 }
+    
     

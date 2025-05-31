@@ -6,18 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ListChecks, Filter } from 'lucide-react';
-import type { Metadata } from 'next';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
-import type { Task as TaskType } from '@/lib/types'; // Import TaskType
+import { useAuth } from '@/hooks/useAuth';
+import type { Task as TaskType } from '@/lib/types';
 import { useEffect, useState, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
-
-// Metadata cannot be exported directly from client component
-// export const metadata: Metadata = {
-//   title: 'My Tasks - BizFlow',
-//   description: 'View and manage your assigned tasks.',
-// };
 
 
 const getPriorityBadgeVariant = (priority?: TaskType['priority']) => {
@@ -43,7 +36,7 @@ const getStatusBadgeVariant = (status?: TaskType['status']) => {
 
 
 export default function MyTasksPage() {
-  const { user, tasks: allTasks, updateTask } = useAuth(); // Get tasks and updateTask from context
+  const { user, tasks: allTasks, updateTask, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [filter, setFilter] = useState<'all' | 'pending' | 'in progress' | 'completed'>('all');
 
@@ -53,9 +46,10 @@ export default function MyTasksPage() {
   }, []);
 
   const myTasks = useMemo(() => {
-    if (!user || !allTasks) return [];
-    return allTasks.filter(task => task.assigneeId === user.employeeId);
-  }, [user, allTasks]);
+    if (!user || !allTasks || authLoading) return [];
+    return allTasks.filter(task => task.assigneeId === user.employeeId)
+                   .sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [user, allTasks, authLoading]);
 
   const filteredTasks = useMemo(() => {
     if (filter === 'all') return myTasks;
@@ -91,9 +85,10 @@ export default function MyTasksPage() {
           <p className="text-muted-foreground">Stay organized and track your progress.</p>
         </div>
         <div className="flex gap-2">
-            <Button variant="outline" disabled>
+            {/* TODO: Implement actual filtering UI if needed */}
+            {/* <Button variant="outline" disabled>
                 <Filter className="mr-2 h-4 w-4" /> Filter Tasks (WIP)
-            </Button>
+            </Button> */}
         </div>
       </div>
 
@@ -103,10 +98,12 @@ export default function MyTasksPage() {
           <CardDescription>All tasks assigned to you. Check them off as you complete them.</CardDescription>
         </CardHeader>
         <CardContent>
-          {filteredTasks.length > 0 ? (
+          {authLoading ? (
+             <p className="text-muted-foreground text-center py-8">Loading tasks...</p>
+          ) : filteredTasks.length > 0 ? (
             <div className="space-y-4">
               {filteredTasks.map(task => (
-                <div key={task.id} className="flex items-start space-x-3 p-4 bg-muted/30 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                <div key={task.id} className={`flex items-start space-x-3 p-4 bg-muted/30 rounded-lg shadow-sm hover:shadow-md transition-shadow ${task.status === 'Completed' ? 'opacity-70' : ''}`}>
                   <Checkbox
                     id={`task-${task.id}`}
                     className="mt-1"
@@ -114,16 +111,16 @@ export default function MyTasksPage() {
                     onCheckedChange={() => handleTaskStatusChange(task.id, task.status)}
                   />
                   <div className="flex-1">
-                    <label htmlFor={`task-${task.id}`} className="font-semibold text-foreground cursor-pointer hover:text-primary">
+                    <label htmlFor={`task-${task.id}`} className={`font-semibold text-foreground cursor-pointer hover:text-primary ${task.status === 'Completed' ? 'line-through text-muted-foreground' : ''}`}>
                       {task.title}
                     </label>
-                    <p className="text-sm text-muted-foreground">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
-                    <div className="mt-1 flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</p>
+                     <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
+                    <div className="mt-2 flex items-center gap-2">
                         <Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge>
                         <Badge variant={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
                     </div>
                   </div>
-                  {/* <Button variant="ghost" size="sm">Details</Button> */}
                 </div>
               ))}
             </div>
@@ -137,8 +134,8 @@ export default function MyTasksPage() {
 
       <Card className="shadow-sm">
         <CardHeader>
-            <CardTitle>Daily Task Summary</CardTitle>
-            <CardDescription>Use the dashboard to submit your daily task summary and checkout.</CardDescription>
+            <CardTitle>Daily Task Report</CardTitle>
+            <CardDescription>Use the dashboard to submit your daily task report and checkout.</CardDescription>
         </CardHeader>
         <CardContent>
             <p className="text-muted-foreground">The task summarization tool is available on your <Button variant="link" asChild className="p-0 h-auto"><Link href="/dashboard">main dashboard</Link></Button>.</p>
@@ -148,4 +145,5 @@ export default function MyTasksPage() {
     </div>
   );
 }
+    
     

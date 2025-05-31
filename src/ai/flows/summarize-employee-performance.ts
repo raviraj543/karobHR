@@ -9,26 +9,25 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'zod'; // Ensure this is 'zod'
+import {z} from 'zod';
 import type {
   Task as TaskType,
   LeaveApplication as LeaveApplicationType,
 } from '@/lib/types';
 
-// Using Zod object for Task within the input schema
 const TaskSchemaForAI = z.object({
   title: z.string(),
   status: z.enum(['Pending', 'In Progress', 'Completed', 'Blocked']),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']),
-  description: z.string().optional(),
-  dueDate: z.string().optional(), // Keep as string for simplicity in AI prompt
+  description: z.string().optional().describe('A brief description or update about the task.'),
+  dueDate: z.string().optional().describe('The due date of the task, in YYYY-MM-DD format if available.'),
 });
 
 
 const SummarizeEmployeePerformanceInputSchema = z.object({
   employeeName: z.string().describe('The name of the employee.'),
   tasks: z
-    .array(TaskSchemaForAI) // Use the defined Task schema
+    .array(TaskSchemaForAI)
     .describe('List of tasks assigned to the employee.'),
   leaveApplications: z
     .array(
@@ -112,4 +111,5 @@ const summarizeEmployeePerformanceFlow = ai.defineFlow(
     return output;
   }
 );
+    
     

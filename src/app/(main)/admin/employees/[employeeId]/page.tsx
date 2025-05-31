@@ -6,7 +6,6 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType, AttendanceEvent } from '@/lib/types';
-// import { initialTasks } from '@/lib/taskData'; // No longer needed, tasks come from context
 import { summarizeEmployeePerformance } from '@/ai/flows/summarize-employee-performance';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -24,7 +23,7 @@ import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDay
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog, tasks: allContextTasks } = useAuth(); // Added tasks from context
+  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog, tasks: allContextTasks } = useAuth();
   const employeeId = params.employeeId as string;
   const { toast } = useToast();
 
@@ -56,7 +55,8 @@ export default function EmployeeDetailPage() {
 
   const employeeTasks = useMemo(() => {
     if (!employee || !allContextTasks) return [];
-    return allContextTasks.filter(task => task.assigneeId === employee.employeeId);
+    return allContextTasks.filter(task => task.assigneeId === employee.employeeId)
+                           .sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [employee, allContextTasks]);
 
   const employeeLeaves: LeaveApplicationType[] = useMemo(() => {
@@ -82,7 +82,6 @@ export default function EmployeeDetailPage() {
     setAiSummary(null);
     setSummaryError(null);
 
-    // Use employeeTasks (derived from context) for the AI summary
     const tasksForSummary = employeeTasks.map(t => ({
         title: t.title,
         status: t.status,
@@ -168,7 +167,7 @@ export default function EmployeeDetailPage() {
   };
 
   const getStatusBadgeVariant = (status?: string) => {
-    status = status || ''; // Ensure status is not null/undefined
+    status = status || ''; 
     if (!status) return 'default';
     switch (status.toLowerCase()) {
       case 'completed': return 'default';
@@ -378,7 +377,7 @@ export default function EmployeeDetailPage() {
                           <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
                           <TableCell><Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge></TableCell>
                           <TableCell><Badge variant={getStatusBadgeVariant(task.status)}>{task.status}</Badge></TableCell>
-                          <TableCell>{new Date(task.dueDate).toLocaleDateString()}</TableCell>
+                          <TableCell>{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -469,4 +468,5 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
+    
     
