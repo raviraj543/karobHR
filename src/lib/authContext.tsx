@@ -87,7 +87,7 @@ export interface AuthContextType {
   allUsers: User[]; // For admin to see all users for payroll/advances
   role: UserRole;
   loading: boolean;
-  login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<void>;
+  login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
   setMockUser: (user: User | null) => void;
   requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
@@ -174,30 +174,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         updateUserInStorage(newAllUsers);
         return newAllUsers;
     });
-    // This check is now part of updateUserInStorage
-    // if (user && user.employeeId === updatedUser.employeeId) {
-    //     setUser(updatedUser);
-    // }
   };
 
 
-  const login = async (employeeId: string, pass: string, _rememberMe?: boolean) => {
+  const login = async (employeeId: string, pass: string, _rememberMe?: boolean): Promise<User | null> => {
     setLoading(true);
     // It's crucial to use allUsersState here, as it's the most up-to-date version
     // especially after potential updates from localStorage.
     const userProfile = allUsersState.find(u => u.employeeId === employeeId);
     const expectedPassword = mockCredentials[employeeId];
 
+    // Simulate network delay for realism if needed
+    // await new Promise(resolve => setTimeout(resolve, 500));
+
     if (userProfile && expectedPassword && expectedPassword === pass) {
       setUser(userProfile);
       localStorage.setItem('mockUser', JSON.stringify(userProfile));
+      setLoading(false);
+      return userProfile;
     } else {
       setUser(null);
       localStorage.removeItem('mockUser');
       setLoading(false);
-      throw new Error('Invalid Employee ID or Password.');
+      return null; // Indicate failed login
     }
-    setLoading(false);
   };
 
   const logout = async () => {

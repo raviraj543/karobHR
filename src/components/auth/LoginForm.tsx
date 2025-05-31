@@ -52,15 +52,31 @@ export function LoginForm() {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
-      await login(data.employeeId, data.password, data.rememberMe);
+      const loggedInUser = await login(data.employeeId, data.password, data.rememberMe);
       
-      toast({
-        title: "Login Successful",
-        description: "Welcome back!",
-      });
-      // AuthProvider's useEffect in combination with app/page.tsx handles redirection
-    } catch (error) {
-      console.error('Login failed:', error);
+      if (loggedInUser) {
+        toast({
+          title: "Login Successful",
+          description: "Welcome back! Redirecting...",
+        });
+        // Perform redirection based on role
+        if (loggedInUser.role === 'admin') {
+          router.replace('/admin/dashboard');
+        } else if (loggedInUser.role === 'manager' || loggedInUser.role === 'employee') {
+          router.replace('/dashboard');
+        } else {
+          // Fallback, though app/page.tsx should handle this if role is unexpected
+          router.replace('/'); 
+        }
+      } else {
+        toast({
+          title: "Login Failed",
+          description: "Invalid Employee ID or Password.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) { // Catch any other unexpected errors from the login process
+      console.error('Login process failed:', error);
       toast({
         title: "Login Failed",
         description: (error as Error).message || "An unexpected error occurred.",
@@ -96,7 +112,7 @@ export function LoginForm() {
                 <FormItem>
                   <FormLabel>Employee ID / Admin ID / Manager ID</FormLabel>
                   <FormControl>
-                    <Input type="text" placeholder="Your ID" {...field} />
+                    <Input type="text" placeholder="Your ID" {...field} suppressHydrationWarning />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -117,13 +133,14 @@ export function LoginForm() {
                   </div>
                   <FormControl>
                     <div className="relative">
-                      <Input type={showPassword ? 'text' : 'password'} placeholder="••••••••" {...field} />
+                      <Input type={showPassword ? 'text' : 'password'} placeholder="••••••••" {...field} suppressHydrationWarning />
                        <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
                         onClick={() => setShowPassword(!showPassword)}
+                        suppressHydrationWarning
                       >
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </Button>
@@ -142,6 +159,7 @@ export function LoginForm() {
                     <Checkbox
                       checked={field.value}
                       onCheckedChange={field.onChange}
+                      suppressHydrationWarning
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
@@ -150,7 +168,7 @@ export function LoginForm() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading} suppressHydrationWarning>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
@@ -166,13 +184,13 @@ export function LoginForm() {
 
         <div className="mt-6 space-y-2">
           <p className="text-center text-sm text-muted-foreground">For development (Quick Logins):</p>
-          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_EMPLOYEE_ID, QUICK_LOGIN_EMPLOYEE_PASS)} disabled={isLoading}>
+          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_EMPLOYEE_ID, QUICK_LOGIN_EMPLOYEE_PASS)} disabled={isLoading} suppressHydrationWarning>
             <UserCheck className="mr-2 h-4 w-4" /> Login as Employee ({QUICK_LOGIN_EMPLOYEE_ID})
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_MANAGER_ID, QUICK_LOGIN_MANAGER_PASS)} disabled={isLoading}>
+          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_MANAGER_ID, QUICK_LOGIN_MANAGER_PASS)} disabled={isLoading} suppressHydrationWarning>
             <Briefcase className="mr-2 h-4 w-4" /> Login as Manager ({QUICK_LOGIN_MANAGER_ID})
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_ADMIN_ID, QUICK_LOGIN_ADMIN_PASS)} disabled={isLoading}>
+          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_ADMIN_ID, QUICK_LOGIN_ADMIN_PASS)} disabled={isLoading} suppressHydrationWarning>
             <ShieldCheck className="mr-2 h-4 w-4" /> Login as Admin ({QUICK_LOGIN_ADMIN_ID})
           </Button>
         </div>
