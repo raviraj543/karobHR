@@ -20,7 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import type { User as AuthUser } from '@/lib/types'; 
 import { v4 as uuidv4 } from 'uuid';
 import type { Task as TaskType } from '@/lib/types'; 
-import { initialTasks } from '@/lib/taskData'; // Import from shared location
+import { initialTasks } from '@/lib/taskData'; 
 
 const taskFormSchema = z.object({
   title: z.string().min(3, "Task title must be at least 3 characters."),
@@ -56,7 +56,7 @@ const getStatusBadgeVariant = (status: TaskType['status']) => {
 
 
 export default function AdminTasksPage() {
-  const [tasks, setTasks] = useState<TaskType[]>(initialTasks); // Initialize with imported data
+  const [tasks, setTasks] = useState<TaskType[]>(initialTasks); 
   const [isAssignTaskDialogOpen, setIsAssignTaskDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -96,12 +96,18 @@ export default function AdminTasksPage() {
       priority: data.priority,
       status: 'Pending',
     };
-    setTasks(prev => [newTask, ...prev]); // Add to local state
-    // In a real app, this would also persist to a backend.
-    // For now, initialTasks in taskData.ts won't be updated by this action.
+    setTasks(prev => [newTask, ...prev]); 
+    
     toast({
       title: 'Task Assigned!',
       description: `Task "${data.title}" assigned to ${selectedUser.name || selectedUser.employeeId}.`,
+    });
+    // Mock notification to employee
+    toast({
+        title: 'Mock Employee Notification',
+        description: `You (as ${selectedUser.name || selectedUser.employeeId}) have been assigned a new task: "${data.title}".`,
+        variant: 'default', 
+        duration: 7000,
     });
     setIsAssignTaskDialogOpen(false);
     form.reset();

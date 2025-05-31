@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, type FormEvent } from 'react';
@@ -11,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { PlusCircle, Trash2, Loader2, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 
 export function TaskSummarizer() {
   const [tasks, setTasks] = useState<ClientTask[]>([
@@ -19,6 +21,7 @@ export function TaskSummarizer() {
   const [summary, setSummary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth(); // Get the current user for notification
 
   const handleTaskChange = (id: string, field: keyof AiTask, value: string) => {
     setTasks(tasks.map(task => task.id === id ? { ...task, [field]: value } : task));
@@ -53,8 +56,15 @@ export function TaskSummarizer() {
       const result = await summarizeEmployeeTasks({ tasks: tasksToSummarize });
       setSummary(result.summary);
       toast({
-        title: "Summary Generated!",
+        title: "Summary Generated & Report Submitted!",
         description: "Your task summary has been successfully created.",
+      });
+      // Mock notification to admin
+      toast({
+        title: "Mock Admin Notification",
+        description: `${user?.name || 'An employee'} has submitted their daily task report.`,
+        variant: "default",
+        duration: 7000,
       });
     } catch (error) {
       console.error('Error summarizing tasks:', error);
