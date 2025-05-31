@@ -33,6 +33,7 @@ import {
   Camera as CameraIcon,
   IndianRupee, 
   CreditCard,
+  Clock // Added Clock icon for Live Attendance
 } from 'lucide-react';
 
 interface NavItem {
@@ -48,13 +49,15 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck, allowedRoles: ['admin'] },
   { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'manager', 'employee'] },
-  { href: '/attendance', label: 'Attendance', icon: CameraIcon, allowedRoles: ['employee', 'manager'] },
+  { href: '/attendance', label: 'My Attendance', icon: CameraIcon, allowedRoles: ['employee', 'manager'] },
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] }, 
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
   { href: '/settings', label: 'Settings', icon: SettingsIcon, allowedRoles: ['employee', 'manager'] },
+  // Admin specific
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
+  { href: '/admin/live-attendance', label: 'Live Attendance', icon: Clock, allowedRoles: ['admin'] },
   { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] },
   { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee', 'manager'] }, 
   { href: '/admin/settings', label: 'Company Settings', icon: SettingsIcon, allowedRoles: ['admin'], isBottom: true },
@@ -125,7 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="md:hidden group-data-[collapsible=icon]:block">
                  <SidebarTrigger />
               </div>
-              <h1 className="text-lg font-semibold text-foreground"></h1>
+              {/* <h1 className="text-lg font-semibold text-foreground"></h1> Removed fixed title */}
             </div>
             <UserNav />
           </header>
@@ -137,3 +140,4 @@ export function AppShell({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
+

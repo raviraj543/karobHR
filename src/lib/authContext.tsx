@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { createContext, useState, useEffect }
 from 'react';
-import type { User, UserRole, Advance, Announcement, LeaveApplication } from '@/lib/types';
+import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, LocationInfo } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Initial mock user profiles (without passwords)
@@ -107,6 +107,7 @@ export interface AuthContextType {
   role: UserRole;
   loading: boolean;
   announcements: Announcement[];
+  attendanceLog: AttendanceEvent[];
   login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
   setMockUser: (user: User | null) => void;
@@ -115,6 +116,7 @@ export interface AuthContextType {
   updateUserInContext: (updatedUser: User) => void;
   addNewEmployee: (employeeData: NewEmployeeData, passwordToSet: string) => Promise<void>;
   addAnnouncement: (title: string, content: string) => Promise<void>;
+  addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -128,16 +130,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [allUsersState, setAllUsersState] = useState<User[]>([]);
   const [mockCredentialsState, setMockCredentialsState] = useState<Record<string, string>>({});
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load allUsers
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
       try {
         const parsedAllUsers = JSON.parse(storedAllUsers) as User[];
         setAllUsersState(parsedAllUsers);
-        // Load current user if available and consistent with allUsers
         const storedUser = localStorage.getItem('mockUser');
         if (storedUser) {
           const parsedLoginUser = JSON.parse(storedUser) as User;
@@ -157,7 +158,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setAllUsersState(defaultUsers);
     }
 
-    // Load mockCredentials
     const storedCredentials = localStorage.getItem('mockCredentials');
     if (storedCredentials) {
       try {
@@ -173,7 +173,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setMockCredentialsState(initialMockCredentials);
     }
 
-    // Load announcements
     const storedAnnouncements = localStorage.getItem('mockAnnouncements');
     if (storedAnnouncements) {
       try {
@@ -184,8 +183,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setAnnouncements([]);
       }
     } else {
-       localStorage.setItem('mockAnnouncements', JSON.stringify([])); // Initialize if not present
+       localStorage.setItem('mockAnnouncements', JSON.stringify([]));
        setAnnouncements([]);
+    }
+
+    const storedAttendanceLog = localStorage.getItem('mockAttendanceLog');
+    if (storedAttendanceLog) {
+        try {
+            setAttendanceLog(JSON.parse(storedAttendanceLog));
+        } catch (e) {
+            console.error("Failed to parse stored attendance log:", e);
+            localStorage.removeItem('mockAttendanceLog');
+            setAttendanceLog([]);
+        }
+    } else {
+        localStorage.setItem('mockAttendanceLog', JSON.stringify([]));
+        setAttendanceLog([]);
     }
 
     setLoading(false);
@@ -210,6 +223,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.setItem('mockAnnouncements', JSON.stringify(announcementsArray));
   };
 
+  const updateAttendanceLogInStorage = (log: AttendanceEvent[]) => {
+    localStorage.setItem('mockAttendanceLog', JSON.stringify(log));
+  };
+
+
   const updateUserInContext = (updatedUser: User) => {
     setAllUsersState(prevAllUsers => {
         const newAllUsers = prevAllUsers.map(u => u.employeeId === updatedUser.employeeId ? updatedUser : u);
@@ -221,7 +239,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const login = async (employeeId: string, pass: string, _rememberMe?: boolean): Promise<User | null> => {
     setLoading(true);
     const userProfile = allUsersState.find(u => u.employeeId === employeeId);
-    const expectedPassword = mockCredentialsState[employeeId]; // Use stateful credentials
+    const expectedPassword = mockCredentialsState[employeeId];
 
     if (userProfile && expectedPassword && expectedPassword === pass) {
       setUser(userProfile);
@@ -327,12 +345,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setAllUsersState(updatedAllUsers);
     updateUserInStorage(updatedAllUsers);
 
-    // Update mockCredentialsState
     const updatedCredentials = { ...mockCredentialsState, [newUser.employeeId]: passwordToSet };
     setMockCredentialsState(updatedCredentials);
     updateCredentialsInStorage(updatedCredentials);
-
-    console.log(`New employee ${newUser.name} (ID: ${newUser.employeeId}) added and is now loggable with the provided password.`);
   };
 
   const addAnnouncement = async (title: string, content: string) => {
@@ -351,6 +366,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     updateAnnouncementsInStorage(updatedAnnouncements);
   };
 
+  const addAttendanceEvent = async (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => {
+    if (!user) throw new Error("User not found for logging attendance.");
+    const newEvent: AttendanceEvent = {
+      ...eventData,
+      id: uuidv4(),
+      timestamp: new Date().toISOString(),
+      userName: user.name || user.employeeId,
+    };
+    const updatedLog = [newEvent, ...attendanceLog];
+    setAttendanceLog(updatedLog);
+    updateAttendanceLogInStorage(updatedLog);
+  };
+
   return (
     <AuthContext.Provider value={{
         user,
@@ -358,6 +386,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         role: user?.role || null,
         loading,
         announcements,
+        attendanceLog,
         login,
         logout,
         setMockUser,
@@ -365,9 +394,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         processAdvance,
         updateUserInContext,
         addNewEmployee,
-        addAnnouncement
+        addAnnouncement,
+        addAttendanceEvent
     }}>
       {children}
     </AuthContext.Provider>
   );
 };
+

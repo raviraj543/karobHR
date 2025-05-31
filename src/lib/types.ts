@@ -11,6 +11,23 @@ export interface Advance {
   dateProcessed?: string; // ISO Date string
 }
 
+export interface LocationInfo {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+}
+
+export interface AttendanceEvent {
+  id: string;
+  employeeId: string;
+  userName: string; // For easier display in admin log
+  type: 'check-in' | 'check-out';
+  timestamp: string; // ISO Date string
+  photoDataUrl: string | null; // Can be null if photo capture fails but still logs event
+  location: LocationInfo | null;
+  isWithinGeofence: boolean | null;
+}
+
 export interface User {
   id: string; // Unique user record ID (e.g., from Firebase Auth or DB)
   employeeId: string; // The ID used for login, set by admin
@@ -26,7 +43,7 @@ export interface User {
   baseSalary?: number;
   mockAttendanceFactor?: number; // Represents proportion of salary based on attendance (0.0 to 1.0). Defaults to 1.0 if undefined.
   advances?: Advance[];
-  leaves?: LeaveApplication[]; // Added this line
+  leaves?: LeaveApplication[];
 }
 
 // Task structure expected by the AI flow
@@ -79,3 +96,4 @@ export interface Announcement {
   postedAt: string; // ISO date string
   postedBy: string; // Admin's name or ID
 }
+
