@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Building2, Clock, Palette, BellDot, MapPin } from 'lucide-react';
+import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2 } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -101,6 +101,37 @@ export default function AdminSettingsPage() {
       </Card>
 
       <Separator />
+
+       <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center"><CalendarCheck2 className="mr-2 h-5 w-5 text-primary" />Leave Policy Settings</CardTitle>
+          <CardDescription>
+            Define default leave allowances for employees.
+             <span className="block text-xs text-muted-foreground/80 italic mt-1">
+              Note: These settings are for demonstration. Backend integration is required for these to be dynamically applied.
+            </span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="monthlyLeave">Default Monthly Leave Allowance (days)</Label>
+              <Input id="monthlyLeave" type="number" defaultValue="4" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="yearlyLeave">Default Yearly Leave Allowance (days)</Label>
+              <Input id="yearlyLeave" type="number" defaultValue="48" />
+            </div>
+          </div>
+          <Button disabled>Save Leave Policy</Button>
+           <p className="text-xs text-muted-foreground">
+            These values will be used as defaults when calculating employee leave balances.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
 
       <Card className="shadow-sm">
         <CardHeader>

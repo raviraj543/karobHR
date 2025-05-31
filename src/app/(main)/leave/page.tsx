@@ -1,6 +1,7 @@
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarPlus, History, BarChartHorizontalBig } from 'lucide-react';
+import { CalendarPlus, History, BarChartHorizontalBig, Info } from 'lucide-react';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -9,12 +10,11 @@ export const metadata: Metadata = {
 };
 
 export default function LeavePage() {
-  // Placeholder data
-  const leaveBalance = {
-    casual: 5,
-    sick: 8,
-    annual: 12,
-  };
+  // Placeholder data - in a real app, this would come from user data and admin settings
+  const configuredMonthlyAllowance = 4; // Example: As set by admin
+  const configuredYearlyAllowance = 48; // Example: As set by admin
+  const currentLeaveBalanceMock = 10; // Example: Employee's actual remaining balance
+
   const recentApplications = [
     { id: '1', type: 'Casual Leave', dates: 'Oct 20 - Oct 22, 2023', status: 'Approved', color: 'text-green-500' },
     { id: '2', type: 'Sick Leave', dates: 'Nov 05, 2023', status: 'Pending', color: 'text-yellow-500' },
@@ -34,17 +34,29 @@ export default function LeavePage() {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center"><BarChartHorizontalBig className="mr-2 h-5 w-5 text-primary" />Leave Balance</CardTitle>
-          <CardDescription>Your current available leave days.</CardDescription>
+          <CardTitle className="flex items-center"><BarChartHorizontalBig className="mr-2 h-5 w-5 text-primary" />Leave Balance Overview</CardTitle>
+          <CardDescription>Your current leave allowances and balance.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {Object.entries(leaveBalance).map(([type, days]) => (
-            <div key={type} className="p-4 bg-muted/30 rounded-lg text-center shadow">
-              <p className="text-sm font-medium capitalize text-muted-foreground">{type} Leave</p>
-              <p className="text-3xl font-bold text-primary">{days}</p>
-              <p className="text-xs text-muted-foreground">days remaining</p>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-4 bg-muted/30 rounded-lg shadow space-y-2">
+            <h3 className="text-md font-semibold text-foreground">Configured Allowances</h3>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Default Monthly Allowance:</span>
+              <span className="font-medium text-primary">{configuredMonthlyAllowance} days</span>
             </div>
-          ))}
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Default Yearly Allowance:</span>
+              <span className="font-medium text-primary">{configuredYearlyAllowance} days</span>
+            </div>
+            <p className="text-xs text-muted-foreground/80 italic pt-1">
+              <Info className="inline-block mr-1 h-3 w-3" /> These are the default allowances set by the company admin. Your actual accrual might vary.
+            </p>
+          </div>
+           <div className="p-4 bg-primary/10 rounded-lg shadow text-center">
+              <p className="text-sm font-medium capitalize text-muted-foreground">Your Remaining Leave (Mock)</p>
+              <p className="text-4xl font-bold text-primary">{currentLeaveBalanceMock}</p>
+              <p className="text-xs text-muted-foreground">days available</p>
+            </div>
         </CardContent>
       </Card>
 
