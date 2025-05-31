@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -75,9 +75,9 @@ export default function AdminSignupPage() {
     // setTimeout(() => router.push('/login'), 3000);
   };
   
-  useState(() => {
+  useEffect(() => {
     document.title = 'Create Admin Account - BizFlow';
-  });
+  }, []);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-background to-muted p-4">
