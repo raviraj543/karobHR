@@ -14,12 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import type { Metadata } from 'next';
-
-// export const metadata: Metadata = { // Metadata must be defined in Server Components
-//   title: 'Add New Employee - Admin - BizFlow',
-//   description: 'Create a new employee account with necessary details.',
-// };
+// import type { Metadata } from 'next'; // Metadata must be defined in Server Components
 
 const newEmployeeSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -29,7 +24,7 @@ const newEmployeeSchema = z.object({
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   department: z.string().min(2, { message: 'Department is required.' }),
-  role: z.enum(['employee', 'admin']).default('employee'),
+  role: z.enum(['employee', 'admin', 'manager']).default('employee'),
   joiningDate: z.string().optional(), // Basic string input for simplicity
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -68,7 +63,7 @@ export default function AddNewEmployeePage() {
 
     toast({
       title: "Employee Account Created (Mock)",
-      description: `Account for ${data.name} (${data.employeeId}) has been notionally created. In a real app, their credentials would be saved.`,
+      description: `Account for ${data.name} (${data.employeeId}) with role ${data.role} has been notionally created. In a real app, their credentials would be saved.`,
     });
     form.reset(); // Reset form after successful submission
     setIsLoading(false);
@@ -217,6 +212,7 @@ export default function AddNewEmployeePage() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
                       </SelectContent>
                     </Select>

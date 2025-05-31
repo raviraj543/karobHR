@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { Eye, EyeOff, LogInIcon, UserCheck, ShieldCheck, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, LogInIcon, UserCheck, ShieldCheck, UserPlus, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
@@ -29,6 +29,9 @@ const QUICK_LOGIN_EMPLOYEE_ID = 'emp101';
 const QUICK_LOGIN_EMPLOYEE_PASS = 'employeepass';
 const QUICK_LOGIN_ADMIN_ID = 'admin001';
 const QUICK_LOGIN_ADMIN_PASS = 'adminpass';
+const QUICK_LOGIN_MANAGER_ID = 'man101';
+const QUICK_LOGIN_MANAGER_PASS = 'managerpass';
+
 
 export function LoginForm() {
   const router = useRouter();
@@ -91,7 +94,7 @@ export function LoginForm() {
               name="employeeId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Employee ID / Admin ID</FormLabel>
+                  <FormLabel>Employee ID / Admin ID / Manager ID</FormLabel>
                   <FormControl>
                     <Input type="text" placeholder="Your ID" {...field} />
                   </FormControl>
@@ -165,6 +168,9 @@ export function LoginForm() {
           <p className="text-center text-sm text-muted-foreground">For development (Quick Logins):</p>
           <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_EMPLOYEE_ID, QUICK_LOGIN_EMPLOYEE_PASS)} disabled={isLoading}>
             <UserCheck className="mr-2 h-4 w-4" /> Login as Employee ({QUICK_LOGIN_EMPLOYEE_ID})
+          </Button>
+          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_MANAGER_ID, QUICK_LOGIN_MANAGER_PASS)} disabled={isLoading}>
+            <Briefcase className="mr-2 h-4 w-4" /> Login as Manager ({QUICK_LOGIN_MANAGER_ID})
           </Button>
           <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_ADMIN_ID, QUICK_LOGIN_ADMIN_PASS)} disabled={isLoading}>
             <ShieldCheck className="mr-2 h-4 w-4" /> Login as Admin ({QUICK_LOGIN_ADMIN_ID})

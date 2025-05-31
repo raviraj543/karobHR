@@ -13,9 +13,9 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
+  // SidebarMenuSub, // Not used currently
+  // SidebarMenuSubItem, // Not used currently
+  // SidebarMenuSubButton, // Not used currently
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -34,29 +34,29 @@ import {
   LogOut,
   Briefcase,
   ShieldCheck,
-  Camera as CameraIcon, // Added Camera icon
+  Camera as CameraIcon,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils'; // Not used currently
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
-  allowedRoles: ('admin' | 'employee')[];
+  allowedRoles: ('admin' | 'manager' | 'employee')[];
   subItems?: NavItem[];
   isBottom?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee'] },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck, allowedRoles: ['admin'] },
-  { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'employee'] },
-  { href: '/attendance', label: 'Attendance', icon: CameraIcon, allowedRoles: ['employee'] }, // New Attendance Link
-  { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee'] },
-  { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin'] }, 
+  { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'manager', 'employee'] },
+  { href: '/attendance', label: 'Attendance', icon: CameraIcon, allowedRoles: ['employee', 'manager'] },
+  { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
+  { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] }, 
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
-  { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee'] }, 
+  { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin', 'employee', 'manager'] }, 
   { href: '/admin/settings', label: 'Settings', icon: Settings, allowedRoles: ['admin'], isBottom: true },
 ];
 
@@ -140,5 +140,3 @@ export function AppShell({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    

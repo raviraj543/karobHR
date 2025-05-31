@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect } from 'react';
@@ -14,8 +15,10 @@ export default function HomePage() {
       if (user) {
         if (role === 'admin') {
           router.replace('/admin/dashboard');
-        } else {
+        } else if (role === 'manager' || role === 'employee') { // Manager and Employee go to the same dashboard
           router.replace('/dashboard');
+        } else {
+           router.replace('/login'); // Fallback if role is somehow null but user exists
         }
       } else {
         router.replace('/login');

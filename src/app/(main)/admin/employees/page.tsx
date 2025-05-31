@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Search, Users, Edit2, Trash2, Mail, Phone, UserCog } from 'lucide-react';
+import { PlusCircle, Search, Users, Edit2, Trash2, Mail, Phone, UserCog, Briefcase as RoleIcon } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
@@ -14,13 +14,13 @@ export const metadata: Metadata = {
   description: 'Add, view, and manage employee accounts.',
 };
 
-// Placeholder employee data - In a real app, this would come from a data store (e.g., populated by the Add Employee form)
-// For now, the IDs here ('emp001', etc.) are what would be used for login if they existed in AuthContext's mockCredentials.
+// Placeholder employee data - In a real app, this would come from a data store
 const employees = [
-  { id: 'emp001', name: 'Alice Johnson', email: 'alice.j@bizflow.com', role: 'Developer', department: 'Engineering', status: 'Active', avatar: 'https://placehold.co/40x40.png?text=AJ' },
-  { id: 'emp002', name: 'Bob Williams', email: 'bob.w@bizflow.com', role: 'Designer', department: 'Design', status: 'Active', avatar: 'https://placehold.co/40x40.png?text=BW' },
-  { id: 'emp003', name: 'Carol Davis', email: 'carol.d@bizflow.com', role: 'Project Manager', department: 'Management', status: 'On Leave', avatar: 'https://placehold.co/40x40.png?text=CD' },
-  { id: 'emp004', name: 'David Brown', email: 'david.b@bizflow.com', role: 'QA Engineer', department: 'Engineering', status: 'Inactive', avatar: 'https://placehold.co/40x40.png?text=DB' },
+  { id: 'emp001', name: 'Alice Johnson', email: 'alice.j@bizflow.com', role: 'Employee', department: 'Engineering', status: 'Active', avatar: 'https://placehold.co/40x40.png?text=AJ' },
+  { id: 'emp002', name: 'Bob Williams', email: 'bob.w@bizflow.com', role: 'Employee', department: 'Design', status: 'Active', avatar: 'https://placehold.co/40x40.png?text=BW' },
+  { id: 'man101', name: 'Mike Manager', email: 'mike.manager@bizflow.com', role: 'Manager', department: 'Operations', status: 'Active', avatar: 'https://placehold.co/40x40.png?text=MM' },
+  { id: 'emp003', name: 'Carol Davis', email: 'carol.d@bizflow.com', role: 'Employee', department: 'Management', status: 'On Leave', avatar: 'https://placehold.co/40x40.png?text=CD' },
+  { id: 'emp004', name: 'David Brown', email: 'david.b@bizflow.com', role: 'Employee', department: 'QA Engineering', status: 'Inactive', avatar: 'https://placehold.co/40x40.png?text=DB' },
   { id: 'admin001', name: 'Jane Admin', email: 'admin@bizflow.com', role: 'Administrator', department: 'System', status: 'Active', avatar: 'https://placehold.co/40x40.png?text=JA' },
 ];
 
@@ -32,6 +32,15 @@ const getStatusBadgeVariant = (status: string) => {
     default: return 'default';
   }
 };
+
+const getRoleBadgeVariant = (role: string) => {
+  switch (role.toLowerCase()) {
+    case 'administrator': return 'destructive'; 
+    case 'manager': return 'secondary'; // Using 'secondary' which typically has a distinct style
+    case 'employee': return 'outline'; 
+    default: return 'default';
+  }
+}
 
 export default function AdminEmployeesPage() {
   return (
@@ -66,7 +75,7 @@ export default function AdminEmployeesPage() {
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden sm:table-cell"><UserCog className="inline-block mr-1 h-4 w-4"/>Employee ID</TableHead>
                 <TableHead className="hidden md:table-cell"><Mail className="inline-block mr-1 h-4 w-4"/>Email</TableHead>
-                <TableHead className="hidden lg:table-cell">Role</TableHead>
+                <TableHead><RoleIcon className="inline-block mr-1 h-4 w-4"/>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -85,7 +94,9 @@ export default function AdminEmployeesPage() {
                   </TableCell>
                   <TableCell className="hidden sm:table-cell font-mono text-xs">{employee.id}</TableCell>
                   <TableCell className="hidden md:table-cell">{employee.email}</TableCell>
-                  <TableCell className="hidden lg:table-cell">{employee.role}</TableCell>
+                  <TableCell>
+                     <Badge variant={getRoleBadgeVariant(employee.role)}>{employee.role}</Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(employee.status)}>{employee.status}</Badge>
                   </TableCell>

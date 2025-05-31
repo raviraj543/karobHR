@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -7,13 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Edit3, Mail, Phone, Briefcase, User as UserIcon } from 'lucide-react';
-import type { Metadata } from 'next'; // Cannot be used in client component directly for dynamic titles
+import { Edit3, Mail, Phone, Briefcase, User as UserIcon, ShieldCheck, UserCog } from 'lucide-react';
+// import type { Metadata } from 'next'; // Cannot be used in client component directly for dynamic titles
 import { useEffect } from 'react';
-
-// export const metadata: Metadata = { // This needs to be handled differently for client components
-//   title: 'My Profile - BizFlow',
-// };
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -35,6 +32,16 @@ export default function ProfilePage() {
     ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase()
     : user.email?.[0].toUpperCase() || 'U';
 
+  const getRoleDisplayName = (role: typeof user.role) => {
+    if (role === 'admin') return 'Administrator';
+    if (role === 'manager') return 'Manager';
+    if (role === 'employee') return 'Employee';
+    return 'User';
+  };
+  
+  const RoleIcon = user.role === 'admin' ? ShieldCheck : user.role === 'manager' ? UserCog : UserIcon;
+
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -49,14 +56,17 @@ export default function ProfilePage() {
       
       <Card className="shadow-lg">
         <CardHeader className="bg-muted/30 p-6 rounded-t-lg">
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
             <Avatar className="h-20 w-20 border-2 border-primary">
               <AvatarImage src={user.profilePictureUrl || undefined} alt={user.name || 'User Avatar'} data-ai-hint="profile person" />
               <AvatarFallback className="text-3xl">{initials}</AvatarFallback>
             </Avatar>
-            <div>
+            <div className="text-center sm:text-left">
               <CardTitle className="text-2xl">{user.name || 'User Name'}</CardTitle>
-              <CardDescription className="text-md">{user.role === 'admin' ? 'Administrator' : 'Employee'}</CardDescription>
+              <CardDescription className="text-md flex items-center justify-center sm:justify-start">
+                 <RoleIcon className="mr-1.5 h-4 w-4 text-muted-foreground" />
+                {getRoleDisplayName(user.role)}
+              </CardDescription>
               <p className="text-sm text-muted-foreground">{user.employeeId ? `Employee ID: ${user.employeeId}`: 'Employee ID: N/A'}</p>
             </div>
           </div>
@@ -69,7 +79,7 @@ export default function ProfilePage() {
                 <Label htmlFor="email" className="flex items-center text-muted-foreground">
                   <Mail className="mr-2 h-4 w-4" /> Email Address
                 </Label>
-                <Input id="email" value={user.email || ''} readOnly disabled className="bg-muted/20"/>
+                <Input id="email" value={user.email || 'Not set'} readOnly disabled className="bg-muted/20"/>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="phone" className="flex items-center text-muted-foreground">

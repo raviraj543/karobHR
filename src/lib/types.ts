@@ -1,5 +1,5 @@
 
-export type UserRole = 'admin' | 'employee' | null;
+export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface User {
   id: string; // Unique user record ID (e.g., from Firebase Auth or DB)
@@ -10,6 +10,10 @@ export interface User {
   profilePictureUrl?: string | null;
   department?: string | null;
   joiningDate?: string | null; // Represent as string for simplicity, or Date
+  contactInfo?: { // Added for profile page display
+    phone?: string | null;
+    // address?: string | null; // Example for future extension
+  };
 }
 
 // Task structure expected by the AI flow
@@ -41,3 +45,4 @@ export interface LeaveApplication {
   status: 'pending' | 'approved' | 'rejected';
   supportingDocumentUrl?: string;
 }
+

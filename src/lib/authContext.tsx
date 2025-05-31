@@ -24,6 +24,7 @@ const mockUserProfiles: Record<string, User> = {
     profilePictureUrl: 'https://placehold.co/100x100.png?text=JD',
     department: 'Engineering',
     joiningDate: '2023-01-15',
+    contactInfo: { phone: '555-1234' }
   },
    'emp102': { 
     id: 'user_emp_102', 
@@ -34,6 +35,18 @@ const mockUserProfiles: Record<string, User> = {
     profilePictureUrl: 'https://placehold.co/100x100.png?text=AS',
     department: 'Marketing',
     joiningDate: '2023-03-20',
+    contactInfo: { phone: '555-5678' }
+  },
+  'man101': { 
+    id: 'user_man_101', 
+    employeeId: 'man101', 
+    name: 'Mike Manager', 
+    email: 'mike.manager@bizflow.com', 
+    role: 'manager', 
+    profilePictureUrl: 'https://placehold.co/100x100.png?text=MM',
+    department: 'Operations',
+    joiningDate: '2022-06-10',
+    contactInfo: { phone: '555-8765' }
   },
   // Add more mock users as needed for testing the employee list
   'emp001': { id: 'usr_emp1', employeeId: 'emp001', name: 'Alice Johnson', email: 'alice.j@bizflow.com', role: 'employee', profilePictureUrl: 'https://placehold.co/40x40.png?text=AJ', department: 'Engineering', joiningDate: '2023-01-15' },
@@ -48,6 +61,7 @@ const mockCredentials: Record<string, string> = {
   'admin001': 'adminpass', // Admin ID and password
   'emp101': 'employeepass',   // Employee ID and password for John Doe
   'emp102': 'alicespass',  // Employee ID and password for Alice Smith
+  'man101': 'managerpass', // Manager ID and password
   'emp001': 'password123',
   'emp002': 'password456',
   'emp003': 'password789',
