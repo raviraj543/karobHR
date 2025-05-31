@@ -84,13 +84,15 @@ export default function AdminEmployeesPage() {
               {employees.map(employee => (
                 <TableRow key={employee.id}>
                   <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <Avatar className="h-8 w-8" data-ai-hint="avatar person">
-                        <AvatarImage src={employee.avatar} alt={employee.name} />
-                        <AvatarFallback>{employee.name.split(' ').map(n=>n[0]).join('')}</AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">{employee.name}</span>
-                    </div>
+                    <Link href={`/admin/employees/${employee.id}`}>
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="h-8 w-8" data-ai-hint="avatar person">
+                          <AvatarImage src={employee.avatar} alt={employee.name} />
+                          <AvatarFallback>{employee.name.split(' ').map(n=>n[0]).join('')}</AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium hover:text-primary transition-colors">{employee.name}</span>
+                      </div>
+                    </Link>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell font-mono text-xs">{employee.id}</TableCell>
                   <TableCell className="hidden md:table-cell">{employee.email}</TableCell>
@@ -104,8 +106,8 @@ export default function AdminEmployeesPage() {
                      <Button variant="outline" size="sm" asChild className="h-8">
                         <Link href={`/admin/employees/${employee.id}`}>View</Link>
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Employee"><Edit2 className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete Employee"><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Employee (Mock Action)"><Edit2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete Employee (Mock Action)"><Trash2 className="h-4 w-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
