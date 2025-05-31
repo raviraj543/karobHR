@@ -9,13 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft, IndianRupee } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth'; // Corrected import path for useAuth
-import type { NewEmployeeData } from '@/lib/authContext'; // NewEmployeeData is from here
+import { useAuth } from '@/hooks/useAuth';
+import type { NewEmployeeData } from '@/lib/authContext';
 import type { UserRole } from '@/lib/types';
 
 const newEmployeeSchema = z.object({
@@ -92,7 +92,7 @@ export default function AddNewEmployeePage() {
   };
 
   useEffect(() => {
-    document.title = 'Add New Employee - Admin - BizFlow';
+    document.title = 'Add New Employee - Admin - Floattend';
   }, []);
 
   return (
@@ -269,5 +269,4 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
-
     

@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'BizFlow - Employee Management System',
+  title: 'Floattend - Employee Management System',
   description: 'Comprehensive Employee Attendance, Payroll, Leave, and Task Management.',
   manifest: '/manifest.json', // Link to the manifest file
 };

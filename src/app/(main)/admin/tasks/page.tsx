@@ -78,7 +78,7 @@ export default function AdminTasksPage() {
 
 
   useEffect(() => {
-    document.title = 'Manage Tasks - Admin - BizFlow';
+    document.title = 'Manage Tasks - Admin - Floattend';
   }, []);
 
   const assignableUsers = allUsers.filter(u => u.role === 'employee' || u.role === 'manager');

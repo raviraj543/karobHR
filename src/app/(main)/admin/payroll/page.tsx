@@ -17,7 +17,7 @@ export default function AdminPayrollPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = 'Manage Payroll - Admin - BizFlow';
+    document.title = 'Manage Payroll - Admin - Floattend';
   }, []);
 
   const pendingAdvances = useMemo(() => {

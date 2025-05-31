@@ -51,7 +51,7 @@ export default function AttendancePage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = 'Attendance - BizFlow';
+    document.title = 'Attendance - Floattend';
     
     const getCameraPermission = async () => {
       try {
@@ -364,5 +364,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-    

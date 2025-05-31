@@ -1,9 +1,10 @@
+
 import { LoginForm } from '@/components/auth/LoginForm';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Login - BizFlow',
-  description: 'Login to your BizFlow account.',
+  title: 'Login - Floattend',
+  description: 'Login to your Floattend account.',
 };
 
 export default function LoginPage() {

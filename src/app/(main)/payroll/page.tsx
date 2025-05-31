@@ -41,7 +41,7 @@ export default function EmployeePayrollPage() {
   });
 
   useEffect(() => {
-    document.title = 'My Payslip - BizFlow';
+    document.title = 'My Payslip - Floattend';
   }, []);
 
   const baseSalary = user?.baseSalary || 0;

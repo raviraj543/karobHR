@@ -1,3 +1,4 @@
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar'; // ShadCN calendar
@@ -6,7 +7,7 @@ import { PlusCircle, Edit2, Trash2, CalendarDays as CalendarDaysIcon } from 'luc
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Manage Holidays - Admin - BizFlow',
+  title: 'Manage Holidays - Admin - Floattend',
   description: 'Set up and manage company holidays.',
 };
 

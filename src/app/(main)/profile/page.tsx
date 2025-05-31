@@ -16,9 +16,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user?.name) {
-      document.title = `${user.name}'s Profile - BizFlow`;
+      document.title = `${user.name}'s Profile - Floattend`;
     } else {
-      document.title = 'My Profile - BizFlow';
+      document.title = 'My Profile - Floattend';
     }
   }, [user?.name]);
 

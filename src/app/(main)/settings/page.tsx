@@ -11,7 +11,7 @@ import { Languages, Palette, Bell } from 'lucide-react';
 import type { Metadata } from 'next';
 
 // export const metadata: Metadata = { // Not used in client component
-//   title: 'My Settings - BizFlow',
+//   title: 'My Settings - Floattend',
 //   description: 'Manage your application settings.',
 // };
 
@@ -20,9 +20,9 @@ export default function UserSettingsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    document.title = 'My Settings - BizFlow';
+    document.title = 'My Settings - Floattend';
     // In a real app, you might load the user's saved language preference here
-    const savedLang = localStorage.getItem('bizflow-lang-pref');
+    const savedLang = localStorage.getItem('floattend-lang-pref');
     if (savedLang) {
       setSelectedLanguage(savedLang);
     }
@@ -30,7 +30,7 @@ export default function UserSettingsPage() {
 
   const handleLanguageChange = (lang: string) => {
     setSelectedLanguage(lang);
-    localStorage.setItem('bizflow-lang-pref', lang);
+    localStorage.setItem('floattend-lang-pref', lang);
     toast({
       title: 'Language Preference Updated (Mock)',
       description: `Language set to ${lang === 'en' ? 'English' : 'Hindi (हिन्दी)'}. Full UI translation is not implemented in this prototype.`,

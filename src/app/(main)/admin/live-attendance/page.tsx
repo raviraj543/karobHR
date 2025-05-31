@@ -39,7 +39,7 @@ export default function AdminLiveAttendancePage() {
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
   useEffect(() => {
-    document.title = 'Live Employee Attendance - Admin - BizFlow';
+    document.title = 'Live Employee Attendance - Admin - Floattend';
   }, []);
 
   const handleRefresh = () => {

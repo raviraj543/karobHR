@@ -46,9 +46,9 @@ export default function EmployeeDetailPage() {
 
   useEffect(() => {
     if (employee?.name) {
-      document.title = `Employee Details - ${employee.name} - BizFlow`;
+      document.title = `Employee Details - ${employee.name} - Floattend`;
     } else if (employeeId) {
-      document.title = `Employee Details - ${employeeId} - BizFlow`;
+      document.title = `Employee Details - ${employeeId} - Floattend`;
     }
   }, [employee, employeeId]);
 

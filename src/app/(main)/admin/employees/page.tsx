@@ -48,7 +48,7 @@ export default function AdminEmployeesPage() {
   const [filteredEmployees, setFilteredEmployees] = useState<User[]>([]);
 
   useEffect(() => {
-    document.title = 'Manage Employees - Admin - BizFlow';
+    document.title = 'Manage Employees - Admin - Floattend';
   }, []);
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export default function AdminEmployeesPage() {
             </div>
           </div>
           <CardDescription>
-            View, edit, and manage employee details. Newly added employees will appear here and can log in with the credentials you set.
+            View, edit, and manage employee details. Newly added employees will appear here and can log in.
           </CardDescription>
         </CardHeader>
         <CardContent>

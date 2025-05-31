@@ -42,7 +42,7 @@ export default function MyTasksPage() {
 
 
   useEffect(() => {
-    document.title = 'My Tasks - BizFlow';
+    document.title = 'My Tasks - Floattend';
   }, []);
 
   const myTasks = useMemo(() => {
