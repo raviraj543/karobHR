@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType } from '@/lib/types';
-import { initialTasks } from '@/lib/taskData'; // Updated import
+import { initialTasks } from '@/lib/taskData';
 import { summarizeEmployeePerformance } from '@/ai/flows/summarize-employee-performance';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -14,26 +14,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Kept for AI summary error
+import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2 } from 'lucide-react';
 
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { allUsers, loading: authLoading } = useAuth();
+  const { allUsers, loading: authLoading, updateUserInContext } = useAuth();
   const employeeId = params.employeeId as string;
+  const { toast } = useToast();
 
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  
+  const [isEditingSalary, setIsEditingSalary] = useState(false);
+  const [editedSalary, setEditedSalary] = useState<string | number>('');
 
-  useEffect(() => {
-    document.title = `Employee Details - ${employeeId} - BizFlow`;
-  }, [employeeId]);
 
   const employee = useMemo(() => {
     if (authLoading || !allUsers.length) return null;
-    return allUsers.find(u => u.employeeId === employeeId) || null;
-  }, [allUsers, employeeId, authLoading]);
+    const foundEmployee = allUsers.find(u => u.employeeId === employeeId) || null;
+    if (foundEmployee && !isEditingSalary) { // Initialize editedSalary when employee loads and not in edit mode
+        setEditedSalary(foundEmployee.baseSalary || '');
+    }
+    return foundEmployee;
+  }, [allUsers, employeeId, authLoading, isEditingSalary]); // isEditingSalary added to dependencies
+
+  useEffect(() => {
+    if (employee?.name) {
+      document.title = `Employee Details - ${employee.name} - BizFlow`;
+    } else if (employeeId) {
+      document.title = `Employee Details - ${employeeId} - BizFlow`;
+    }
+  }, [employee, employeeId]);
+
 
   const employeeTasks = useMemo(() => {
     if (!employee) return [];
@@ -41,9 +58,7 @@ export default function EmployeeDetailPage() {
   }, [employee]);
 
   const employeeLeaves: LeaveApplicationType[] = useMemo(() => {
-    if (!employee || !employee.advances) return []; // Using advances as a proxy for where leaves might be, adjust if actual leave structure is different
-    // This is a placeholder. Actual leave applications should be part of the User object.
-    // For now, let's return some mock leaves if employee.leaves exists or an empty array
+    if (!employee || !employee.leaves) return [];
     return employee.leaves || [];
   }, [employee]);
 
@@ -58,7 +73,7 @@ export default function EmployeeDetailPage() {
       const performanceInput = {
         employeeName: employee.name || employee.employeeId,
         tasks: employeeTasks.map(t => ({ title: t.title, status: t.status, priority: t.priority, description: t.description, dueDate: t.dueDate })),
-        leaveApplications: (employee.leaves || []).map(l => ({ type: l.leaveType, status: l.status, startDate: l.startDate, endDate: l.endDate, reason: l.reason })),
+        leaveApplications: (employee.leaves || []).map(l => ({ leaveType: l.leaveType, status: l.status, startDate: l.startDate, endDate: l.endDate, reason: l.reason })),
         attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0,
         baseSalary: employee.baseSalary || 0,
       };
@@ -71,8 +86,22 @@ export default function EmployeeDetailPage() {
       setIsSummaryLoading(false);
     }
   };
+  
+  const handleSaveSalary = async () => {
+    if (!employee) return;
+    const newSalary = parseFloat(String(editedSalary));
+    if (isNaN(newSalary) || newSalary < 0) {
+      toast({ title: "Invalid Salary", description: "Please enter a valid positive number for salary.", variant: "destructive" });
+      return;
+    }
+    const updatedEmployee = { ...employee, baseSalary: newSalary };
+    updateUserInContext(updatedEmployee);
+    setIsEditingSalary(false);
+    toast({ title: "Salary Updated", description: `${employee.name || employee.employeeId}'s base salary updated to ₹${newSalary.toLocaleString('en-IN')}.` });
+  };
 
-  if (authLoading) {
+
+  if (authLoading && !employee) { // Show loading only if employee data isn't available yet
     return <div className="text-center py-10"><Loader2 className="mx-auto h-8 w-8 animate-spin" /> Loading employee details...</div>;
   }
 
@@ -129,9 +158,8 @@ export default function EmployeeDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={() => router.back()}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Employees
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        {/* Add Edit/Delete buttons here if needed */}
       </div>
 
       <Card className="shadow-lg">
@@ -156,15 +184,60 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Phone" icon={Phone} value={employee.contactInfo?.phone || 'N/A'} />
             <InfoCard title="Department" icon={Briefcase} value={employee.department || 'N/A'} />
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
-            <InfoCard title="Base Salary" icon={IndianRupee} value={`₹${(employee.baseSalary || 0).toLocaleString('en-IN')}`} />
-             <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} />
+            {/* Base Salary moved to its own editable card below */}
+            <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} />
           </div>
           
           <Separator />
 
           <Card>
             <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center">
+                  <IndianRupee className="mr-2 h-5 w-5 text-primary" /> Base Salary
+                </CardTitle>
+                {!isEditingSalary ? (
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    setEditedSalary(employee?.baseSalary || '');
+                    setIsEditingSalary(true);
+                  }}>
+                    <Edit2 className="mr-1 h-4 w-4" /> Edit
+                  </Button>
+                ) : null}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isEditingSalary ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={editedSalary}
+                    onChange={(e) => setEditedSalary(e.target.value)}
+                    placeholder="Enter base salary"
+                    className="max-w-xs"
+                  />
+                  <Button size="sm" onClick={handleSaveSalary}>Save</Button>
+                  <Button variant="outline" size="sm" onClick={() => {
+                      setIsEditingSalary(false);
+                      setEditedSalary(employee?.baseSalary || ''); // Reset on cancel
+                  }}>Cancel</Button>
+                </div>
+              ) : (
+                <p className="text-2xl font-semibold">
+                  ₹{(employee?.baseSalary || 0).toLocaleString('en-IN')}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Separator />
+
+          <Card>
+            <CardHeader>
               <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary"/>Payout Summary (Till Date - Mock)</CardTitle>
+               <CardDescription className="text-xs text-muted-foreground">
+                Net Payable = (Base Salary × Mock Attendance Factor) - Approved Advances. Updates in real-time if base salary or attendance factor (mock) are changed.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div><span className="font-medium">Salary (Post-Attendance):</span> ₹{salaryAfterAttendance.toLocaleString('en-IN')}</div>
@@ -286,3 +359,6 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
+
+
+    
