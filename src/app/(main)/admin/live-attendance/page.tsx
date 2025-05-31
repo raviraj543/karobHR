@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, CalendarCheck, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, CalendarCheck, AlertTriangle, RefreshCw, Camera as CameraIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow, differenceInMilliseconds, format, isToday, parseISO } from 'date-fns';
+import { formatDuration } from '@/lib/dateUtils';
+
 
 interface EmployeeAttendanceStatus {
   user: User;
@@ -21,17 +23,6 @@ interface EmployeeAttendanceStatus {
   location?: { latitude: number; longitude: number; accuracy?: number } | null;
   workingHoursToday: string; // Formatted string e.g., "3h 15m" or "Not started"
 }
-
-const formatDuration = (ms: number): string => {
-  if (ms <= 0) return '0m';
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  let durationString = '';
-  if (hours > 0) durationString += `${hours}h `;
-  durationString += `${minutes}m`;
-  return durationString.trim() || '0m';
-};
 
 
 export default function AdminLiveAttendancePage() {
@@ -143,7 +134,7 @@ export default function AdminLiveAttendancePage() {
                 <TableHead>Geofence</TableHead>
                 <TableHead>Working Hours (Today)</TableHead>
                 <TableHead className="hidden md:table-cell">Location (Lat, Lon)</TableHead>
-                {/* <TableHead className="text-center hidden sm:table-cell">Photo</TableHead> */}
+                <TableHead className="text-center hidden sm:table-cell">Photo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -191,19 +182,19 @@ export default function AdminLiveAttendancePage() {
                     {location ? `${location.latitude.toFixed(3)}, ${location.longitude.toFixed(3)}` : 'N/A'}
                     {location?.accuracy && ` (±${location.accuracy.toFixed(0)}m)`}
                   </TableCell>
-                  {/* <TableCell className="text-center hidden sm:table-cell">
+                  <TableCell className="text-center hidden sm:table-cell">
                     {lastActivityPhoto ? (
                         <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
                             <AvatarImage src={lastActivityPhoto} alt="Activity photo" />
                             <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
                         </Avatar>
                     ) : <span className="text-xs text-muted-foreground">-</span>}
-                  </TableCell> */}
+                  </TableCell>
                 </TableRow>
               ))}
               {employeeAttendanceData.length === 0 && !authLoading && (
                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       No employee attendance data available for today.
                     </TableCell>
                  </TableRow>

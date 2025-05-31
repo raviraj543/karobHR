@@ -16,9 +16,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { format, parseISO, isToday, formatDistanceToNow } from 'date-fns';
+import { format, parseISO, isToday, formatDistanceToNow, differenceInMilliseconds } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock } from 'lucide-react';
+import { formatDuration } from '@/lib/dateUtils';
+
+interface DailyWorkSummary {
+  date: string;
+  totalWorkMs: number;
+  entries: AttendanceEvent[];
+  isOngoing: boolean;
+}
 
 export default function EmployeeDetailPage() {
   const params = useParams();
@@ -68,11 +77,66 @@ export default function EmployeeDetailPage() {
     if (!employee || authLoading) return [];
     return attendanceLog
       .filter(event => event.employeeId === employee.employeeId)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // Keep most recent event first globally
   }, [employee, attendanceLog, authLoading]);
 
   const todaysAttendanceEvents = useMemo(() => {
-    return employeeAttendanceEvents.filter(event => isToday(parseISO(event.timestamp)));
+    return employeeAttendanceEvents.filter(event => isToday(parseISO(event.timestamp)))
+                                   .sort((a,b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime()); // Chronological for today's summary
+  }, [employeeAttendanceEvents]);
+
+  const dailyWorkSummaries = useMemo((): DailyWorkSummary[] => {
+    if (!employeeAttendanceEvents.length) return [];
+
+    const eventsByDate = employeeAttendanceEvents.reduce((acc, event) => {
+      const dateStr = format(parseISO(event.timestamp), 'yyyy-MM-dd');
+      if (!acc[dateStr]) {
+        acc[dateStr] = [];
+      }
+      acc[dateStr].push(event);
+      return acc;
+    }, {} as Record<string, AttendanceEvent[]>);
+
+    const summaries = Object.entries(eventsByDate)
+      .map(([dateStr, dailyEvents]) => {
+        // Sort events chronologically for duration calculation
+        dailyEvents.sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
+
+        let totalWorkMs = 0;
+        let lastCheckInTime: Date | null = null;
+        let isOngoing = false;
+
+        for (const event of dailyEvents) {
+          if (event.type === 'check-in') {
+            lastCheckInTime = parseISO(event.timestamp);
+          } else if (event.type === 'check-out' && lastCheckInTime) {
+            totalWorkMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
+            lastCheckInTime = null; // Reset for the next pair
+          }
+        }
+
+        // If the day is today and the last recorded event was a check-in, calculate duration up to current time
+        if (lastCheckInTime && isToday(parseISO(dateStr))) {
+          // Check if the last event in dailyEvents is actually the check-in we are holding
+          const lastEventOfTheDay = dailyEvents[dailyEvents.length -1];
+          if (lastEventOfTheDay.type === 'check-in' && parseISO(lastEventOfTheDay.timestamp).getTime() === lastCheckInTime.getTime()){
+            totalWorkMs += differenceInMilliseconds(new Date(), lastCheckInTime);
+            isOngoing = true;
+          }
+        }
+        // For past days, an unclosed check-in (lastCheckInTime is not null) means incomplete data for that segment,
+        // so we don't add its duration from check-in to end-of-day. Only completed pairs are counted.
+
+        return {
+          date: dateStr,
+          totalWorkMs,
+          entries: dailyEvents, // Chronologically sorted daily events
+          isOngoing,
+        };
+      })
+      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()); // Sort days: most recent day first
+
+    return summaries;
   }, [employeeAttendanceEvents]);
 
 
@@ -277,8 +341,8 @@ export default function EmployeeDetailPage() {
 
            <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center text-xl"><Clock className="mr-2 h-5 w-5 text-primary" />Attendance Log</CardTitle>
-              <CardDescription>Full attendance history for {employee.name || employee.employeeId}.</CardDescription>
+              <CardTitle className="flex items-center text-xl"><Clock className="mr-2 h-5 w-5 text-primary" />Attendance Log & Work Hours</CardTitle>
+              <CardDescription>Daily attendance records and calculated work hours for {employee.name || employee.employeeId}.</CardDescription>
             </CardHeader>
             <CardContent>
               {todaysAttendanceEvents.length > 0 && (
@@ -286,7 +350,7 @@ export default function EmployeeDetailPage() {
                   <h4 className="font-semibold text-md text-primary mb-2">Today's Activity ({format(new Date(), 'PPP')})</h4>
                   <ul className="space-y-2 text-sm">
                     {todaysAttendanceEvents.map(event => (
-                      <li key={event.id} className="flex items-center justify-between">
+                      <li key={`today-${event.id}`} className="flex items-center justify-between">
                         <div>
                           <Badge variant={getStatusBadgeVariant(event.type)} className="capitalize mr-2">
                             {event.type === 'check-in' ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
@@ -300,56 +364,77 @@ export default function EmployeeDetailPage() {
                   </ul>
                 </div>
               )}
-              {employeeAttendanceEvents.length > 0 ? (
-                <ScrollArea className="h-[400px] border rounded-md">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Geofence</TableHead>
-                        <TableHead className="hidden md:table-cell">Location</TableHead>
-                        <TableHead className="text-center">Photo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {employeeAttendanceEvents.map(event => (
-                        <TableRow key={event.id}>
-                          <TableCell>{format(parseISO(event.timestamp), 'MMM d, yyyy')}</TableCell>
-                          <TableCell>{format(parseISO(event.timestamp), 'p')}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusBadgeVariant(event.type)} className="capitalize">
-                             {event.type === 'check-in' ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
-                              {event.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {event.isWithinGeofence === undefined || event.isWithinGeofence === null ? <Badge variant="outline">N/A</Badge> :
-                             event.isWithinGeofence ?
-                             <Badge variant="default" className="bg-green-600 hover:bg-green-700"><Wifi className="mr-1 h-3 w-3"/> Within</Badge> :
-                             <Badge variant="destructive"><WifiOff className="mr-1 h-3 w-3"/> Outside</Badge>}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
-                            {event.location ? `${event.location.latitude.toFixed(3)}, ${event.location.longitude.toFixed(3)}` : 'N/A'}
-                            {event.location?.accuracy && ` (±${event.location.accuracy.toFixed(0)}m)`}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {event.photoDataUrl ? (
-                                <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
-                                    <AvatarImage src={event.photoDataUrl} alt="Attendance photo" />
-                                    <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
-                                </Avatar>
-                            ) : (
-                                <div className="flex justify-center items-center h-9 w-9" title="Photo not available in log">
-                                  <CameraIcon className="h-5 w-5 text-muted-foreground/70" />
-                                </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+
+              {dailyWorkSummaries.length > 0 ? (
+                <ScrollArea className="h-[500px] border rounded-md p-1">
+                  <Accordion type="multiple" className="w-full">
+                    {dailyWorkSummaries.map((summary) => (
+                      <AccordionItem value={summary.date} key={summary.date} className="border-b-0 mb-2 rounded-md bg-muted/20 overflow-hidden">
+                        <AccordionTrigger className="px-4 py-3 hover:bg-muted/40 rounded-t-md">
+                          <div className="flex justify-between items-center w-full">
+                            <span className="font-semibold text-foreground">{format(parseISO(summary.date), 'PPP')} ({format(parseISO(summary.date), 'eeee')})</span>
+                            <div className="flex items-center">
+                              <Badge variant="secondary" className="text-sm">
+                                <Clock className="mr-1.5 h-4 w-4" />
+                                {formatDuration(summary.totalWorkMs)} worked
+                              </Badge>
+                              {summary.isOngoing && isToday(parseISO(summary.date)) && (
+                                <Badge variant="outline" className="ml-2 bg-green-500/10 text-green-700 border-green-500/30">Ongoing</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="bg-background px-1 pb-1 rounded-b-md">
+                          <Table className="mt-0">
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Geofence</TableHead>
+                                <TableHead className="hidden md:table-cell">Location</TableHead>
+                                <TableHead className="text-center">Photo</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {summary.entries.map(event => (
+                                <TableRow key={event.id}>
+                                  <TableCell>{format(parseISO(event.timestamp), 'p')}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={getStatusBadgeVariant(event.type)} className="capitalize">
+                                     {event.type === 'check-in' ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
+                                      {event.type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {event.isWithinGeofence === undefined || event.isWithinGeofence === null ? <Badge variant="outline">N/A</Badge> :
+                                     event.isWithinGeofence ?
+                                     <Badge variant="default" className="bg-green-600 hover:bg-green-700"><Wifi className="mr-1 h-3 w-3"/> Within</Badge> :
+                                     <Badge variant="destructive"><WifiOff className="mr-1 h-3 w-3"/> Outside</Badge>}
+                                  </TableCell>
+                                  <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                                    {event.location ? `${event.location.latitude.toFixed(3)}, ${event.location.longitude.toFixed(3)}` : 'N/A'}
+                                    {event.location?.accuracy && ` (±${event.location.accuracy.toFixed(0)}m)`}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {event.photoDataUrl ? (
+                                        <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
+                                            <AvatarImage src={event.photoDataUrl} alt="Attendance photo" />
+                                            <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
+                                        </Avatar>
+                                    ) : (
+                                        <div className="flex justify-center items-center h-9 w-9" title="Photo not available in log">
+                                          <CameraIcon className="h-5 w-5 text-muted-foreground/70" />
+                                        </div>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 </ScrollArea>
               ) : (
                 <p className="text-muted-foreground text-center py-4">No attendance records found for this employee.</p>
@@ -472,4 +557,3 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
-
