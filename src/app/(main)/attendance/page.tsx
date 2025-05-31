@@ -19,7 +19,7 @@ const GEOFENCE_RADIUS_METERS = 100;
 
 interface CheckInOutDisplayRecord { // For local display of the last action
   type: 'check-in' | 'check-out';
-  photoDataUrl: string | null; 
+  photoDataUrl: string | null;
   location: Location | null;
   timestamp: Date;
   isWithinGeofence: boolean | null;
@@ -50,15 +50,13 @@ export default function AttendancePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
+  // Effect for Camera Permission (runs once on mount)
   useEffect(() => {
-    document.title = 'Attendance - KarobHR';
-    
     const getCameraPermission = async () => {
       setError(null); // Clear previous camera-related errors when re-attempting
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         setHasCameraPermission(true);
-        // setError(null); // Cleared at the start, or could be specific to success here
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -75,12 +73,26 @@ export default function AttendancePage() {
     };
     getCameraPermission();
 
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // Effect for setting title and initial attendance status
+  useEffect(() => {
+    document.title = 'Attendance - KarobHR';
+
     if (user) {
       const userEvents = attendanceLog
         .filter(event => event.employeeId === user.employeeId)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       if (userEvents.length > 0 && userEvents[0].type === 'check-in') {
         setCheckInStatus('checked-in');
+        // For historical log entries, photoDataUrl will be null
         setLastDisplayRecord({
           type: userEvents[0].type,
           photoDataUrl: null, 
@@ -93,15 +105,8 @@ export default function AttendancePage() {
         setLastDisplayRecord(null);
       }
     }
+  }, [user, attendanceLog]);
 
-    return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, attendanceLog]); // Removed toast from dependencies as it's stable
 
   const capturePhoto = (): string | null => {
     if (!videoRef.current || !canvasRef.current || !hasCameraPermission) {
@@ -155,18 +160,16 @@ export default function AttendancePage() {
       return;
     }
     setIsSubmitting(true);
-    // setError(null); // Error state is handled per operation (camera, location)
-
-    if (!hasCameraPermission) {
-      setError('Camera permission is required to proceed.'); // This message might be overwritten by specific errors below
+    
+    if (hasCameraPermission !== true) { // Stricter check
+      setError('Camera permission is required to proceed.');
       toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required.' });
       setIsSubmitting(false);
       return;
     }
 
     const photoDataUrl = capturePhoto();
-    // No need to toast if photoDataUrl is null, capturePhoto already does and sets error.
-
+    
     const location = await getGeolocation();
     let isWithinGeofence: boolean | null = null;
     let toastDescription = `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}`;
@@ -187,12 +190,11 @@ export default function AttendancePage() {
       }
     } else {
       toastDescription += ' (Location not available). Geofence status cannot be determined.';
-      // setError might be set by getGeolocation here
     }
     
     const displayRecord: CheckInOutDisplayRecord = {
       type,
-      photoDataUrl: photoDataUrl, 
+      photoDataUrl: photoDataUrl, // This will be used for immediate display on this page
       location,
       timestamp: new Date(),
       isWithinGeofence,
@@ -200,6 +202,7 @@ export default function AttendancePage() {
     setLastDisplayRecord(displayRecord);
     setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
 
+    // The photoDataUrl passed here will be nulled out by addAttendanceEvent before storage
     await addAttendanceEvent({
         employeeId: user.employeeId,
         type,
@@ -365,4 +368,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
