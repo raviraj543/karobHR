@@ -341,8 +341,8 @@ export default function EmployeeDetailPage() {
                                     <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
                                 </Avatar>
                             ) : (
-                                <div className="flex justify-center items-center h-9 w-9">
-                                  <CameraIcon className="h-5 w-5 text-muted-foreground" title="Photo taken (not stored in log)" />
+                                <div className="flex justify-center items-center h-9 w-9" title="Photo not available in log">
+                                  <CameraIcon className="h-5 w-5 text-muted-foreground/70" />
                                 </div>
                             )}
                           </TableCell>
@@ -472,3 +472,4 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
     </div>
   );
 }
+
