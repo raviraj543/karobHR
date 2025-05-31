@@ -1,23 +1,78 @@
 
+'use client'; // Required for useState, useEffect, useAuth
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity, Megaphone, Send } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useToast } from '@/hooks/use-toast'; // Import useToast
+import type { Announcement } from '@/lib/types'; // Import Announcement type
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-export const metadata: Metadata = {
-  title: 'Admin Dashboard - BizFlow',
-  description: 'Manage your organization with BizFlow.',
-};
+
+// Metadata cannot be exported from client components directly.
+// export const metadata: Metadata = {
+//   title: 'Admin Dashboard - BizFlow',
+//   description: 'Manage your organization with BizFlow.',
+// };
 
 const adminStats = [
-  { title: "Total Employees", value: "75", icon: Users, link: "/admin/employees" },
+  { title: "Total Employees", value: "75", icon: Users, link: "/admin/employees" }, // Value will be dynamic
   { title: "Pending Leave Approvals", value: "5", icon: CalendarOff, link: "/admin/leave-approvals" },
   { title: "Tasks In Progress", value: "23", icon: ListChecks, link: "/admin/tasks" },
-  { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" }, // No link for this stat
+  { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
 ];
 
 export default function AdminDashboardPage() {
+  const { allUsers, announcements, addAnnouncement, user } = useAuth(); // Get announcements and addAnnouncement
+  const { toast } = useToast();
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementContent, setAnnouncementContent] = useState('');
+  const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
+
+  useEffect(() => {
+    document.title = 'Admin Dashboard - BizFlow';
+  }, []);
+
+  const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;
+  adminStats[0].value = totalEmployees.toString(); // Update dynamic stat
+
+  const handlePostAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementTitle.trim() || !announcementContent.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide both a title and content for the announcement.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsPostingAnnouncement(true);
+    try {
+      await addAnnouncement(announcementTitle, announcementContent);
+      toast({
+        title: "Announcement Posted!",
+        description: "Your announcement is now visible to all employees.",
+      });
+      setAnnouncementTitle('');
+      setAnnouncementContent('');
+    } catch (error) {
+      toast({
+        title: "Error Posting Announcement",
+        description: (error as Error).message || "Could not post the announcement.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPostingAnnouncement(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -47,7 +102,7 @@ export default function AdminDashboardPage() {
                   Manage &rarr;
                 </Link>
               ) : (
-                 <span className="text-xs text-muted-foreground">&nbsp;</span> // Placeholder to maintain layout if needed, or remove if not
+                 <span className="text-xs text-muted-foreground">&nbsp;</span>
               )}
             </CardContent>
           </Card>
@@ -61,7 +116,6 @@ export default function AdminDashboardPage() {
             <CardDescription>Overview of recent check-ins, task updates, and leave requests.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Placeholder for activity feed or summary charts */}
             <p className="text-muted-foreground">Employee activity data will be shown here.</p>
             <div className="mt-4 h-64 bg-muted rounded-md flex items-center justify-center" data-ai-hint="bar chart employee activity">
                 <BarChart3 className="h-16 w-16 text-muted-foreground/50"/>
@@ -81,6 +135,68 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center"><Megaphone className="mr-2 h-5 w-5 text-primary"/>Post Company Announcement</CardTitle>
+          <CardDescription>Share important updates with all employees.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handlePostAnnouncement} className="space-y-4">
+            <div>
+              <Label htmlFor="announcementTitle">Title</Label>
+              <Input
+                id="announcementTitle"
+                value={announcementTitle}
+                onChange={(e) => setAnnouncementTitle(e.target.value)}
+                placeholder="e.g., Upcoming Holiday Schedule"
+                disabled={isPostingAnnouncement}
+              />
+            </div>
+            <div>
+              <Label htmlFor="announcementContent">Content</Label>
+              <Textarea
+                id="announcementContent"
+                value={announcementContent}
+                onChange={(e) => setAnnouncementContent(e.target.value)}
+                placeholder="Enter the details of your announcement here..."
+                rows={4}
+                disabled={isPostingAnnouncement}
+              />
+            </div>
+            <Button type="submit" disabled={isPostingAnnouncement}>
+              {isPostingAnnouncement ? 'Posting...' : <><Send className="mr-2 h-4 w-4"/> Post Announcement</>}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+      
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle>Recent Announcements</CardTitle>
+          <CardDescription>A log of announcements you've posted.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {announcements && announcements.length > 0 ? (
+            <ScrollArea className="h-72">
+              <ul className="space-y-4">
+                {announcements.map((ann) => (
+                  <li key={ann.id} className="p-4 border rounded-md bg-muted/50">
+                    <h4 className="font-semibold text-foreground">{ann.title}</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Posted by {ann.postedBy} on {new Date(ann.postedAt).toLocaleDateString()} at {new Date(ann.postedAt).toLocaleTimeString()}
+                    </p>
+                    <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{ann.content}</p>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
+          ) : (
+            <p className="text-muted-foreground">No announcements posted yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
        <Card className="shadow-sm">
           <CardHeader>
             <CardTitle>Task Completion Overview</CardTitle>
@@ -88,7 +204,6 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">Task overview data will be shown here.</p>
-            {/* Placeholder for task chart */}
              <div className="mt-4 h-64 bg-muted rounded-md flex items-center justify-center" data-ai-hint="pie chart task status">
                  <BarChart3 className="h-16 w-16 text-muted-foreground/50"/>
             </div>

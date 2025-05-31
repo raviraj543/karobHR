@@ -4,8 +4,8 @@
 import type { ReactNode } from 'react';
 import { createContext, useState, useEffect }
 from 'react';
-import type { User, UserRole, Advance } from '@/lib/types';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs for advances
+import type { User, UserRole, Advance, Announcement, LeaveApplication } from '@/lib/types'; // Added Announcement
+import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 
 // Mock user profiles (without passwords) - In a real app, this would come from a database.
 const initialMockUserProfiles: Record<string, User> = {
@@ -90,25 +90,23 @@ const mockCredentials: Record<string, string> = {
   'emp004': 'password000',
 };
 
-// Define the type for the data passed to addNewEmployee, based on NewEmployeeFormValues
-// but ensuring all necessary User fields are constructed.
 export interface NewEmployeeData {
   name: string;
   employeeId: string;
   email?: string;
   department: string;
-  role: UserRole; // Make sure UserRole is 'employee', 'admin', 'manager'
+  role: UserRole;
   joiningDate?: string;
   baseSalary?: number;
-  // password is used for setting credentials, not stored directly on User object in allUsersState
 }
 
 
 export interface AuthContextType {
   user: User | null;
-  allUsers: User[]; // For admin to see all users for payroll/advances
+  allUsers: User[];
   role: UserRole;
   loading: boolean;
+  announcements: Announcement[]; // Added
   login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
   setMockUser: (user: User | null) => void;
@@ -116,6 +114,7 @@ export interface AuthContextType {
   processAdvance: (targetEmployeeId: string, advanceId: string, newStatus: 'approved' | 'rejected') => Promise<void>;
   updateUserInContext: (updatedUser: User) => void;
   addNewEmployee: (employeeData: NewEmployeeData, passwordToSet: string) => Promise<void>;
+  addAnnouncement: (title: string, content: string) => Promise<void>; // Added
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -127,7 +126,6 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [allUsersState, setAllUsersState] = useState<User[]>(() => {
-    // Initialize from localStorage or use initialMockUserProfiles
     if (typeof window !== 'undefined') {
       const storedAllUsers = localStorage.getItem('mockAllUsers');
       if (storedAllUsers) {
@@ -135,33 +133,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return JSON.parse(storedAllUsers);
         } catch (e) {
           console.error("Failed to parse stored allUsers from localStorage:", e);
-          // Fallback to initial mock data if parsing fails
           return Object.values(initialMockUserProfiles);
         }
       }
     }
     return Object.values(initialMockUserProfiles);
   });
+  const [announcements, setAnnouncements] = useState<Announcement[]>(() => { // Added announcements state
+    if (typeof window !== 'undefined') {
+      const storedAnnouncements = localStorage.getItem('mockAnnouncements');
+      if (storedAnnouncements) {
+        try {
+          return JSON.parse(storedAnnouncements);
+        } catch (e) {
+          console.error("Failed to parse stored announcements from localStorage:", e);
+          return [];
+        }
+      }
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This effect ensures localStorage is only accessed on the client side
-    // and populates the initial state.
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
       try {
         const parsedAllUsers = JSON.parse(storedAllUsers) as User[];
         setAllUsersState(parsedAllUsers);
-
         const storedUser = localStorage.getItem('mockUser');
         if (storedUser) {
           const parsedLoginUser = JSON.parse(storedUser) as User;
           const currentUserProfile = parsedAllUsers.find(u => u.employeeId === parsedLoginUser.employeeId);
-          if (currentUserProfile) {
-            setUser(currentUserProfile);
-          } else {
-             localStorage.removeItem('mockUser');
-          }
+          setUser(currentUserProfile || null);
         }
       } catch (e) {
         console.error("Failed to parse stored allUsers:", e);
@@ -171,11 +175,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setAllUsersState(defaultUsers);
       }
     } else {
-      // If nothing in localStorage, initialize it with the default mock profiles
       const defaultUsers = Object.values(initialMockUserProfiles);
       localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
       setAllUsersState(defaultUsers);
     }
+
+    const storedAnnouncements = localStorage.getItem('mockAnnouncements'); // Load announcements
+    if (storedAnnouncements) {
+      try {
+        setAnnouncements(JSON.parse(storedAnnouncements));
+      } catch (e) {
+        console.error("Failed to parse stored announcements:", e);
+        localStorage.removeItem('mockAnnouncements');
+        setAnnouncements([]);
+      }
+    }
+
     setLoading(false);
   }, []);
 
@@ -185,10 +200,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (user) {
         const updatedLoggedInUser = usersArray.find(u => u.employeeId === user.employeeId);
         if (updatedLoggedInUser) {
-            setUser(updatedLoggedInUser); // Update context for current user
+            setUser(updatedLoggedInUser);
             localStorage.setItem('mockUser', JSON.stringify(updatedLoggedInUser));
         }
     }
+  };
+
+  const updateAnnouncementsInStorage = (announcementsArray: Announcement[]) => { // Added
+    localStorage.setItem('mockAnnouncements', JSON.stringify(announcementsArray));
   };
 
   const updateUserInContext = (updatedUser: User) => {
@@ -203,8 +222,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const login = async (employeeId: string, pass: string, _rememberMe?: boolean): Promise<User | null> => {
     setLoading(true);
     const userProfile = allUsersState.find(u => u.employeeId === employeeId);
-    // For prototype: check against static mockCredentials.
-    // Newly added users via UI won't be loggable unless manually added to mockCredentials in code.
     const expectedPassword = mockCredentials[employeeId];
 
     if (userProfile && expectedPassword && expectedPassword === pass) {
@@ -256,11 +273,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       dateRequested: new Date().toISOString(),
       status: 'pending',
     };
-    
+
     const updatedAllUsers = [...allUsersState];
     const targetUser = updatedAllUsers[targetUserIndex];
     targetUser.advances = [...(targetUser.advances || []), newAdvance];
-    
+
     setAllUsersState(updatedAllUsers);
     updateUserInStorage(updatedAllUsers);
   };
@@ -271,7 +288,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const updatedAllUsers = [...allUsersState];
     const targetUser = updatedAllUsers[targetUserIndex];
-    
+
     if (!targetUser.advances) throw new Error("Advances array not found for user.");
 
     const advanceIndex = targetUser.advances.findIndex(adv => adv.id === advanceId);
@@ -282,30 +299,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         status: newStatus,
         dateProcessed: new Date().toISOString()
     };
-    
+
     setAllUsersState(updatedAllUsers);
     updateUserInStorage(updatedAllUsers);
   };
 
   const addNewEmployee = async (employeeData: NewEmployeeData, passwordToSet: string) => {
-    // Note: passwordToSet is captured but not dynamically added to mockCredentials for login in this prototype.
-    // Admin needs to manually add it to mockCredentials in the code for the new user to log in.
     const newUser: User = {
-      id: uuidv4(), // Generate a unique ID for the user record
+      id: uuidv4(),
       employeeId: employeeData.employeeId,
       name: employeeData.name,
       email: employeeData.email || '',
-      role: employeeData.role as 'employee' | 'admin' | 'manager', // Ensure role is correctly typed
+      role: employeeData.role as 'employee' | 'admin' | 'manager',
       department: employeeData.department,
       joiningDate: employeeData.joiningDate || new Date().toISOString().split('T')[0],
       baseSalary: employeeData.baseSalary || 0,
-      mockAttendanceFactor: 1.0, // Default to 100%
+      mockAttendanceFactor: 1.0,
       advances: [],
       leaves: [],
       profilePictureUrl: `https://placehold.co/100x100.png?text=${employeeData.name.split(' ').map(n=>n[0]).join('').toUpperCase() || 'N/A'}`,
     };
 
-    // Check if employeeId already exists
     if (allUsersState.some(u => u.employeeId === newUser.employeeId)) {
       throw new Error(`Employee ID "${newUser.employeeId}" already exists.`);
     }
@@ -313,10 +327,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const updatedAllUsers = [...allUsersState, newUser];
     setAllUsersState(updatedAllUsers);
     updateUserInStorage(updatedAllUsers);
-    
-    // The 'passwordToSet' is what the admin entered.
-    // For the prototype, we remind the admin of the manual step:
+
     console.log(`New employee ${newUser.name} created with Employee ID: ${newUser.employeeId} and Password: ${passwordToSet}. Add to mockCredentials to enable login.`);
+  };
+
+  const addAnnouncement = async (title: string, content: string) => { // Added
+    if (!user || user.role !== 'admin') {
+      throw new Error("Only admins can post announcements.");
+    }
+    const newAnnouncement: Announcement = {
+      id: uuidv4(),
+      title,
+      content,
+      postedAt: new Date().toISOString(),
+      postedBy: user.name || user.employeeId,
+    };
+    const updatedAnnouncements = [newAnnouncement, ...announcements]; // Add to the beginning
+    setAnnouncements(updatedAnnouncements);
+    updateAnnouncementsInStorage(updatedAnnouncements);
   };
 
 
@@ -326,17 +354,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         allUsers: allUsersState,
         role: user?.role || null,
         loading,
+        announcements, // Added
         login,
         logout,
         setMockUser,
         requestAdvance,
         processAdvance,
         updateUserInContext,
-        addNewEmployee
+        addNewEmployee,
+        addAnnouncement // Added
     }}>
       {children}
     </AuthContext.Provider>
   );
 };
-
-    

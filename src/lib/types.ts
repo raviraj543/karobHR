@@ -1,5 +1,4 @@
 
-
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface Advance {
@@ -27,6 +26,7 @@ export interface User {
   baseSalary?: number;
   mockAttendanceFactor?: number; // Represents proportion of salary based on attendance (0.0 to 1.0). Defaults to 1.0 if undefined.
   advances?: Advance[];
+  leaves?: LeaveApplication[]; // Added this line
 }
 
 // Task structure expected by the AI flow
@@ -45,9 +45,9 @@ export interface Task {
   id: string;
   title: string;
   description: string;
-  assigneeId: string; 
-  assigneeName: string; 
-  dueDate: string; 
+  assigneeId: string;
+  assigneeName: string;
+  dueDate: string;
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
   status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
 }
@@ -70,4 +70,12 @@ export interface LeaveApplication {
   status: 'pending' | 'approved' | 'rejected';
   supportingDocumentUrl?: string; // Optional
   color?: string; // For UI display, not part of core data model necessarily
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  postedAt: string; // ISO date string
+  postedBy: string; // Admin's name or ID
 }

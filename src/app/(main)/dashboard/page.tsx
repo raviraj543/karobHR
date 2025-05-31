@@ -1,24 +1,39 @@
+
+'use client'; // Required for useAuth hook
+
 import { TaskSummarizer } from '@/components/tasks/TaskSummarizer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { BarChart, CheckSquare, DollarSign, UserCircle } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { BarChart, CheckSquare, DollarSign, UserCircle, Megaphone } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useEffect } from 'react';
 
-export const metadata: Metadata = {
-  title: 'Dashboard - BizFlow',
-  description: 'Your personal dashboard for BizFlow.',
-};
+// Metadata cannot be directly exported from client component in App Router
+// Consider moving to layout or parent server component if static generation is needed
+// export const metadata: Metadata = {
+//   title: 'Dashboard - BizFlow',
+//   description: 'Your personal dashboard for BizFlow.',
+// };
 
 export default function EmployeeDashboardPage() {
-  // Placeholder data - replace with actual data fetching
-  const employeeName = "John Doe"; 
+  const { user, announcements } = useAuth(); // Get user and announcements
+
+  useEffect(() => {
+    document.title = user?.name ? `${user.name}'s Dashboard - BizFlow` : 'Dashboard - BizFlow';
+  }, [user?.name]);
+
+
+  // Placeholder data - some will be replaced by actual data from useAuth
+  const employeeName = user?.name || "Employee";
   const quickStats = [
-    { title: "Attendance This Month", value: "20/22 Days", icon: CheckSquare, link: "/attendance" },
-    { title: "Pending Tasks", value: "3 Tasks", icon: CheckSquare, link: "/tasks" },
-    { title: "Leave Balance", value: "10 Days", icon: UserCircle, link: "/leave" },
-    { title: "Next Payslip", value: "Oct 30, 2023", icon: DollarSign, link: "/payroll" },
+    { title: "Attendance This Month", value: "20/22 Days", icon: CheckSquare, link: "/attendance" }, // Mock
+    { title: "Pending Tasks", value: "3 Tasks", icon: CheckSquare, link: "/tasks" }, // Mock
+    { title: "Leave Balance", value: "10 Days", icon: UserCircle, link: "/leave" }, // Mock
+    { title: "Next Payslip", value: "Oct 30, 2023", icon: DollarSign, link: "/payroll" }, // Mock
   ];
 
   return (
@@ -52,7 +67,7 @@ export default function EmployeeDashboardPage() {
           </Card>
         ))}
       </div>
-      
+
       <Separator />
 
       <TaskSummarizer />
@@ -69,13 +84,33 @@ export default function EmployeeDashboardPage() {
           </CardContent>
         </Card>
          <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle>Company Announcements</CardTitle>
-            <CardDescription>Latest updates from the company.</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center"><Megaphone className="mr-2 h-5 w-5 text-primary" />Company Announcements</CardTitle>
+              <CardDescription>Latest updates from the company.</CardDescription>
+            </div>
+             {/* Can add a "View All" link if there's a dedicated announcements page later */}
           </CardHeader>
           <CardContent>
-             <p className="text-muted-foreground">No announcements at this time.</p>
-            {/* Placeholder for announcements */}
+            {announcements && announcements.length > 0 ? (
+              <ScrollArea className="h-64"> {/* Limit height and make scrollable */}
+                <ul className="space-y-4">
+                  {announcements.slice(0, 5).map((ann) => ( // Show latest 5 or so
+                    <li key={ann.id} className="p-3 border-l-4 border-primary bg-primary/5 rounded-r-md">
+                      <h4 className="font-semibold text-foreground">{ann.title}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Posted by {ann.postedBy} on {new Date(ann.postedAt).toLocaleDateString()}
+                      </p>
+                      <p className="mt-1 text-sm text-foreground whitespace-pre-wrap text-ellipsis overflow-hidden line-clamp-3">
+                        {ann.content}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            ) : (
+              <p className="text-muted-foreground text-center py-4">No announcements at this time.</p>
+            )}
           </CardContent>
         </Card>
       </div>
