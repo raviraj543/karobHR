@@ -13,29 +13,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { Eye, EyeOff, LogInIcon, UserCheck, ShieldCheck, UserPlus, Briefcase } from 'lucide-react';
+import { Eye, EyeOff, LogInIcon, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
-  employeeId: z.string().min(1, { message: 'Employee ID is required.' }),
+  employeeId: z.string().min(1, { message: 'User ID is required.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   rememberMe: z.boolean().optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-// Predefined credentials for quick login (should match those in AuthContext mocks)
-const QUICK_LOGIN_EMPLOYEE_ID = 'emp101';
-const QUICK_LOGIN_EMPLOYEE_PASS = 'employeepass';
-const QUICK_LOGIN_ADMIN_ID = 'admin001';
-const QUICK_LOGIN_ADMIN_PASS = 'adminpass';
-const QUICK_LOGIN_MANAGER_ID = 'man101';
-const QUICK_LOGIN_MANAGER_PASS = 'managerpass';
-
-
 export function LoginForm() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, allUsers, loading: authLoading } = useAuth(); // Added allUsers and authLoading
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
@@ -65,17 +56,16 @@ export function LoginForm() {
         } else if (loggedInUser.role === 'manager' || loggedInUser.role === 'employee') {
           router.replace('/dashboard');
         } else {
-          // Fallback, though app/page.tsx should handle this if role is unexpected
           router.replace('/'); 
         }
       } else {
         toast({
           title: "Login Failed",
-          description: "Invalid Employee ID or Password.",
+          description: "Invalid User ID or Password.",
           variant: "destructive",
         });
       }
-    } catch (error) { // Catch any other unexpected errors from the login process
+    } catch (error) {
       console.error('Login process failed:', error);
       toast({
         title: "Login Failed",
@@ -87,11 +77,8 @@ export function LoginForm() {
     }
   };
   
-  const handleQuickLogin = async (id: string, pass: string) => {
-    form.setValue('employeeId', id);
-    form.setValue('password', pass);
-    await onSubmit(form.getValues());
-  };
+  // Determine if any admin account exists to show/hide the admin signup link
+  const adminExists = authLoading ? false : allUsers.some(user => user.role === 'admin');
 
   return (
     <Card className="w-full max-w-md shadow-xl">
@@ -100,7 +87,7 @@ export function LoginForm() {
           <LogInIcon className="w-12 h-12 text-primary" />
         </div>
         <CardTitle className="text-3xl font-bold">Welcome to KarobHR</CardTitle>
-        <CardDescription>Please sign in with your Employee ID and Password.</CardDescription>
+        <CardDescription>Please sign in with your User ID and Password.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -110,7 +97,7 @@ export function LoginForm() {
               name="employeeId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Employee ID / Admin ID / Manager ID</FormLabel>
+                  <FormLabel>User ID</FormLabel>
                   <FormControl>
                     <Input type="text" placeholder="Your ID" {...field} suppressHydrationWarning />
                   </FormControl>
@@ -168,32 +155,21 @@ export function LoginForm() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={isLoading} suppressHydrationWarning>
-              {isLoading ? 'Signing in...' : 'Sign In'}
+            <Button type="submit" className="w-full" disabled={isLoading || authLoading} suppressHydrationWarning>
+              {isLoading || authLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
         </Form>
 
-        <div className="mt-4 text-center">
+        {!authLoading && !adminExists && ( // Only show if not loading and no admin exists
+          <div className="mt-4 text-center">
             <Link href="/admin-signup" legacyBehavior>
               <a className="text-sm text-primary hover:underline inline-flex items-center">
-                <UserPlus className="mr-1 h-4 w-4" /> First time Admin? Create Account
+                <UserPlus className="mr-1 h-4 w-4" /> First time? Create Admin Account
               </a>
             </Link>
           </div>
-
-        <div className="mt-6 space-y-2">
-          <p className="text-center text-sm text-muted-foreground">For development (Quick Logins):</p>
-          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_EMPLOYEE_ID, QUICK_LOGIN_EMPLOYEE_PASS)} disabled={isLoading} suppressHydrationWarning>
-            <UserCheck className="mr-2 h-4 w-4" /> Login as Employee ({QUICK_LOGIN_EMPLOYEE_ID})
-          </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_MANAGER_ID, QUICK_LOGIN_MANAGER_PASS)} disabled={isLoading} suppressHydrationWarning>
-            <Briefcase className="mr-2 h-4 w-4" /> Login as Manager ({QUICK_LOGIN_MANAGER_ID})
-          </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleQuickLogin(QUICK_LOGIN_ADMIN_ID, QUICK_LOGIN_ADMIN_PASS)} disabled={isLoading} suppressHydrationWarning>
-            <ShieldCheck className="mr-2 h-4 w-4" /> Login as Admin ({QUICK_LOGIN_ADMIN_ID})
-          </Button>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

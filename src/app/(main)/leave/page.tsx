@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { CalendarPlus, History, BarChartHorizontalBig, Info, CalendarDays as CalendarIcon } from 'lucide-react';
-import type { Metadata } from 'next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -18,10 +17,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { LeaveApplication } from '@/lib/types';
 import { useAuth } from '@/hooks/useAuth';
 
-// export const metadata: Metadata = { // Metadata not used in client components
-//   title: 'Leave Management - KarobHR',
-//   description: 'Apply for leave and track your leave balance.',
-// };
 
 const leaveApplicationSchema = z.object({
   leaveType: z.string().min(1, "Leave type is required"),
@@ -39,20 +34,33 @@ const leaveApplicationSchema = z.object({
 
 type LeaveFormValues = z.infer<typeof leaveApplicationSchema>;
 
-const initialRecentApplications: LeaveApplication[] = [
-    { id: '1', userId: 'mockUser', leaveType: 'Casual Leave', startDate: '2023-10-20', endDate: '2023-10-22', reason: 'Family function', status: 'Approved', color: 'bg-green-100 text-green-700 border-green-300' },
-    { id: '2', userId: 'mockUser', leaveType: 'Sick Leave', startDate: '2023-11-05', endDate: '2023-11-05', reason: 'Feeling unwell', status: 'Pending', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
-];
+const initialRecentApplications: LeaveApplication[] = []; // Cleared for "start from zero"
 
 export default function LeavePage() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // In a real app, user.leaves would come from here
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [recentApplications, setRecentApplications] = useState<LeaveApplication[]>(initialRecentApplications);
   
+  // For a "start from zero" app, this should ideally be managed within AuthContext or fetched
+  // But for this mock client-side only version, we'll manage it locally.
+  const [recentApplications, setRecentApplications] = useState<LeaveApplication[]>(() => {
+     if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(`userLeaves_${user?.employeeId}`);
+        return saved ? JSON.parse(saved) : [];
+     }
+     return [];
+  });
+
   useEffect(() => {
     document.title = 'Leave Management - KarobHR';
   }, []);
+
+  useEffect(() => {
+    if (user?.employeeId && typeof window !== 'undefined') {
+        localStorage.setItem(`userLeaves_${user.employeeId}`, JSON.stringify(recentApplications));
+    }
+  }, [recentApplications, user?.employeeId]);
+
 
   const form = useForm<LeaveFormValues>({
     resolver: zodResolver(leaveApplicationSchema),
@@ -66,13 +74,13 @@ export default function LeavePage() {
 
   const onSubmit = (data: LeaveFormValues) => {
     const newApplication: LeaveApplication = {
-      id: Date.now().toString(),
+      id: Date.now().toString(), // Simple ID for mock
       userId: user?.employeeId || 'unknownUser',
       leaveType: data.leaveType,
       startDate: data.startDate,
       endDate: data.endDate,
       reason: data.reason,
-      status: 'pending',
+      status: 'pending', // New applications are pending
       color: 'bg-yellow-100 text-yellow-700 border-yellow-300', // Default for pending
     };
     setRecentApplications(prev => [newApplication, ...prev]);
