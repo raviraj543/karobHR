@@ -7,11 +7,65 @@ from 'react';
 import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, LocationInfo, Task as TaskType } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
-// Initial mock user profiles - NOW EMPTY FOR FRESH START
-const initialMockUserProfiles: Record<string, User> = {};
+// --- Mock Data for Quick Login ---
+const MOCK_ADMIN_ID = 'admin';
+const MOCK_MANAGER_ID = 'manager01';
+const MOCK_EMPLOYEE_ID = 'emp001';
+const MOCK_PASSWORD = 'password123';
 
-// Initial mock credentials - NOW EMPTY FOR FRESH START
-const initialMockCredentials: Record<string, string> = {};
+// Initial mock user profiles - Re-added for quick login testing
+const initialMockUserProfiles: Record<string, User> = {
+  [MOCK_ADMIN_ID]: {
+    id: 'mock-admin-uuid',
+    employeeId: MOCK_ADMIN_ID,
+    name: 'Mock Admin',
+    email: 'admin@karobhr.com',
+    role: 'admin',
+    department: 'Administration',
+    joiningDate: '2023-01-01',
+    baseSalary: 0,
+    mockAttendanceFactor: 1.0,
+    advances: [],
+    leaves: [],
+    profilePictureUrl: `https://placehold.co/100x100.png?text=AD`,
+  },
+  [MOCK_MANAGER_ID]: {
+    id: 'mock-manager-uuid',
+    employeeId: MOCK_MANAGER_ID,
+    name: 'Mock Manager',
+    email: 'manager@karobhr.com',
+    role: 'manager',
+    department: 'Operations',
+    joiningDate: '2023-01-15',
+    baseSalary: 75000,
+    mockAttendanceFactor: 1.0,
+    advances: [],
+    leaves: [],
+    profilePictureUrl: `https://placehold.co/100x100.png?text=MM`,
+  },
+  [MOCK_EMPLOYEE_ID]: {
+    id: 'mock-employee-uuid',
+    employeeId: MOCK_EMPLOYEE_ID,
+    name: 'Mock Employee',
+    email: 'employee@karobhr.com',
+    role: 'employee',
+    department: 'Development',
+    joiningDate: '2023-02-01',
+    baseSalary: 50000,
+    mockAttendanceFactor: 1.0,
+    advances: [],
+    leaves: [],
+    profilePictureUrl: `https://placehold.co/100x100.png?text=ME`,
+  },
+};
+
+// Initial mock credentials - Re-added for quick login testing
+const initialMockCredentials: Record<string, string> = {
+  [MOCK_ADMIN_ID]: MOCK_PASSWORD,
+  [MOCK_MANAGER_ID]: MOCK_PASSWORD,
+  [MOCK_EMPLOYEE_ID]: MOCK_PASSWORD,
+};
+// --- End Mock Data ---
 
 export interface NewEmployeeData {
   name: string;
@@ -33,7 +87,7 @@ export interface AuthContextType {
   tasks: TaskType[];
   login: (employeeId: string, pass: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => Promise<void>;
-  setMockUser: (user: User | null) => void; // Kept for potential testing/dev scenarios, but not primary flow
+  setMockUser: (user: User | null) => void;
   requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
   processAdvance: (targetEmployeeId: string, advanceId: string, newStatus: 'approved' | 'rejected') => Promise<void>;
   updateUserInContext: (updatedUser: User) => void;
@@ -62,45 +116,53 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     setLoading(true);
     // Load All Users
+    let loadedUsersFromStorage = false;
     const storedAllUsers = localStorage.getItem('mockAllUsers');
     if (storedAllUsers) {
       try {
         const parsedAllUsers = JSON.parse(storedAllUsers) as User[];
-        setAllUsersState(parsedAllUsers);
+        if (parsedAllUsers.length > 0) { // Only use if not empty
+            setAllUsersState(parsedAllUsers);
+            loadedUsersFromStorage = true;
+        }
         const storedUser = localStorage.getItem('mockUser'); // For remembering logged-in user
         if (storedUser) {
           const parsedLoginUser = JSON.parse(storedUser) as User;
-          // Ensure the remembered user still exists in the main list and refresh its data
-          const currentUserProfile = parsedAllUsers.find(u => u.employeeId === parsedLoginUser.employeeId);
+          const currentUserProfile = (parsedAllUsers.length > 0 ? parsedAllUsers : Object.values(initialMockUserProfiles)).find(u => u.employeeId === parsedLoginUser.employeeId);
           setUser(currentUserProfile || null);
         }
       } catch (e) {
         console.error("Failed to parse stored allUsers:", e);
         localStorage.removeItem('mockAllUsers');
-        const defaultUsers = Object.values(initialMockUserProfiles); // Will be empty initially
-        localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
-        setAllUsersState(defaultUsers);
       }
-    } else {
-      const defaultUsers = Object.values(initialMockUserProfiles); // Will be empty initially
+    }
+    
+    if (!loadedUsersFromStorage) {
+      const defaultUsers = Object.values(initialMockUserProfiles);
       localStorage.setItem('mockAllUsers', JSON.stringify(defaultUsers));
       setAllUsersState(defaultUsers);
     }
 
+
     // Load Credentials
+    let loadedCredentialsFromStorage = false;
     const storedCredentials = localStorage.getItem('mockCredentials');
     if (storedCredentials) {
       try {
-        setMockCredentialsState(JSON.parse(storedCredentials));
+        const parsedCredentials = JSON.parse(storedCredentials) as Record<string, string>;
+        if (Object.keys(parsedCredentials).length > 0) { // Only use if not empty
+            setMockCredentialsState(parsedCredentials);
+            loadedCredentialsFromStorage = true;
+        }
       } catch (e) {
         console.error("Failed to parse stored credentials:", e);
         localStorage.removeItem('mockCredentials');
-        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials)); // Will be empty initially
-        setMockCredentialsState(initialMockCredentials);
       }
-    } else {
-      localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials)); // Will be empty initially
-      setMockCredentialsState(initialMockCredentials);
+    }
+    
+    if (!loadedCredentialsFromStorage) {
+        localStorage.setItem('mockCredentials', JSON.stringify(initialMockCredentials));
+        setMockCredentialsState(initialMockCredentials);
     }
 
     // Load Announcements
@@ -139,9 +201,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (user) {
         const updatedLoggedInUser = usersArray.find(u => u.employeeId === user.employeeId);
         if (updatedLoggedInUser) {
-            setUser(updatedLoggedInUser); 
+            setUser(updatedLoggedInUser);
             localStorage.setItem('mockUser', JSON.stringify(updatedLoggedInUser));
-        } else { // Logged in user was deleted
+        } else {
             setUser(null);
             localStorage.removeItem('mockUser');
         }
@@ -197,7 +259,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setLoading(false);
   };
 
-  const setMockUser = (mockUser: User | null) => { // Kept for dev/testing if needed
+  const setMockUser = (mockUser: User | null) => {
     setUser(mockUser);
     if (mockUser) {
       localStorage.setItem('mockUser', JSON.stringify(mockUser));
@@ -263,21 +325,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       employeeId: employeeData.employeeId,
       name: employeeData.name,
       email: employeeData.email || '',
-      role: employeeData.role as 'employee' | 'admin' | 'manager', // Role is set here
-      department: employeeData.department || (employeeData.role === 'admin' ? 'Administration' : 'N/A'), // Default department for admin
+      role: employeeData.role as 'employee' | 'admin' | 'manager',
+      department: employeeData.department || (employeeData.role === 'admin' ? 'Administration' : 'N/A'),
       joiningDate: employeeData.joiningDate || new Date().toISOString().split('T')[0],
-      baseSalary: employeeData.baseSalary || (employeeData.role === 'admin' ? 0 : undefined), // Admin might not have a salary in this context
+      baseSalary: employeeData.baseSalary || (employeeData.role === 'admin' ? 0 : undefined),
       mockAttendanceFactor: 1.0,
       advances: [],
       leaves: [],
       profilePictureUrl: `https://placehold.co/100x100.png?text=${employeeData.name.split(' ').map(n=>n[0]).join('').toUpperCase() || 'N/A'}`,
     };
 
-    if (allUsersState.some(u => u.employeeId === newUser.employeeId)) {
-      throw new Error(`User ID "${newUser.employeeId}" already exists.`);
+    // Check if employeeId already exists in the current state or initial mock profiles
+    const employeeIdExists = allUsersState.some(u => u.employeeId === newUser.employeeId) ||
+                             (initialMockUserProfiles[newUser.employeeId] && !allUsersState.some(u => u.employeeId === newUser.employeeId));
+
+    if (employeeIdExists && newUser.employeeId !== MOCK_ADMIN_ID && newUser.employeeId !== MOCK_MANAGER_ID && newUser.employeeId !== MOCK_EMPLOYEE_ID) {
+        // Allow overwriting mock users if they are being "officially" added
+        if (initialMockUserProfiles[newUser.employeeId]) {
+            // If it's one of the initial mock IDs, we proceed to update/replace it
+        } else {
+            throw new Error(`User ID "${newUser.employeeId}" already exists.`);
+        }
     }
 
-    const updatedAllUsers = [...allUsersState, newUser];
+
+    let updatedAllUsers;
+    const existingUserIndex = allUsersState.findIndex(u => u.employeeId === newUser.employeeId);
+    if (existingUserIndex !== -1) { // User exists, update them (e.g. if it was a mock user being formally added)
+        updatedAllUsers = [...allUsersState];
+        updatedAllUsers[existingUserIndex] = newUser;
+    } else { // New user
+        updatedAllUsers = [...allUsersState, newUser];
+    }
+
     setAllUsersState(updatedAllUsers);
     updateUserInStorage(updatedAllUsers);
 
@@ -311,6 +391,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
       userName: user.name || user.employeeId,
+      photoDataUrl: eventData.photoDataUrl, // Make sure photoDataUrl is passed through
+      location: eventData.location,
+      isWithinGeofence: eventData.isWithinGeofence,
     };
 
     const updatedLog = [fullEvent, ...attendanceLog];
@@ -355,5 +438,3 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     </AuthContext.Provider>
   );
 };
-    
-    

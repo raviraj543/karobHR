@@ -13,8 +13,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { Eye, EyeOff, LogInIcon, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, LogInIcon, UserPlus, Shield, UserCog, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Separator } from '../ui/separator';
 
 const loginSchema = z.object({
   employeeId: z.string().min(1, { message: 'User ID is required.' }),
@@ -24,9 +25,14 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
+const MOCK_ADMIN_ID = 'admin';
+const MOCK_MANAGER_ID = 'manager01';
+const MOCK_EMPLOYEE_ID = 'emp001';
+const MOCK_PASSWORD = 'password123';
+
 export function LoginForm() {
   const router = useRouter();
-  const { login, allUsers, loading: authLoading } = useAuth(); // Added allUsers and authLoading
+  const { login, allUsers, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
@@ -40,45 +46,65 @@ export function LoginForm() {
     },
   });
 
+  const handleLoginSuccess = (loggedInUser: import('@/lib/types').User) => {
+    toast({
+      title: "Login Successful",
+      description: `Welcome back, ${loggedInUser.name}! Redirecting...`,
+    });
+    if (loggedInUser.role === 'admin') {
+      router.replace('/admin/dashboard');
+    } else if (loggedInUser.role === 'manager' || loggedInUser.role === 'employee') {
+      router.replace('/dashboard');
+    } else {
+      router.replace('/');
+    }
+  };
+
+  const handleLoginFailure = (message = "Invalid User ID or Password.") => {
+     toast({
+        title: "Login Failed",
+        description: message,
+        variant: "destructive",
+      });
+  }
+
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
       const loggedInUser = await login(data.employeeId, data.password, data.rememberMe);
-      
       if (loggedInUser) {
-        toast({
-          title: "Login Successful",
-          description: "Welcome back! Redirecting...",
-        });
-        // Perform redirection based on role
-        if (loggedInUser.role === 'admin') {
-          router.replace('/admin/dashboard');
-        } else if (loggedInUser.role === 'manager' || loggedInUser.role === 'employee') {
-          router.replace('/dashboard');
-        } else {
-          router.replace('/'); 
-        }
+        handleLoginSuccess(loggedInUser);
       } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid User ID or Password.",
-          variant: "destructive",
-        });
+        handleLoginFailure();
       }
     } catch (error) {
       console.error('Login process failed:', error);
-      toast({
-        title: "Login Failed",
-        description: (error as Error).message || "An unexpected error occurred.",
-        variant: "destructive",
-      });
+      handleLoginFailure((error as Error).message || "An unexpected error occurred.");
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Determine if any admin account exists to show/hide the admin signup link
-  const adminExists = authLoading ? false : allUsers.some(user => user.role === 'admin');
+  const handleQuickLogin = async (userId: string) => {
+    setIsLoading(true);
+    try {
+      const loggedInUser = await login(userId, MOCK_PASSWORD, false);
+      if (loggedInUser) {
+        handleLoginSuccess(loggedInUser);
+      } else {
+        // This case should ideally not happen if mock users are correctly set up
+        handleLoginFailure(`Mock user '${userId}' not found or password incorrect. Please ensure mock data is loaded or try admin signup.`);
+      }
+    } catch (error) {
+      console.error('Quick login failed:', error);
+      handleLoginFailure((error as Error).message || "An unexpected error occurred during quick login.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  const adminExistsInSystem = authLoading ? true : allUsers.some(user => user.role === 'admin');
 
   return (
     <Card className="w-full max-w-md shadow-xl">
@@ -161,14 +187,37 @@ export function LoginForm() {
           </form>
         </Form>
 
-        {!authLoading && !adminExists && ( // Only show if not loading and no admin exists
-          <div className="mt-4 text-center">
+        {!authLoading && !adminExistsInSystem && (
+          <div className="mt-6 text-center">
             <Link href="/admin-signup" legacyBehavior>
               <a className="text-sm text-primary hover:underline inline-flex items-center">
                 <UserPlus className="mr-1 h-4 w-4" /> First time? Create Admin Account
               </a>
             </Link>
+             <p className="text-xs text-muted-foreground mt-1">(No admin account found in the system)</p>
           </div>
+        )}
+
+        {/* Quick Login Buttons for Testing - visible if not loading */}
+        {!authLoading && (
+          <>
+            <Separator className="my-6" />
+            <div className="space-y-3">
+              <p className="text-center text-sm text-muted-foreground">For testing purposes:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Button variant="outline" onClick={() => handleQuickLogin(MOCK_ADMIN_ID)} disabled={isLoading}>
+                  <Shield className="mr-2 h-4 w-4" /> Admin
+                </Button>
+                <Button variant="outline" onClick={() => handleQuickLogin(MOCK_MANAGER_ID)} disabled={isLoading}>
+                  <UserCog className="mr-2 h-4 w-4" /> Manager
+                </Button>
+                <Button variant="outline" onClick={() => handleQuickLogin(MOCK_EMPLOYEE_ID)} disabled={isLoading}>
+                  <User className="mr-2 h-4 w-4" /> Employee
+                </Button>
+              </div>
+              <p className="text-center text-xs text-muted-foreground">(User ID: admin/manager01/emp001, Password: password123)</p>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
