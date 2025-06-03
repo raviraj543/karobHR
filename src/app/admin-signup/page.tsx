@@ -18,13 +18,13 @@ import type { NewEmployeeData } from '@/lib/authContext';
 import type { UserRole } from '@/lib/types';
 
 const adminSignupSchema = z.object({
-  name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
+  companyName: z.string().min(2, {message: 'Company name must be at least 2 characters.'}),
+  adminName: z.string().min(2, { message: 'Admin name must be at least 2 characters.' }),
   adminId: z.string().min(3, { message: 'Admin ID must be at least 3 characters.' })
     .regex(/^[a-zA-Z0-9_.-]*$/, { message: 'Admin ID can only contain letters, numbers, and _ . -' }),
-  email: z.string().email({ message: 'Invalid email address.' }).optional().or(z.literal('')),
+  adminEmail: z.string().email({ message: 'Invalid email address.' }).optional().or(z.literal('')),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
-  department: z.string().optional(), // Admin might not need a department, or it's fixed
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -36,25 +36,23 @@ export default function AdminSignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { addNewEmployee, allUsers } = useAuth(); // Use addNewEmployee from context
+  const { addNewEmployee, allUsers, loading: authLoading } = useAuth();
 
   const form = useForm<AdminSignupFormValues>({
     resolver: zodResolver(adminSignupSchema),
     defaultValues: {
-      name: '',
+      companyName: '',
+      adminName: '',
       adminId: '',
-      email: '',
+      adminEmail: '',
       password: '',
       confirmPassword: '',
-      department: 'Administration', // Default for admin
     },
   });
 
-  // Check if an admin already exists. If so, redirect.
-  // This is a simple check; for production, backend validation is critical.
-  useEffect(() => {
-    const adminExists = allUsers.some(user => user.role === 'admin');
-    if (adminExists && allUsers.length > 0) { // Check allUsers.length to ensure initial load is complete
+  // Basic check if any admin exists. More robust checks should be server-side.
+   useEffect(() => {
+    if (!authLoading && allUsers.some(user => user.role === 'admin')) {
       toast({
         title: "Admin Account Exists",
         description: "An admin account has already been set up. Please log in.",
@@ -63,27 +61,31 @@ export default function AdminSignupPage() {
       });
       router.replace('/login');
     }
-  }, [allUsers, router, toast]);
+  }, [allUsers, authLoading, router, toast]);
 
 
   const onSubmit = async (data: AdminSignupFormValues) => {
     setIsLoading(true);
 
+    // For a new company, the companyId could be derived from the company name or be a UUID.
+    // Let's derive a simple companyId from the company name for now.
+    // In a real app, ensure this is unique (e.g., check against a DB or append UUID).
+    const companyIdForNewCompany = data.companyName.toLowerCase().replace(/\s+/g, '-') + '-' + uuidv4().slice(0,4);
+
     const adminDataForContext: NewEmployeeData = {
-      name: data.name,
+      name: data.adminName,
       employeeId: data.adminId,
-      email: data.email,
-      department: data.department || 'Administration', // Default if empty
-      role: 'admin' as UserRole, // Explicitly set role to admin
-      // Joining date and base salary can be omitted or set to defaults for admin
+      email: data.adminEmail, // This will be used for Firebase Auth user
+      department: 'Administration',
+      role: 'admin' as UserRole,
+      companyId: companyIdForNewCompany, // Associate admin with this new company
       joiningDate: new Date().toISOString().split('T')[0],
-      baseSalary: 0, // Admins in this system might not have a typical salary structure
+      baseSalary: 0,
     };
 
     try {
-      // Check again before submission, in case of race condition (unlikely in this client-side setup)
-      const adminExists = allUsers.some(user => user.role === 'admin');
-      if (adminExists) {
+      // Client-side check (backend check is more reliable)
+      if (!authLoading && allUsers.some(user => user.role === 'admin')) {
          toast({
           title: "Admin Account Exists",
           description: "An admin account has already been set up. Please log in.",
@@ -96,12 +98,12 @@ export default function AdminSignupPage() {
 
       await addNewEmployee(adminDataForContext, data.password);
       toast({
-        title: "Admin Account Created!",
-        description: `Admin account for '${data.adminId}' successfully created. You can now log in.`,
+        title: "Admin Account & Company Created!",
+        description: `Admin '${data.adminId}' for company '${data.companyName}' created. You can now log in.`,
         duration: 7000,
       });
       form.reset();
-      router.push('/login'); // Redirect to login after successful admin creation
+      router.push('/login');
     } catch (error) {
         toast({
             title: "Error Creating Admin Account",
@@ -112,7 +114,7 @@ export default function AdminSignupPage() {
         setIsLoading(false);
     }
   };
-  
+
   useEffect(() => {
     document.title = 'Create Admin Account - KarobHR';
   }, []);
@@ -124,7 +126,7 @@ export default function AdminSignupPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center">
               <ShieldPlus className="mr-2 h-8 w-8 text-primary" />
-              <CardTitle className="text-2xl font-bold">Create Initial Admin Account</CardTitle>
+              <CardTitle className="text-2xl font-bold">Setup Company & Admin Account</CardTitle>
             </div>
             <Button variant="outline" size="sm" asChild>
               <Link href="/login">
@@ -133,8 +135,7 @@ export default function AdminSignupPage() {
             </Button>
           </div>
           <CardDescription>
-            Fill in the details to create the first administrator account for KarobHR.
-            This page should only be accessible if no admin accounts exist.
+            Register your company and create the first administrator account for KarobHR.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -142,12 +143,25 @@ export default function AdminSignupPage() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
-                name="name"
+                name="companyName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name</FormLabel>
+                    <FormLabel>Company Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Site Administrator" {...field} />
+                      <Input placeholder="e.g., Acme Innovations Ltd." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="adminName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Full Name (Administrator)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Jane Doe" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -159,24 +173,25 @@ export default function AdminSignupPage() {
                   name="adminId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Admin ID (for Login)</FormLabel>
+                      <FormLabel>Admin Login ID</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., main_admin" {...field} />
+                        <Input placeholder="e.g., jane.admin" {...field} />
                       </FormControl>
-                       <FormDescription>Unique ID for login. No spaces or special chars other than _ . -</FormDescription>
+                       <FormDescription>Unique ID for login.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
                   control={form.control}
-                  name="email"
+                  name="adminEmail"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email Address (Optional)</FormLabel>
+                      <FormLabel>Admin Email (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="e.g., admin@example.com" {...field} />
+                        <Input type="email" placeholder="e.g., admin@company.com" {...field} />
                       </FormControl>
+                      <FormDescription>If blank, one will be auto-generated for login.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -211,9 +226,9 @@ export default function AdminSignupPage() {
                   )}
                 />
               </div>
-              
-              <Button type="submit" className="w-full md:w-auto" disabled={isLoading}>
-                {isLoading ? 'Creating Account...' : 'Create Admin Account'}
+
+              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authLoading}>
+                {isLoading || authLoading ? 'Creating Account...' : 'Create Company & Admin Account'}
               </Button>
             </form>
           </Form>
