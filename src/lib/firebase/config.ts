@@ -1,4 +1,8 @@
+
 // TODO: Replace with your actual Firebase project configuration
+// You can get this from the Firebase console:
+// Project settings > General > Your apps > Firebase SDK snippet > Config
+
 export const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_AUTH_DOMAIN",
@@ -8,7 +12,3 @@ export const firebaseConfig = {
   appId: "YOUR_APP_ID",
   measurementId: "YOUR_MEASUREMENT_ID" // Optional
 };
-
-// Note: Firebase app initialization (initializeApp) would typically happen here
-// or in a dedicated firebase.ts file that imports this config.
-// For this scaffold, we are only providing the config structure.
