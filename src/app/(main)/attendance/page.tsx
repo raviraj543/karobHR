@@ -9,24 +9,24 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import type { LocationInfo as Location, AttendanceEvent } from '@/lib/types';
 import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert } from 'lucide-react';
-import Image from 'next/image';
+import Image from 'next/image'; // Using next/image for optimization
 
-// --- Geofence Settings ---
-const OFFICE_LATITUDE = 37.7749;
-const OFFICE_LONGITUDE = -122.4194;
-const GEOFENCE_RADIUS_METERS = 100;
+// --- Geofence Settings (Consider moving to company settings in Firestore later) ---
+const OFFICE_LATITUDE = 37.7749; // Placeholder, should be configurable per company
+const OFFICE_LONGITUDE = -122.4194; // Placeholder
+const GEOFENCE_RADIUS_METERS = 100; // Placeholder
 // --- End Geofence Settings ---
 
-interface CheckInOutDisplayRecord { // For local display of the last action
+interface CheckInOutDisplayRecord {
   type: 'check-in' | 'check-out';
-  photoDataUrl: string | null;
+  photoUrl: string | null; // Now photoUrl from storage
   location: Location | null;
   timestamp: Date;
   isWithinGeofence: boolean | null;
 }
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3;
+  const R = 6371e3; // Earth radius in meters
   const phi1 = lat1 * Math.PI / 180;
   const phi2 = lat2 * Math.PI / 180;
   const deltaPhi = (lat2 - lat1) * Math.PI / 180;
@@ -39,7 +39,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function AttendancePage() {
-  const { user, addAttendanceEvent, attendanceLog } = useAuth();
+  const { user, addAttendanceEvent, attendanceLog, companyId } = useAuth();
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
@@ -48,16 +48,15 @@ export default function AttendancePage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null); // Ref to hold the MediaStream
+  const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
 
-  // Effect for Camera Permission (runs once on mount)
   useEffect(() => {
     const getCameraPermission = async () => {
-      setError(null); // Clear previous camera-related errors when re-attempting
+      setError(null);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        streamRef.current = stream; // Store the stream in the ref
+        streamRef.current = stream;
         setHasCameraPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -73,49 +72,44 @@ export default function AttendancePage() {
         });
       }
     };
-
     getCameraPermission();
-
-    // Cleanup function
     return () => {
-      console.log("AttendancePage: Unmounting, attempting to stop camera stream...");
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
-        console.log("AttendancePage: Camera tracks stopped.");
       }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null; // Clear the video element's source
-        console.log("AttendancePage: Video source cleared.");
-      }
-      streamRef.current = null; // Clear the ref to the stream
+      if (videoRef.current) videoRef.current.srcObject = null;
+      streamRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only once on mount and cleans up on unmount
+  }, []);
 
-  // Effect for setting title and initial attendance status
   useEffect(() => {
     document.title = 'Attendance - KarobHR';
-
-    if (user) {
-      const userEvents = attendanceLog
-        .filter(event => event.employeeId === user.employeeId)
+    if (user && attendanceLog.length > 0) {
+      // Filter for current user's events today to determine status
+      const today = new Date().toISOString().split('T')[0];
+      const userEventsToday = attendanceLog
+        .filter(event => event.userId === user.id && event.timestamp.startsWith(today))
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      if (userEvents.length > 0 && userEvents[0].type === 'check-in') {
+
+      if (userEventsToday.length > 0 && userEventsToday[0].type === 'check-in') {
         setCheckInStatus('checked-in');
-        setLastDisplayRecord({
-          type: userEvents[0].type,
-          photoDataUrl: null, 
-          location: userEvents[0].location,
-          timestamp: new Date(userEvents[0].timestamp),
-          isWithinGeofence: userEvents[0].isWithinGeofence,
+        setLastDisplayRecord({ // Initialize with latest check-in for display continuity
+          type: 'check-in',
+          photoUrl: userEventsToday[0].photoUrl || null,
+          location: userEventsToday[0].location,
+          timestamp: new Date(userEventsToday[0].timestamp),
+          isWithinGeofence: userEventsToday[0].isWithinGeofence,
         });
       } else {
         setCheckInStatus('checked-out');
         setLastDisplayRecord(null);
       }
+    } else if (user) {
+        setCheckInStatus('checked-out'); // Default if no logs or no logs for today
+        setLastDisplayRecord(null);
     }
   }, [user, attendanceLog]);
-
 
   const capturePhoto = (): string | null => {
     if (!videoRef.current || !canvasRef.current || !hasCameraPermission) {
@@ -133,7 +127,7 @@ export default function AttendancePage() {
         return null;
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg');
+    return canvas.toDataURL('image/jpeg', 0.8); // Use JPEG with some compression
   };
 
   const getGeolocation = (): Promise<Location | null> => {
@@ -145,7 +139,7 @@ export default function AttendancePage() {
       }
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setError(null); // Clear previous location errors on success
+          setError(null);
           resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -163,9 +157,9 @@ export default function AttendancePage() {
   };
 
   const handleCheckInOrOut = async (type: 'check-in' | 'check-out') => {
-    if (!user) {
-      setError('User not identified. Cannot record attendance.');
-      toast({ variant: 'destructive', title: 'User Error', description: 'Could not identify user.' });
+    if (!user || !companyId) {
+      setError('User not identified or company context missing. Cannot record attendance.');
+      toast({ variant: 'destructive', title: 'User Error', description: 'Could not identify user or company.' });
       return;
     }
     setIsSubmitting(true);
@@ -177,55 +171,49 @@ export default function AttendancePage() {
       return;
     }
 
-    const photoDataUrl = capturePhoto();
-    
+    const photoDataUrlString = capturePhoto(); // This is a base64 data URL
     const location = await getGeolocation();
     let isWithinGeofence: boolean | null = null;
     let toastDescription = `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}`;
 
     if (location) {
-      const distance = calculateDistance(
-        location.latitude,
-        location.longitude,
-        OFFICE_LATITUDE,
-        OFFICE_LONGITUDE
-      );
+      // TODO: Fetch office coordinates from company settings in Firestore
+      const distance = calculateDistance(location.latitude, location.longitude, OFFICE_LATITUDE, OFFICE_LONGITUDE);
       isWithinGeofence = distance <= GEOFENCE_RADIUS_METERS;
       toastDescription += ` from lat: ${location.latitude.toFixed(4)}, lon: ${location.longitude.toFixed(4)}.`;
-      if (!isWithinGeofence) {
-        toastDescription += ` You are outside the office geofence (Distance: ${distance.toFixed(0)}m).`;
-      } else {
-        toastDescription += ` You are within the office geofence.`;
-      }
+      toastDescription += isWithinGeofence ? ` You are within the office geofence.` : ` You are OUTSIDE the office geofence (Distance: ${distance.toFixed(0)}m).`;
     } else {
       toastDescription += ' (Location not available). Geofence status cannot be determined.';
     }
     
-    const displayRecord: CheckInOutDisplayRecord = {
-      type,
-      photoDataUrl: photoDataUrl, 
-      location,
-      timestamp: new Date(),
-      isWithinGeofence,
-    };
-    setLastDisplayRecord(displayRecord);
-    setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
+    try {
+        // addAttendanceEvent now handles photo upload to Firebase Storage
+        await addAttendanceEvent({
+            type,
+            photoDataUrl: photoDataUrlString, // Pass the base64 data URL
+            location,
+            isWithinGeofence,
+        });
 
-    await addAttendanceEvent({
-        employeeId: user.employeeId,
-        type,
-        photoDataUrl, 
-        location,
-        isWithinGeofence
-    });
+        // The actual photoUrl from storage will be set in AuthContext after upload
+        // For immediate display, we can use the local data URL if successful, or wait for context update
+        // For now, let's assume addAttendanceEvent will update the attendanceLog, and useEffect will update lastDisplayRecord
+        
+        setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
 
-    toast({
-      title: `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}! ${isWithinGeofence === false ? '(Outside Geofence)' : ''}`,
-      description: toastDescription,
-      variant: isWithinGeofence === false ? 'destructive' : 'default',
-      duration: isWithinGeofence === false ? 9000 : 5000,
-    });
-    setIsSubmitting(false);
+        toast({
+            title: `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}! ${isWithinGeofence === false ? '(Outside Geofence)' : ''}`,
+            description: toastDescription,
+            variant: isWithinGeofence === false ? 'destructive' : 'default',
+            duration: isWithinGeofence === false ? 9000 : 5000,
+        });
+    } catch (submissionError) {
+        console.error("Error submitting attendance:", submissionError);
+        setError((submissionError as Error).message || "Failed to record attendance.");
+        toast({ variant: "destructive", title: "Submission Failed", description: (submissionError as Error).message });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   return (
@@ -236,7 +224,7 @@ export default function AttendancePage() {
             <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance
           </CardTitle>
           <CardDescription>
-            Use your camera and location to check in or check out. Attendance is verified against office geofence (Radius: {GEOFENCE_RADIUS_METERS}m).
+            Use your camera and location to check in or check out. Attendance is verified against office geofence (Radius: {GEOFENCE_RADIUS_METERS}m - Placeholder).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -249,23 +237,15 @@ export default function AttendancePage() {
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Camera Feed</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg">Camera Feed</CardTitle></CardHeader>
             <CardContent>
               <div className="relative aspect-video w-full max-w-md mx-auto bg-muted rounded-md overflow-hidden border">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-cover"
-                  autoPlay
-                  muted
-                  playsInline
-                />
+                <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
                 {hasCameraPermission === false && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
                     <AlertTriangle className="h-12 w-12 mb-2 text-destructive" />
                     <p className="text-center font-semibold">Camera permission denied.</p>
-                    <p className="text-center text-sm">Please enable camera access in your browser settings.</p>
+                    <p className="text-center text-sm">Please enable camera access.</p>
                   </div>
                 )}
                  {hasCameraPermission === null && (
@@ -275,31 +255,18 @@ export default function AttendancePage() {
                   </div>
                 )}
               </div>
-              <canvas ref={canvasRef} className="hidden" />
+              <canvas ref={canvasRef} className="hidden" /> {/* For capturing frame */}
             </CardContent>
           </Card>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {checkInStatus === 'checked-out' ? (
-              <Button
-                size="lg"
-                onClick={() => handleCheckInOrOut('check-in')}
-                disabled={isSubmitting || hasCameraPermission !== true}
-                className="w-full sm:w-auto"
-              >
-                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />}
-                Check In
+              <Button size="lg" onClick={() => handleCheckInOrOut('check-in')} disabled={isSubmitting || hasCameraPermission !== true} className="w-full sm:w-auto">
+                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />} Check In
               </Button>
             ) : (
-              <Button
-                size="lg"
-                variant="destructive"
-                onClick={() => handleCheckInOrOut('check-out')}
-                disabled={isSubmitting || hasCameraPermission !== true}
-                className="w-full sm:w-auto"
-              >
-                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
-                Check Out
+              <Button size="lg" variant="destructive" onClick={() => handleCheckInOrOut('check-out')} disabled={isSubmitting || hasCameraPermission !== true} className="w-full sm:w-auto">
+                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />} Check Out
               </Button>
             )}
           </div>
@@ -308,19 +275,17 @@ export default function AttendancePage() {
             <Card className={`mt-6 ${lastDisplayRecord.isWithinGeofence === false ? 'border-destructive bg-destructive/10' : 'bg-muted/30'}`}>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center">
-                  {lastDisplayRecord.type === 'check-in' ? 'Checked In' : 'Checked Out'} Details
+                  {lastDisplayRecord.type === 'check-in' ? 'Last Check-In' : 'Last Check-Out'} Details
                   {lastDisplayRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" />}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoDataUrl && ( 
+                  {lastDisplayRecord.photoUrl && ( 
                     <div className="w-full sm:w-1/3">
-                      <p className="font-semibold mb-1">
-                        {lastDisplayRecord.type === 'check-out' ? 'Checkout Photo:' : 'Check-in Photo:'}
-                      </p>
+                      <p className="font-semibold mb-1">Photo:</p>
                       <Image
-                        src={lastDisplayRecord.photoDataUrl}
+                        src={lastDisplayRecord.photoUrl}
                         alt={`Captured photo for ${lastDisplayRecord.type}`}
                         width={200}
                         height={150}
@@ -329,41 +294,23 @@ export default function AttendancePage() {
                       />
                     </div>
                   )}
-                  <div className={`w-full ${lastDisplayRecord.photoDataUrl ? 'sm:w-2/3' : ''} space-y-2`}>
+                  <div className={`w-full ${lastDisplayRecord.photoUrl ? 'sm:w-2/3' : ''} space-y-2`}>
+                    <div><p className="font-semibold">Time:</p><p>{lastDisplayRecord.timestamp.toLocaleString()}</p></div>
                     <div>
-                      <p className="font-semibold">
-                        {lastDisplayRecord.type === 'check-out' ? 'Checkout Time:' : 'Check-in Time:'}
-                      </p>
-                      <p>{lastDisplayRecord.timestamp.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold flex items-center">
-                        <MapPin className="mr-1 h-4 w-4 text-primary" /> 
-                        {lastDisplayRecord.type === 'check-out' ? 'Checkout Location:' : 'Check-in Location:'}
-                      </p>
+                      <p className="font-semibold flex items-center"><MapPin className="mr-1 h-4 w-4 text-primary" />Location:</p>
                       {lastDisplayRecord.location ? (
-                        <p>
-                          Lat: {lastDisplayRecord.location.latitude.toFixed(5)}, Lon: {lastDisplayRecord.location.longitude.toFixed(5)}
-                          {lastDisplayRecord.location.accuracy && ` (Accuracy: ${lastDisplayRecord.location.accuracy.toFixed(0)}m)`}
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">Location data not available or permission denied.</p>
-                      )}
+                        <p>Lat: {lastDisplayRecord.location.latitude.toFixed(5)}, Lon: {lastDisplayRecord.location.longitude.toFixed(5)}
+                           {lastDisplayRecord.location.accuracy && ` (Accuracy: ${lastDisplayRecord.location.accuracy.toFixed(0)}m)`}</p>
+                      ) : (<p className="text-muted-foreground">Location data not available.</p>)}
                     </div>
                      <div>
                       <p className="font-semibold flex items-center">
-                        {lastDisplayRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <CheckCircle className="mr-1 h-4 w-4 text-green-600" />}
-                        Geofence Status:
+                        {lastDisplayRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <CheckCircle className="mr-1 h-4 w-4 text-green-600" />} Geofence Status:
                       </p>
-                      {lastDisplayRecord.location === null ? (
-                         <p className="text-muted-foreground">Could not determine (location unavailable).</p>
-                      ): lastDisplayRecord.isWithinGeofence ? (
-                        <p className="text-green-600 font-medium">Within office radius.</p>
-                      ) : (
-                        <p className="text-destructive font-medium">
-                          Outside office radius. 
-                          {lastDisplayRecord.location && ` (Approx. ${calculateDistance(lastDisplayRecord.location.latitude, lastDisplayRecord.location.longitude, OFFICE_LATITUDE, OFFICE_LONGITUDE).toFixed(0)}m away)`}
-                        </p>
+                      {lastDisplayRecord.location === null ? (<p className="text-muted-foreground">Could not determine.</p>)
+                       : lastDisplayRecord.isWithinGeofence ? (<p className="text-green-600 font-medium">Within office radius.</p>)
+                       : (<p className="text-destructive font-medium">Outside office radius. 
+                          {lastDisplayRecord.location && ` (Approx. ${calculateDistance(lastDisplayRecord.location.latitude, lastDisplayRecord.location.longitude, OFFICE_LATITUDE, OFFICE_LONGITUDE).toFixed(0)}m away)`}</p>
                       )}
                     </div>
                   </div>

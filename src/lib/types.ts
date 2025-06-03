@@ -3,7 +3,7 @@ export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface Advance {
   id: string;
-  employeeId: string; // To know who this advance belongs to, useful for admin view
+  employeeId: string; 
   amount: number;
   reason: string;
   dateRequested: string; // ISO Date string
@@ -18,82 +18,100 @@ export interface LocationInfo {
 }
 
 export interface AttendanceEvent {
-  id: string;
-  employeeId: string;
-  userName: string; // For easier display in admin log
+  id: string; // Firestore document ID
+  employeeId: string; // KarobHR employee ID
+  userId: string; // Firebase Auth UID of the employee
+  userName: string; 
   type: 'check-in' | 'check-out';
-  timestamp: string; // ISO Date string
-  photoDataUrl: string | null; // Can be null if photo capture fails but still logs event
+  timestamp: string; // ISO Date string (server timestamp preferred for Firestore)
+  photoUrl?: string | null; // URL from Firebase Storage
   location: LocationInfo | null;
   isWithinGeofence: boolean | null;
 }
 
 export interface User {
-  id: string; // Unique user record ID (e.g., from Firebase Auth or DB)
-  employeeId: string; // The ID used for login, set by admin
+  id: string; // Firebase Auth UID
+  employeeId: string; 
   email?: string | null;
   name?: string | null;
   role: UserRole;
+  companyId: string; // Crucial for multi-tenancy
   profilePictureUrl?: string | null;
   department?: string | null;
-  joiningDate?: string | null; // Represent as string for simplicity, or Date
+  joiningDate?: string | null; 
   contactInfo?: {
     phone?: string | null;
   };
   baseSalary?: number;
-  mockAttendanceFactor?: number; // Represents proportion of salary based on attendance (0.0 to 1.0). Defaults to 1.0 if undefined.
+  mockAttendanceFactor?: number; 
   advances?: Advance[];
   leaves?: LeaveApplication[];
 }
 
-// Task structure expected by the AI flow
+// For the top-level user directory lookup
+export interface UserDirectoryEntry {
+    userId: string; // Firebase Auth UID
+    employeeId: string;
+    email: string;
+    companyId: string;
+    role: UserRole;
+    name?: string; // For easier identification if needed
+}
+
+
 export interface AiTask {
   title: string;
   description: string;
   status: 'In Progress' | 'Completed' | 'Blocked';
 }
 
-// Client-side task structure, potentially with an ID
+
 export interface ClientTask extends AiTask {
   id: string;
 }
 
 export interface Task {
-  id: string;
+  id: string; // Firestore document ID
   title: string;
   description: string;
-  assigneeId: string;
+  assigneeId: string; // KarobHR employee ID of assignee
   assigneeName: string;
-  dueDate: string;
+  assigneeUid?: string; // Firebase Auth UID of assignee (optional, for easier querying)
+  dueDate: string; // ISO Date string
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
   status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
+  createdAt: string; // ISO Date string (server timestamp)
+  updatedAt: string; // ISO Date string (server timestamp)
 }
 
 
 export interface Holiday {
   id:string;
   name: string;
-  date: Date;
+  date: Date; // Stored as Timestamp in Firestore
   description?: string;
 }
 
 export interface LeaveApplication {
-  id: string;
-  userId: string; // Could be employeeId or user.id
+  id: string; // Firestore document ID (or sub-collection ID if part of user doc)
+  userId: string; // Firebase Auth UID of the applicant
+  employeeId: string; // KarobHR employee ID of applicant
   leaveType: string;
-  startDate: string; // Using string for form simplicity, could be Date
-  endDate: string;   // Using string for form simplicity, could be Date
+  startDate: string; 
+  endDate: string;   
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
-  supportingDocumentUrl?: string; // Optional
-  color?: string; // For UI display, not part of core data model necessarily
+  appliedAt: string; // ISO Date string (server timestamp)
+  processedAt?: string; // ISO Date string (server timestamp)
+  supportingDocumentUrl?: string; 
+  color?: string; 
 }
 
 export interface Announcement {
-  id: string;
+  id: string; // Firestore document ID
   title: string;
   content: string;
-  postedAt: string; // ISO date string
-  postedBy: string; // Admin's name or ID
+  postedAt: string; // ISO Date string (server timestamp)
+  postedByUid: string; // Firebase Auth UID of admin
+  postedByName: string; // Admin's name
 }
-

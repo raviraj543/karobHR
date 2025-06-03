@@ -2,9 +2,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { createContext, useState, useEffect }
-from 'react';
-import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, Task as TaskType } from '@/lib/types';
+import { createContext, useState, useEffect, useCallback } from 'react';
+import type { User, UserRole, Advance, Announcement, LeaveApplication, AttendanceEvent, Task as TaskType, UserDirectoryEntry, NewEmployeeData as OldNewEmployeeData } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getFirebaseInstances } from './firebase/firebase';
 import {
@@ -12,72 +11,66 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  type User as FirebaseUser // Renamed to avoid conflict with our User type
+  type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, writeBatch, query, where, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import {
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  writeBatch,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  arrayUnion,
+  arrayRemove,
+  Timestamp,
+  orderBy,
+  limit,
+  serverTimestamp,
+  addDoc,
+  deleteField,
+} from 'firebase/firestore';
+import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
-
-// --- Mock Data for Initial State (will be phased out for Firestore) ---
-const MOCK_ADMIN_ID = 'admin';
-const MOCK_MANAGER_ID = 'manager01';
-const MOCK_EMPLOYEE_ID = 'emp001';
-const MOCK_PASSWORD = 'password123'; // Used for quick login buttons if these users exist in Firebase
-
-const initialMockUserProfiles: Record<string, User> = {
-  // These profiles are primarily for seeding `allUsersState` if localStorage is empty
-  // Actual user profiles will live in Firestore.
-  [MOCK_ADMIN_ID]: {
-    id: 'firebase-uid-placeholder-admin', // This will be Firebase UID
-    employeeId: MOCK_ADMIN_ID,
-    name: 'Mock Admin',
-    email: `${MOCK_ADMIN_ID}@karobhr-temp.firebaseapp.com`, // Example Firebase Auth email
-    role: 'admin',
-    department: 'Administration',
-    joiningDate: '2023-01-01',
-    baseSalary: 0,
-    mockAttendanceFactor: 1.0,
-    advances: [],
-    leaves: [],
-    profilePictureUrl: `https://placehold.co/100x100.png?text=AD`,
-    // companyId: 'default-company-id' // Company ID will be crucial
-  },
-  // ... other mock profiles for manager and employee if needed for quick testing
+// --- Helper: Firebase Email Convention ---
+const TEMP_AUTH_DOMAIN = "karobhr-temp.firebaseapp.com"; // Keep consistent for now
+const createFirebaseEmail = (employeeId: string): string => {
+  const safeEmployeeId = employeeId.replace(/[^a-zA-Z0-9_.-]/g, '');
+  return `${safeEmployeeId}@${TEMP_AUTH_DOMAIN}`;
 };
-// --- End Mock Data ---
+// --- End Helper ---
 
-export interface NewEmployeeData {
-  name: string;
-  employeeId: string;
-  email?: string; // Optional: if not provided, will be constructed
-  department: string;
-  role: UserRole;
-  companyId: string; // Each employee must belong to a company
-  joiningDate?: string;
-  baseSalary?: number;
+// Redefine NewEmployeeData to ensure companyId is always present
+export interface NewEmployeeData extends OldNewEmployeeData {
+  companyId: string; // Ensure companyId is part of the data for a new employee
 }
 
 export interface AuthContextType {
-  user: User | null; // KarobHR User Profile
-  firebaseUser: FirebaseUser | null; // Firebase Auth User object
-  companyId: string | null; // Current user's company ID (derived from User profile)
-  allUsers: User[]; // All users (for admin view, eventually from Firestore)
-  role: UserRole | null; // Derived from KarobHR User profile
+  user: User | null;
+  firebaseUser: FirebaseUser | null;
+  companyId: string | null;
+  allUsers: User[];
+  role: UserRole | null;
   loading: boolean;
   announcements: Announcement[];
   attendanceLog: AttendanceEvent[];
   tasks: TaskType[];
-  login: (employeeId: string, pass: string, companyIdentifier?: string) => Promise<User | null>; // companyIdentifier might be needed for email construction
+  login: (employeeId: string, pass: string) => Promise<User | null>;
   logout: () => Promise<void>;
   addNewEmployee: (employeeData: NewEmployeeData, passwordToSet: string) => Promise<void>;
-  // TODO: Update these to use Firestore
-  requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
-  processAdvance: (targetEmployeeId: string, advanceId: string, newStatus: 'approved' | 'rejected') => Promise<void>;
-  updateUserInContext: (updatedUser: User) => Promise<void>;
+  requestAdvance: (amount: number, reason: string) => Promise<void>;
+  processAdvance: (targetEmployeeUid: string, advanceId: string, newStatus: 'approved' | 'rejected') => Promise<void>;
+  updateUserInContext: (updatedUser: Partial<User> & { id: string }) => Promise<void>;
   addAnnouncement: (title: string, content: string) => Promise<void>;
-  addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => Promise<void>;
-  addTask: (task: TaskType) => Promise<void>;
-  updateTask: (updatedTask: TaskType) => Promise<void>;
-  setMockUser: (user: User | null) => void; // For testing, may be removed later
+  addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName' | 'userId'> & { photoDataUrl?: string | null }) => Promise<void>;
+  addTask: (taskData: Omit<TaskType, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateTask: (updatedTask: Partial<TaskType> & { id: string }) => Promise<void>;
+  // New:
+  addLeaveApplication: (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => Promise<void>;
+  processLeaveApplication: (targetEmployeeUid: string, leaveId: string, newStatus: 'approved' | 'rejected') => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -86,128 +79,154 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Helper to create a Firebase-compatible email
-// For now, we'll use a temporary domain. A real app might use company-specific subdomains or a passed company ID.
-const TEMP_AUTH_DOMAIN = "karobhr-temp.firebaseapp.com";
-const createFirebaseEmail = (employeeId: string): string => {
-  const safeEmployeeId = employeeId.replace(/[^a-zA-Z0-9_.-]/g, '');
-  return `${safeEmployeeId}@${TEMP_AUTH_DOMAIN}`;
-};
-
-
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // States for other app data - will be migrated to Firestore
-  const [allUsersState, setAllUsersState] = useState<User[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
 
-  // Load mock data from localStorage (will be replaced by Firestore calls)
-  useEffect(() => {
-    const storedAllUsers = localStorage.getItem('mockAllUsers');
-    if (storedAllUsers) try { setAllUsersState(JSON.parse(storedAllUsers)); } catch (e) { console.error(e); }
-    else {
-        setAllUsersState(Object.values(initialMockUserProfiles));
-        localStorage.setItem('mockAllUsers', JSON.stringify(Object.values(initialMockUserProfiles)));
-    }
+  const loadCompanyData = useCallback(async (cid: string, currentFbUser: FirebaseUser) => {
+    if (!cid) return;
+    const { db } = getFirebaseInstances();
 
-    const storedAnnouncements = localStorage.getItem('mockAnnouncements');
-    if (storedAnnouncements) try {setAnnouncements(JSON.parse(storedAnnouncements));} catch(e) {console.error(e);}
-    const storedAttendanceLog = localStorage.getItem('mockAttendanceLog');
-    if (storedAttendanceLog) try {setAttendanceLog(JSON.parse(storedAttendanceLog));} catch(e) {console.error(e);}
-    const storedTasks = localStorage.getItem('mockTasks');
-    if (storedTasks) try {setTasks(JSON.parse(storedTasks));} catch(e) {console.error(e);}
+    // Fetch all users for the company
+    const usersCollectionRef = collection(db, "companies", cid, "employees");
+    const usersSnapshot = await getDocs(usersCollectionRef);
+    const companyUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    setAllUsers(companyUsers);
+
+    // Fetch tasks for the company
+    const tasksCollectionRef = collection(db, "companies", cid, "tasks");
+    const tasksQuery = query(tasksCollectionRef, orderBy("createdAt", "desc"));
+    const tasksSnapshot = await getDocs(tasksQuery);
+    const companyTasks = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskType));
+    setTasks(companyTasks);
+
+    // Fetch announcements for the company
+    const announcementsCollectionRef = collection(db, "companies", cid, "announcements");
+    const announcementsQuery = query(announcementsCollectionRef, orderBy("postedAt", "desc"), limit(20));
+    const announcementsSnapshot = await getDocs(announcementsQuery);
+    const companyAnnouncements = announcementsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Announcement));
+    setAnnouncements(companyAnnouncements);
+
+    // Fetch attendance log for the company (maybe limit this or filter by date range in a real app)
+    const attendanceCollectionRef = collection(db, "companies", cid, "attendanceLog");
+    const attendanceQuery = query(attendanceCollectionRef, orderBy("timestamp", "desc"), limit(100)); // Example limit
+    const attendanceSnapshot = await getDocs(attendanceQuery);
+    const companyAttendanceLog = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceEvent));
+    setAttendanceLog(companyAttendanceLog);
+
   }, []);
 
-  // Firebase Auth state listener
+
   useEffect(() => {
     setLoading(true);
     const { auth: firebaseAuthService, db: firestore } = getFirebaseInstances();
     if (!firebaseAuthService || !firestore) {
-        console.error("Firebase services not available in AuthProvider listener.");
-        setLoading(false);
-        return;
+      console.error("Firebase services not initialized in AuthProvider listener.");
+      setLoading(false);
+      return;
     }
 
     const unsubscribe = onAuthStateChanged(firebaseAuthService, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
-        // User is signed in with Firebase. Fetch their KarobHR profile from Firestore.
-        // For now, we simulate this by trying to find them in allUsersState.
-        // This part needs to be replaced with a Firestore query.
-        // Example: const userDocRef = doc(firestore, "users", fbUser.uid);
-        //          const userDocSnap = await getDoc(userDocRef);
-        //          if (userDocSnap.exists()) setUser(userDocSnap.data() as User);
+        try {
+          const userDirRef = doc(firestore, "userDirectory", fbUser.uid);
+          const userDirSnap = await getDoc(userDirRef);
 
-        // TEMPORARY: Try to find user in allUsersState by matching employeeId from email.
-        const employeeIdFromEmail = fbUser.email?.split('@')[0];
-        const karobUserProfile = allUsersState.find(u => u.employeeId === employeeIdFromEmail);
+          if (userDirSnap.exists()) {
+            const userDirData = userDirSnap.data() as UserDirectoryEntry;
+            setCompanyId(userDirData.companyId);
+            setRole(userDirData.role);
 
-        if (karobUserProfile) {
-          setUser(karobUserProfile);
-          // @ts-ignore // TODO: karobUserProfile needs companyId property
-          setCompanyId(karobUserProfile.companyId || 'unknown-company'); // Placeholder
-        } else {
-          console.warn(`No KarobHR profile found for Firebase user: ${fbUser.email}. User might need to complete profile setup.`);
-          setUser(null); // Or handle incomplete profile state
+            const userProfileRef = doc(firestore, "companies", userDirData.companyId, "employees", fbUser.uid);
+            const userProfileSnap = await getDoc(userProfileRef);
+
+            if (userProfileSnap.exists()) {
+              const userProfileData = { id: userProfileSnap.id, ...userProfileSnap.data() } as User;
+              setUser(userProfileData);
+              await loadCompanyData(userDirData.companyId, fbUser);
+            } else {
+              console.warn(`KarobHR profile not found for UID: ${fbUser.uid} in company ${userDirData.companyId}. User might need full profile setup.`);
+              setUser(null); // Or a minimal user object from userDirData
+            }
+          } else {
+            console.warn(`User directory entry not found for UID: ${fbUser.uid}. User may be new or setup is incomplete.`);
+            // This case might happen if admin signup was interrupted.
+            // Or if it's a user whose directory entry wasn't created properly.
+            setUser(null);
+            setCompanyId(null);
+            setRole(null);
+          }
+        } catch (error) {
+          console.error("Error fetching user data post-auth:", error);
+          setUser(null);
           setCompanyId(null);
+          setRole(null);
         }
       } else {
-        // User is signed out
         setUser(null);
         setCompanyId(null);
+        setRole(null);
+        setAllUsers([]);
+        setTasks([]);
+        setAnnouncements([]);
+        setAttendanceLog([]);
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allUsersState]); // Re-run if allUsersState changes (relevant for mock data)
+  }, [loadCompanyData]);
 
-
-  const login = async (employeeId: string, pass: string, companyIdentifier?: string): Promise<User | null> => {
+  const login = async (employeeId: string, pass: string): Promise<User | null> => {
     setLoading(true);
     const { auth: firebaseAuthService } = getFirebaseInstances();
-    if (!firebaseAuthService) throw new Error("Firebase Auth service not available.");
-
-    // Construct email based on employeeId (and companyIdentifier if provided later)
     const authEmail = createFirebaseEmail(employeeId);
 
     try {
       const userCredential = await signInWithEmailAndPassword(firebaseAuthService, authEmail, pass);
-      // onAuthStateChanged will handle setting firebaseUser and fetching KarobHR profile.
-      // For now, we directly return the profile found by onAuthStateChanged (if any) or null.
-      // This is a bit indirect, will be cleaner with Firestore.
-      const profile = allUsersState.find(u => u.employeeId === employeeId); // Temporary
-      setUser(profile || null);
+      // onAuthStateChanged will handle setting user state and loading company data.
+      // For the return value, we need to wait for onAuthStateChanged to resolve and set `user`.
+      // This is a bit tricky. Let's assume onAuthStateChanged will be quick.
+      // A better approach might be to fetch user details directly here after login.
+      // For now, let's rely on onAuthStateChanged.
+      // This function will now effectively just trigger the auth state change.
+      // The actual `User` object will come from the `user` state managed by `onAuthStateChanged`.
+      // We can try to fetch and return here for immediate feedback to LoginForm.
+      const { db } = getFirebaseInstances();
+      const userDirRef = doc(db, "userDirectory", userCredential.user.uid);
+      const userDirSnap = await getDoc(userDirRef);
+      if (userDirSnap.exists()) {
+        const userDirData = userDirSnap.data() as UserDirectoryEntry;
+        const userProfileRef = doc(db, "companies", userDirData.companyId, "employees", userCredential.user.uid);
+        const userProfileSnap = await getDoc(userProfileRef);
+        if (userProfileSnap.exists()) {
+          setLoading(false);
+          return { id: userProfileSnap.id, ...userProfileSnap.data() } as User;
+        }
+      }
       setLoading(false);
-      return profile || null;
+      return null; // Fallback if profile not found immediately
     } catch (error: any) {
       console.error("Firebase login error:", error);
       setLoading(false);
-      throw error; // Re-throw to be caught by the form
+      throw error;
     }
   };
 
   const logout = async () => {
     setLoading(true);
     const { auth: firebaseAuthService } = getFirebaseInstances();
-     if (!firebaseAuthService) {
-        console.warn("Firebase Auth service not available for logout. Clearing local state.");
-        setUser(null);
-        setFirebaseUser(null);
-        setCompanyId(null);
-        setLoading(false);
-        return;
-    }
     try {
       await signOut(firebaseAuthService);
-      // onAuthStateChanged will clear user, firebaseUser, companyId
+      // onAuthStateChanged will clear all user-related states.
     } catch (error) {
       console.error("Error signing out from Firebase:", error);
     } finally {
@@ -217,13 +236,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const addNewEmployee = async (employeeData: NewEmployeeData, passwordToSet: string) => {
     const { auth: firebaseAuthService, db: firestore } = getFirebaseInstances();
-    if (!firebaseAuthService || !firestore) throw new Error("Firebase services not available.");
+    const { employeeId, name, role: newEmployeeRole, department, joiningDate, baseSalary, companyId: empCompanyId, email: providedEmail } = employeeData;
 
-    const { employeeId, name, role, department, joiningDate, baseSalary, companyId: empCompanyId } = employeeData;
-    const firebaseEmail = employeeData.email || createFirebaseEmail(employeeId);
+    if (!empCompanyId) throw new Error("Company ID is required to add a new employee.");
 
+    const firebaseEmail = providedEmail || createFirebaseEmail(employeeId);
     let newFirebaseUser: FirebaseUser | null = null;
+
     try {
+      // Check if employeeId already exists in the company's userDirectory lookups
+      const q = query(collection(firestore, "userDirectory"), where("companyId", "==", empCompanyId), where("employeeId", "==", employeeId));
+      const existingEmployeeSnap = await getDocs(q);
+      if (!existingEmployeeSnap.empty) {
+        throw new Error(`Employee ID "${employeeId}" already exists in company "${empCompanyId}".`);
+      }
+      
       const userCredential = await createUserWithEmailAndPassword(firebaseAuthService, firebaseEmail, passwordToSet);
       newFirebaseUser = userCredential.user;
     } catch (error: any) {
@@ -231,106 +258,289 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       throw new Error(`Failed to create Firebase Auth user: ${error.message}`);
     }
 
-    if (!newFirebaseUser) {
-      throw new Error("Firebase user creation failed silently.");
-    }
+    if (!newFirebaseUser) throw new Error("Firebase user creation failed silently.");
+
+    const userDirEntry: UserDirectoryEntry = {
+      userId: newFirebaseUser.uid,
+      employeeId,
+      email: newFirebaseUser.email!, // email is guaranteed by Firebase Auth user
+      companyId: empCompanyId,
+      role: newEmployeeRole,
+      name: name
+    };
 
     const newUserProfile: User = {
-      id: newFirebaseUser.uid, // Use Firebase UID as the primary ID for KarobHR profile
+      id: newFirebaseUser.uid,
       employeeId,
       name,
-      email: newFirebaseUser.email || firebaseEmail,
-      role,
-      department: department || (role === 'admin' ? 'Administration' : 'N/A'),
+      email: newFirebaseUser.email!,
+      role: newEmployeeRole,
+      companyId: empCompanyId,
+      department: department || (newEmployeeRole === 'admin' ? 'Administration' : 'N/A'),
       joiningDate: joiningDate || new Date().toISOString().split('T')[0],
-      baseSalary: baseSalary || (role === 'admin' ? 0 : undefined),
-      mockAttendanceFactor: 1.0, // Default
+      baseSalary: baseSalary !== undefined ? baseSalary : (newEmployeeRole === 'admin' ? 0 : undefined),
+      mockAttendanceFactor: 1.0,
       advances: [],
       leaves: [],
-      profilePictureUrl: `https://placehold.co/100x100.png?text=${name.split(' ').map(n=>n[0]).join('').toUpperCase() || 'NA'}`,
-      // @ts-ignore // Add companyId to User type definition
-      companyId: empCompanyId,
+      profilePictureUrl: `https://placehold.co/100x100.png?text=${name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'NA'}`,
+    };
+
+    const batch = writeBatch(firestore);
+    const userDirRef = doc(firestore, "userDirectory", newFirebaseUser.uid);
+    batch.set(userDirRef, userDirEntry);
+    const userProfileRef = doc(firestore, "companies", empCompanyId, "employees", newFirebaseUser.uid);
+    batch.set(userProfileRef, newUserProfile);
+
+    try {
+      await batch.commit();
+      console.log("Employee created in Auth, UserDirectory, and Company Employees collection.");
+      // If current user is admin of the same company, refresh allUsers
+      if (user && user.companyId === empCompanyId && user.role === 'admin') {
+         setAllUsers(prev => [...prev, newUserProfile]);
+      }
+    } catch (error) {
+      console.error("Error writing employee data to Firestore:", error);
+      // TODO: Consider rolling back Firebase Auth user creation
+      throw new Error("Failed to store employee profile in Firestore.");
+    }
+  };
+
+  const requestAdvance = async (amount: number, reason: string) => {
+    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    const { db } = getFirebaseInstances();
+    const newAdvance: Advance = {
+      id: uuidv4(),
+      employeeId: user.employeeId,
+      amount,
+      reason,
+      dateRequested: new Date().toISOString(),
+      status: 'pending'
+    };
+    const userProfileRef = doc(db, "companies", companyId, "employees", user.id);
+    try {
+      await updateDoc(userProfileRef, {
+        advances: arrayUnion(newAdvance)
+      });
+      setUser(prev => prev ? ({ ...prev, advances: [...(prev.advances || []), newAdvance] }) : null);
+    } catch (error) {
+      console.error("Error requesting advance:", error);
+      throw error;
+    }
+  };
+
+  const processAdvance = async (targetEmployeeUid: string, advanceId: string, newStatus: 'approved' | 'rejected') => {
+    if (!user || !companyId || user.role !== 'admin') throw new Error("Unauthorized or missing context.");
+    const { db } = getFirebaseInstances();
+    const targetUserProfileRef = doc(db, "companies", companyId, "employees", targetEmployeeUid);
+    
+    try {
+        const targetUserDoc = await getDoc(targetUserProfileRef);
+        if (!targetUserDoc.exists()) throw new Error("Target employee profile not found.");
+        const targetUserData = targetUserDoc.data() as User;
+        const advances = targetUserData.advances || [];
+        const advanceIndex = advances.findIndex(adv => adv.id === advanceId);
+
+        if (advanceIndex === -1) throw new Error("Advance not found for target employee.");
+        
+        const updatedAdvances = [...advances];
+        updatedAdvances[advanceIndex] = {
+            ...updatedAdvances[advanceIndex],
+            status: newStatus,
+            dateProcessed: new Date().toISOString()
+        };
+
+        await updateDoc(targetUserProfileRef, { advances: updatedAdvances });
+        // Update local allUsers state
+        setAllUsers(prevAllUsers => prevAllUsers.map(u => 
+            u.id === targetEmployeeUid ? { ...u, advances: updatedAdvances } : u
+        ));
+         // If the processed advance belongs to the current user, update their state too
+        if (user.id === targetEmployeeUid) {
+            setUser(prev => prev ? { ...prev, advances: updatedAdvances } : null);
+        }
+
+    } catch (error) {
+        console.error("Error processing advance:", error);
+        throw error;
+    }
+  };
+  
+  const updateUserInContext = async (updatedProfileData: Partial<User> & { id: string }) => {
+    if (!firebaseUser || !companyId) throw new Error("No authenticated user or company context to update profile.");
+    const { db } = getFirebaseInstances();
+    const { id: targetUserId, ...dataToUpdate } = updatedProfileData;
+
+    const userProfileRef = doc(db, "companies", companyId, "employees", targetUserId);
+    try {
+      await updateDoc(userProfileRef, dataToUpdate);
+      if (targetUserId === user?.id) {
+        setUser(prev => prev ? ({ ...prev, ...dataToUpdate }) : null);
+      }
+      setAllUsers(prevAll => prevAll.map(u => u.id === targetUserId ? ({ ...u, ...dataToUpdate } as User) : u));
+    } catch (error) {
+      console.error("Error updating user profile in Firestore:", error);
+      throw error;
+    }
+  };
+
+  const addAnnouncement = async (title: string, content: string) => {
+    if (!user || !companyId || user.role !== 'admin') throw new Error("Unauthorized.");
+    const { db } = getFirebaseInstances();
+    const newAnnouncement: Omit<Announcement, 'id'> = {
+      title,
+      content,
+      postedAt: Timestamp.now().toDate().toISOString(),
+      postedByUid: user.id,
+      postedByName: user.name || user.employeeId,
+    };
+    try {
+      const announcementsCollectionRef = collection(db, "companies", companyId, "announcements");
+      const docRef = await addDoc(announcementsCollectionRef, {
+        ...newAnnouncement,
+        postedAt: serverTimestamp() // Use server timestamp for consistency
+      });
+      setAnnouncements(prev => [{ ...newAnnouncement, id: docRef.id, postedAt: new Date().toISOString() }, ...prev]);
+    } catch (error) {
+      console.error("Error adding announcement:", error);
+      throw error;
+    }
+  };
+
+  const addAttendanceEvent = async (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName' | 'userId'> & { photoDataUrl?: string | null }) => {
+    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    const { db, storage } = getFirebaseInstances();
+    const { photoDataUrl, ...restOfEventData } = eventData;
+    let photoFirebaseUrl: string | null = null;
+    const eventId = uuidv4(); // Generate ID for Firestore and Storage
+
+    if (photoDataUrl) {
+        const photoRef = ref(storage, `companies/${companyId}/attendance_photos/${user.employeeId}/${eventId}.jpg`);
+        try {
+            await uploadString(photoRef, photoDataUrl, 'data_url');
+            photoFirebaseUrl = await getDownloadURL(photoRef);
+        } catch (uploadError) {
+            console.error("Error uploading attendance photo:", uploadError);
+            // Decide if you want to proceed without photo or throw error
+        }
+    }
+
+    const fullEvent: Omit<AttendanceEvent, 'id'> = {
+      ...restOfEventData,
+      userId: user.id,
+      employeeId: user.employeeId,
+      userName: user.name || user.employeeId,
+      timestamp: Timestamp.now().toDate().toISOString(), // client-side timestamp for immediate display, server preferred
+      photoUrl: photoFirebaseUrl,
     };
 
     try {
-      // Store KarobHR profile in Firestore, namespaced by companyId
-      // Path: /companies/{companyId}/employees/{firebaseUser.uid}
-      const userDocRef = doc(firestore, "companies", empCompanyId, "employees", newFirebaseUser.uid);
-      await setDoc(userDocRef, newUserProfile);
-      console.log("Employee profile stored in Firestore:", newUserProfile);
+      const attendanceDocRef = doc(db, "companies", companyId, "attendanceLog", eventId);
+      await setDoc(attendanceDocRef, {
+          ...fullEvent,
+          timestamp: serverTimestamp() // Override with server timestamp
+      });
+      setAttendanceLog(prev => [{ ...fullEvent, id: eventId, timestamp: new Date().toISOString() }, ...prev]);
     } catch (error) {
-      console.error("Error storing employee profile in Firestore:", error);
-      // TODO: Consider rolling back Firebase Auth user creation if Firestore write fails
-      throw new Error("Failed to store employee profile in Firestore.");
-    }
-
-    // Update local mock state (will be removed once Firestore is the source of truth for allUsers)
-    const updatedAllUsers = [...allUsersState, newUserProfile];
-    setAllUsersState(updatedAllUsers);
-    localStorage.setItem('mockAllUsers', JSON.stringify(updatedAllUsers));
-  };
-
-  // Mock/Placeholder functions - to be refactored with Firestore
-  const updateUserInStorage = (usersArray: User[]) => {
-    localStorage.setItem('mockAllUsers', JSON.stringify(usersArray));
-    if (user) {
-        const updatedLoggedInUser = usersArray.find(u => u.id === user.id); // Match by main ID
-        if (updatedLoggedInUser) setUser(updatedLoggedInUser); else setUser(null);
+      console.error("Error adding attendance event:", error);
+      throw error;
     }
   };
-  const requestAdvance = async (employeeId: string, amount: number, reason: string) => {
-    console.warn("requestAdvance: Using localStorage mock.");
-    const targetUserIndex = allUsersState.findIndex(u => u.employeeId === employeeId);
-    if (targetUserIndex === -1) throw new Error("User not found.");
-    const newAdvance: Advance = { id: uuidv4(), employeeId, amount, reason, dateRequested: new Date().toISOString(), status: 'pending' };
-    const updatedAllUsers = [...allUsersState];
-    updatedAllUsers[targetUserIndex].advances = [...(updatedAllUsers[targetUserIndex].advances || []), newAdvance];
-    setAllUsersState(updatedAllUsers); updateUserInStorage(updatedAllUsers);
+  
+  const addTask = async (taskData: Omit<TaskType, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    const { db } = getFirebaseInstances();
+    const newTaskPayload = {
+        ...taskData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    };
+    try {
+        const tasksCollectionRef = collection(db, "companies", companyId, "tasks");
+        const docRef = await addDoc(tasksCollectionRef, newTaskPayload);
+        setTasks(prev => [{ ...taskData, id: docRef.id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, ...prev]);
+    } catch (error) {
+        console.error("Error adding task:", error);
+        throw error;
+    }
   };
-  const processAdvance = async (targetEmployeeId: string, advanceId: string, newStatus: 'approved' | 'rejected') => {
-    console.warn("processAdvance: Using localStorage mock.");
-    const targetUserIndex = allUsersState.findIndex(u => u.employeeId === targetEmployeeId);
-    if (targetUserIndex === -1 || !allUsersState[targetUserIndex].advances) throw new Error("User or advances not found.");
-    const advanceIndex = allUsersState[targetUserIndex].advances!.findIndex(adv => adv.id === advanceId);
-    if (advanceIndex === -1) throw new Error("Advance ID not found.");
-    const updatedAllUsers = [...allUsersState];
-    updatedAllUsers[targetUserIndex].advances![advanceIndex] = { ...updatedAllUsers[targetUserIndex].advances![advanceIndex], status: newStatus, dateProcessed: new Date().toISOString() };
-    setAllUsersState(updatedAllUsers); updateUserInStorage(updatedAllUsers);
+
+  const updateTask = async (updatedTaskData: Partial<TaskType> & { id: string }) => {
+    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    const { db } = getFirebaseInstances();
+    const { id: taskId, ...dataToUpdate } = updatedTaskData;
+    const taskDocRef = doc(db, "companies", companyId, "tasks", taskId);
+    try {
+        await updateDoc(taskDocRef, {
+            ...dataToUpdate,
+            updatedAt: serverTimestamp()
+        });
+        setTasks(prev => prev.map(t => t.id === taskId ? ({ ...t, ...dataToUpdate, updatedAt: new Date().toISOString() } as TaskType) : t));
+    } catch (error) {
+        console.error("Error updating task:", error);
+        throw error;
+    }
   };
-  const updateUserInContext = async (updatedProfileData: User) => {
-    console.warn("updateUserInContext: Using localStorage mock. Needs Firestore update.");
-     if (!firebaseUser || !companyId) throw new Error("No authenticated user or company context to update profile.");
-    // TODO: Firestore update: const userDocRef = doc(firestore, "companies", companyId, "employees", firebaseUser.uid);
-    // await updateDoc(userDocRef, { ...updatedProfileData });
-    setUser(prevUser => ({ ...prevUser, ...updatedProfileData } as User));
-    setAllUsersState(prevAll => prevAll.map(u => u.id === updatedProfileData.id ? updatedProfileData : u));
-    updateUserInStorage(allUsersState.map(u => u.id === updatedProfileData.id ? updatedProfileData : u));
+
+  const addLeaveApplication = async (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => {
+    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    const { db } = getFirebaseInstances();
+    const newLeaveId = uuidv4();
+    const newLeaveApp: LeaveApplication = {
+        ...leaveData,
+        id: newLeaveId,
+        userId: user.id,
+        employeeId: user.employeeId,
+        status: 'pending',
+        appliedAt: Timestamp.now().toDate().toISOString(),
+    };
+    
+    const userProfileRef = doc(db, "companies", companyId, "employees", user.id);
+    try {
+        await updateDoc(userProfileRef, {
+            leaves: arrayUnion(newLeaveApp)
+        });
+        setUser(prev => prev ? ({ ...prev, leaves: [...(prev.leaves || []), newLeaveApp] }) : null);
+    } catch (error) {
+        console.error("Error adding leave application:", error);
+        throw error;
+    }
   };
-  const addAnnouncement = async (title: string, content: string) => {
-    console.warn("addAnnouncement: Using localStorage mock.");
-    if (!user || user.role !== 'admin') throw new Error("Unauthorized.");
-    const newAnnouncement: Announcement = { id: uuidv4(), title, content, postedAt: new Date().toISOString(), postedBy: user.name || user.employeeId };
-    const updatedAnnouncements = [newAnnouncement, ...announcements];
-    setAnnouncements(updatedAnnouncements); localStorage.setItem('mockAnnouncements', JSON.stringify(updatedAnnouncements));
+
+  const processLeaveApplication = async (targetEmployeeUid: string, leaveId: string, newStatus: 'approved' | 'rejected') => {
+    if (!user || !companyId || user.role !== 'admin') throw new Error("Unauthorized or missing context.");
+    const { db } = getFirebaseInstances();
+    const targetUserProfileRef = doc(db, "companies", companyId, "employees", targetEmployeeUid);
+
+    try {
+        const targetUserDoc = await getDoc(targetUserProfileRef);
+        if (!targetUserDoc.exists()) throw new Error("Target employee profile not found.");
+        const targetUserData = targetUserDoc.data() as User;
+        const leaves = targetUserData.leaves || [];
+        const leaveIndex = leaves.findIndex(l => l.id === leaveId);
+
+        if (leaveIndex === -1) throw new Error("Leave application not found for target employee.");
+        
+        const updatedLeaves = [...leaves];
+        updatedLeaves[leaveIndex] = {
+            ...updatedLeaves[leaveIndex],
+            status: newStatus,
+            processedAt: new Date().toISOString()
+        };
+
+        await updateDoc(targetUserProfileRef, { leaves: updatedLeaves });
+        // Update local allUsers state
+        setAllUsers(prevAllUsers => prevAllUsers.map(u => 
+            u.id === targetEmployeeUid ? { ...u, leaves: updatedLeaves } : u
+        ));
+        // If the processed leave belongs to the current user, update their state too
+        if (user.id === targetEmployeeUid) {
+            setUser(prev => prev ? { ...prev, leaves: updatedLeaves } : null);
+        }
+    } catch (error) {
+        console.error("Error processing leave application:", error);
+        throw error;
+    }
   };
-  const addAttendanceEvent = async (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName'>) => {
-    console.warn("addAttendanceEvent: Using localStorage mock.");
-    if (!user) throw new Error("User not found.");
-    const fullEvent: AttendanceEvent = { ...eventData, id: uuidv4(), timestamp: new Date().toISOString(), userName: user.name || user.employeeId };
-    const updatedLog = [fullEvent, ...attendanceLog];
-    setAttendanceLog(updatedLog); localStorage.setItem('mockAttendanceLog', JSON.stringify(updatedLog));
-  };
-  const addTask = async (task: TaskType) => {
-    console.warn("addTask: Using localStorage mock.");
-    const newTasks = [task, ...tasks];
-    setTasks(newTasks); localStorage.setItem('mockTasks', JSON.stringify(newTasks));
-  };
-  const updateTask = async (updatedTask: TaskType) => {
-    console.warn("updateTask: Using localStorage mock.");
-    const newTasks = tasks.map(t => t.id === updatedTask.id ? updatedTask : t);
-    setTasks(newTasks); localStorage.setItem('mockTasks', JSON.stringify(newTasks));
-  };
-  const setMockUser = (mu: User | null) => { /* Kept for legacy, but Firebase drives user state now */ setUser(mu); };
 
 
   return (
@@ -338,8 +548,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         user,
         firebaseUser,
         companyId,
-        allUsers: allUsersState,
-        role: user?.role || null,
+        allUsers,
+        role,
         loading,
         announcements,
         attendanceLog,
@@ -354,7 +564,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         addAttendanceEvent,
         addTask,
         updateTask,
-        setMockUser
+        addLeaveApplication,
+        processLeaveApplication,
     }}>
       {children}
     </AuthContext.Provider>
