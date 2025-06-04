@@ -1,121 +1,142 @@
-
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
-import { firebaseConfig } from "./config"; // Correctly import firebaseConfig
+import { firebaseConfig } from "./config";
 
-const PREFIX = ">>> KAROBHR FIREBASE DEBUG: ";
-console.log(PREFIX + "src/lib/firebase/firebase.ts module starting to load..."); // New log
+// Immediately log that this module is being loaded.
+console.log("==================================================================================");
+console.log(">>> KAROBHR FIREBASE DEBUG: Attempting to load src/lib/firebase/firebase.ts module...");
+console.log("==================================================================================");
 
 let app: FirebaseApp | undefined = undefined;
 let auth: Auth | undefined = undefined;
 let db: Firestore | undefined = undefined;
 let storage: FirebaseStorage | undefined = undefined;
+let initializationError: Error | null = null;
 
-const CRITICAL_CONFIG_ERROR_MESSAGE_UNDEFINED =
-  PREFIX + "################################################################################\n" +
-  PREFIX + "CRITICAL FIREBASE CONFIGURATION ERROR! The 'firebaseConfig' object was not found or not exported correctly from 'src/lib/firebase/config.ts'.\n" +
-  PREFIX + "SOLUTION: Please ensure 'src/lib/firebase/config.ts' exists, is saved, and correctly exports 'firebaseConfig' (e.g., export const firebaseConfig = { ... };).\n" +
-  PREFIX + "################################################################################";
+const CRITICAL_CONFIG_MESSAGES = {
+  UNDEFINED: [
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "!!! KAROBHR FIREBASE DEBUG: CRITICAL CONFIGURATION ERROR !!!",
+    "!!! Firebase configuration (firebaseConfig from ./config.ts) is UNDEFINED.",
+    "!!! This means 'src/lib/firebase/config.ts' might be empty, not saved,",
+    "!!! or the 'firebaseConfig' object is not correctly exported.",
+    "!!! PLEASE CHECK THE FILE: src/lib/firebase/config.ts",
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  ],
+  PLACEHOLDERS: [
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+    "!!! KAROBHR FIREBASE DEBUG: CRITICAL CONFIGURATION ERROR !!!",
+    "!!! Firebase configuration in 'src/lib/firebase/config.ts' appears to use",
+    "!!! PLACEHOLDER VALUES (e.g., 'YOUR_API_KEY', 'YOUR_PROJECT_ID').",
+    "!!! You MUST replace ALL placeholder values with your *ACTUAL*",
+    "!!! Firebase project credentials from the Firebase Console.",
+    "!!! Current apiKey for check (DO NOT SHARE REAL KEY PUBLICLY):",
+    // Will be populated with actual apiKey if firebaseConfig exists
+    "!!! PLEASE FIX YOUR CONFIGURATION IN: src/lib/firebase/config.ts",
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  ],
+  INITIALIZATION_FAILED: ">>> KAROBHR FIREBASE DEBUG: Firebase initializeApp() FAILED. See details above/below. Firebase services will not be available.",
+  SERVICES_NOT_READY: ">>> KAROBHR FIREBASE DEBUG: Firebase services (app, auth, db, storage) are NOT INITIALIZED. Prior initialization attempt likely failed. Check server logs for CRITICAL configuration errors or other Firebase initialization errors."
+};
 
-const CRITICAL_CONFIG_ERROR_MESSAGE_PLACEHOLDERS =
-  PREFIX + "################################################################################\n" +
-  PREFIX + "CRITICAL FIREBASE CONFIGURATION ERROR! The 'firebaseConfig' in 'src/lib/firebase/config.ts' still contains placeholder values (e.g., 'YOUR_API_KEY' or includes 'PLACEHOLDER').\n" +
-  PREFIX + "SOLUTION: You MUST replace ALL placeholder values (like 'YOUR_API_KEY', 'YOUR_PROJECT_ID', etc.) with your actual Firebase project credentials from your Firebase Console. Then, save the file, DELETE THE .NEXT FOLDER, and restart the server.\n" +
-  PREFIX + "################################################################################";
-
-const SERVICE_INIT_ERROR_MESSAGE_GENERIC =
-  PREFIX + "SERVICE INITIALIZATION FAILED! Firebase services (app, auth, db, or storage) are not available. " +
-  "This usually means Firebase initialization failed. Check this server terminal output carefully for more specific 'CRITICAL CONFIGURATION ERROR' messages or 'Firebase initializeApp() error' messages above this one.";
+function logCriticalError(type: 'UNDEFINED' | 'PLACEHOLDERS', currentApiKey?: string) {
+  const messages = CRITICAL_CONFIG_MESSAGES[type];
+  messages.forEach(msg => {
+    if (msg.includes("Current apiKey for check")) {
+      console.error(`!!! Current apiKey for check: ${currentApiKey || 'N/A (firebaseConfig itself might be undefined)'}`);
+    } else {
+      console.error(msg);
+    }
+  });
+}
 
 // Eagerly check the imported firebaseConfig at the module level
 if (typeof firebaseConfig === 'undefined') {
-  console.error("\n\n" + CRITICAL_CONFIG_ERROR_MESSAGE_UNDEFINED + "\n\n");
-  throw new Error(CRITICAL_CONFIG_ERROR_MESSAGE_UNDEFINED);
-}
-
-// Check for placeholder values
-if (
-  !firebaseConfig || // General check it's not null/empty if somehow it wasn't undefined
-  !firebaseConfig.apiKey || // Check if apiKey is defined and not empty
-  firebaseConfig.apiKey === "YOUR_API_KEY" || // Check if it's the exact placeholder
-  (typeof firebaseConfig.apiKey === 'string' && firebaseConfig.apiKey.includes("PLACEHOLDER")) || // Check if it contains "PLACEHOLDER"
-  !firebaseConfig.projectId || // Check for other critical fields like projectId
+  logCriticalError('UNDEFINED');
+  initializationError = new Error(CRITICAL_CONFIG_MESSAGES.UNDEFINED.join(" "));
+} else if (
+  !firebaseConfig ||
+  !firebaseConfig.apiKey ||
+  firebaseConfig.apiKey === "YOUR_API_KEY" || // Common placeholder
+  firebaseConfig.apiKey.toUpperCase().includes("PLACEHOLDER") || // General placeholder check
+  firebaseConfig.apiKey.toUpperCase().includes("YOUR_") || // Another common pattern
+  !firebaseConfig.projectId ||
   firebaseConfig.projectId === "YOUR_PROJECT_ID" ||
-  (typeof firebaseConfig.projectId === 'string' && firebaseConfig.projectId.includes("PLACEHOLDER"))
+  firebaseConfig.projectId.toUpperCase().includes("PLACEHOLDER") ||
+  firebaseConfig.projectId.toUpperCase().includes("YOUR_")
 ) {
-  console.error("\n\n" + CRITICAL_CONFIG_ERROR_MESSAGE_PLACEHOLDERS + "\n\n");
-  console.error(PREFIX + "Current problematic apiKey (if available): ", firebaseConfig?.apiKey);
-  console.error(PREFIX + "Current problematic projectId (if available): ", firebaseConfig?.projectId);
-  throw new Error(CRITICAL_CONFIG_ERROR_MESSAGE_PLACEHOLDERS);
+  logCriticalError('PLACEHOLDERS', firebaseConfig?.apiKey);
+  initializationError = new Error(CRITICAL_CONFIG_MESSAGES.PLACEHOLDERS.join(" "));
 }
 
-// Function to initialize Firebase if not already done.
+// Function to initialize Firebase if not already done and no prior critical errors.
 function initializeFirebaseServices() {
-  if (getApps().length === 0) { // Only initialize if no apps exist
+  // If there was a critical config error, don't even try to initialize
+  if (initializationError) {
+    console.error(">>> KAROBHR FIREBASE DEBUG: Skipping Firebase initialization due to prior critical configuration errors.");
+    return;
+  }
+
+  if (getApps().length === 0) {
     try {
-      console.log(PREFIX + "Attempting to initialize Firebase app with actual projectId: " + firebaseConfig.projectId + "...");
+      console.log(">>> KAROBHR FIREBASE DEBUG: Attempting to initialize Firebase app with projectId: " + firebaseConfig.projectId + "...");
       app = initializeApp(firebaseConfig);
       auth = getAuth(app);
       db = getFirestore(app);
       storage = getStorage(app);
-      console.log(PREFIX + "Firebase initialized successfully with actual projectId: " + firebaseConfig.projectId);
+      console.log(">>> KAROBHR FIREBASE DEBUG: Firebase initialized successfully with projectId: " + firebaseConfig.projectId);
+      initializationError = null; // Clear any previous non-critical init error if successful
     } catch (error: any) {
-      console.error(PREFIX + "Firebase initializeApp() FAILED:", error.message || error);
+      console.error(">>> KAROBHR FIREBASE DEBUG: Firebase initializeApp() FAILED:", error.message || error);
+      console.error(error); // Log the full error object
+      initializationError = new Error("Firebase initializeApp() failed: " + (error.message || JSON.stringify(error)));
       // Ensure services are reset to undefined if initialization fails
       app = undefined;
       auth = undefined;
       db = undefined;
       storage = undefined;
-      // Re-throw as a more specific error
-      throw new Error(PREFIX + "Firebase initializeApp() FAILED: " + (error.message || error));
     }
   } else {
-    // This case handles Fast Refresh or other scenarios where the module might be re-evaluated.
-    app = getApps()[0]; // Get the already initialized app
-    // Ensure auth, db, storage are also assigned from this existing app if not already
+    console.log(">>> KAROBHR FIREBASE DEBUG: Firebase app already initialized. Getting existing instance.");
+    app = getApps()[0];
     if (app && !auth) auth = getAuth(app);
     if (app && !db) db = getFirestore(app);
     if (app && !storage) storage = getStorage(app);
-    // console.log(PREFIX + "Firebase app already initialized. Using existing instance for projectId: " + (app.options.projectId || "N/A"));
+    initializationError = null; // Assume if app exists, it was initialized correctly before
   }
 }
 
-// Attempt to initialize Firebase services eagerly at module load.
-try {
+// Attempt to initialize Firebase services eagerly if no critical config errors were found.
+if (!initializationError) {
   initializeFirebaseServices();
-} catch (initError: any) {
-  // This catch is for errors specifically from initializeApp() if it was thrown from within initializeFirebaseServices
-  console.error("\n\n" + PREFIX + "CRITICAL ERROR during Firebase module load initialization:", initError.message || initError + "\n\n");
-  // `app`, `auth`, etc., would have been reset to undefined by the throw in initializeFirebaseServices.
+} else {
+  console.error(">>> KAROBHR FIREBASE DEBUG: Firebase initialization skipped due to configuration errors detected at module load.");
 }
 
 // Export a function to get the instances.
 export const getFirebaseInstances = () => {
-  // If services are not ready, try to initialize them again.
-  // This is defensive, in case the eager initialization failed or was reset.
-  if (!app || !auth || !db || !storage) {
-    console.warn(PREFIX + "getFirebaseInstances() called, but services were not ready. Attempting re-initialization...");
-    initializeFirebaseServices(); // Attempt to re-initialize
-
-    // After attempting re-initialization, check again.
-    if (!app || !auth || !db || !storage) {
-      console.error("\n\n" + PREFIX + "RE-INITIALIZATION FAILED. Firebase services are still not available." + "\n\n");
-      // Additional check for config issues, in case initializeFirebaseServices was skipped or failed silently
-      if (typeof firebaseConfig === 'undefined') {
-          console.error("\n\n" + CRITICAL_CONFIG_ERROR_MESSAGE_UNDEFINED + " (checked in getFirebaseInstances after re-init attempt)" + "\n\n");
-          throw new Error(CRITICAL_CONFIG_ERROR_MESSAGE_UNDEFINED + " (checked in getFirebaseInstances after re-init attempt)");
-      }
-      if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY" || (typeof firebaseConfig.apiKey === 'string' && firebaseConfig.apiKey.includes("PLACEHOLDER"))) {
-          console.error("\n\n" + CRITICAL_CONFIG_ERROR_MESSAGE_PLACEHOLDERS + " (checked in getFirebaseInstances after re-init attempt)" + "\n\n");
-          console.error(PREFIX + "Current problematic apiKey (if available) during getFirebaseInstances: ", firebaseConfig?.apiKey);
-          throw new Error(CRITICAL_CONFIG_ERROR_MESSAGE_PLACEHOLDERS + " (checked in getFirebaseInstances after re-init attempt)");
-      }
-      // If config seems okay but init failed, throw the generic service error
-      throw new Error(SERVICE_INIT_ERROR_MESSAGE_GENERIC + " (after re-init attempt)");
-    }
-    console.log(PREFIX + "Services re-initialized successfully within getFirebaseInstances.");
+  // If services are not ready, first check if it's due to a known critical error.
+  if (initializationError) {
+    console.error(">>> KAROBHR FIREBASE DEBUG: Accessing getFirebaseInstances(), but a prior initialization error occurred.");
+    console.error(initializationError.message); // Log the stored error message
+    throw initializationError; // Re-throw the original error
   }
-  return { app, auth, db, storage };
+
+  // If there was no explicit error, but services are still not available (e.g., if initialization was skipped or failed silently somehow)
+  if (!app || !auth || !db || !storage) {
+    console.error(CRITICAL_CONFIG_MESSAGES.SERVICES_NOT_READY);
+    // Attempt a re-initialization if not already tried or if the previous attempt failed and wasn't a config issue
+    // This is a last-ditch effort.
+    console.warn(">>> KAROBHR FIREBASE DEBUG: Attempting re-initialization from getFirebaseInstances()...");
+    initializeFirebaseServices(); // Try again
+    if (!app || !auth || !db || !storage) { // If still not initialized
+        if (initializationError) throw initializationError; // if initializeFirebaseServices set an error
+        throw new Error(CRITICAL_CONFIG_MESSAGES.SERVICES_NOT_READY + " Re-initialization also failed.");
+    }
+  }
+  
+  console.log(">>> KAROBHR FIREBASE DEBUG: getFirebaseInstances() providing Firebase services. Auth ready: " + !!auth);
+  return { app, auth, db, storage, error: initializationError }; // Return error state as well
 };
