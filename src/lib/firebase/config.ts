@@ -21,6 +21,7 @@
 //    - Copy the corresponding values (apiKey, authDomain, projectId, etc.) from there.
 //
 // 3. **SAVE THIS FILE**: After replacing the placeholders, ensure this file is saved.
+//    The `export const firebaseConfig = { ... };` line MUST be present.
 //
 // 4. **RESTART YOUR SERVER CLEANLY**:
 //    - Stop your Next.js development server (Ctrl+C in the terminal).
@@ -28,7 +29,7 @@
 //    - Restart the server (e.g., npm run dev).
 //
 // If these steps are not followed, your application WILL NOT connect to Firebase
-// and you WILL continue to see server errors.
+// and you WILL continue to see errors.
 //
 // =================================================================================================
 
