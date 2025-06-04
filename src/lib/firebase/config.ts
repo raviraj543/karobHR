@@ -34,11 +34,11 @@
 // =================================================================================================
 
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", // <-- REPLACE THIS WITH YOUR ACTUAL API KEY
-  authDomain: "YOUR_AUTH_DOMAIN", // <-- REPLACE THIS (e.g., your-project-id.firebaseapp.com)
-  projectId: "YOUR_PROJECT_ID", // <-- REPLACE THIS
-  storageBucket: "YOUR_STORAGE_BUCKET", // <-- REPLACE THIS (e.g., your-project-id.appspot.com)
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // <-- REPLACE THIS
-  appId: "YOUR_APP_ID", // <-- REPLACE THIS (e.g., 1:xxxx:web:xxxx)
-  measurementId: "YOUR_MEASUREMENT_ID" // Optional: REPLACE if you use Google Analytics, otherwise it can be an empty string or removed if not present in your Firebase config.
+  apiKey: "AIzaSyCP67K069RaS0kRF_2RrwkyMkit6KpYtVU",
+  authDomain: "karobhr-app.firebaseapp.com",
+  projectId: "karobhr-app",
+  storageBucket: "karobhr-app.firebasestorage.app",
+  messagingSenderId: "173193434755",
+  appId: "1:173193434755:web:ade88ec8193ca04dff2db6",
+  measurementId: "G-YDWNN7RCWP"
 };
