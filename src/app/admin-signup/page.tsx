@@ -14,9 +14,9 @@ import { ShieldPlus, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import type { NewEmployeeData } from '@/lib/authContext'; // Now NewEmployeeData in AuthContext will expect companyId
+import type { NewEmployeeData } from '@/lib/authContext';
 import type { UserRole } from '@/lib/types';
-import { v4 as uuidv4 } from 'uuid'; // For generating companyId
+import { v4 as uuidv4 } from 'uuid';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
@@ -40,39 +40,36 @@ export default function AdminSignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { addNewEmployee, loading: authLoading } = useAuth(); // Removed allUsers for now
-  const [adminAccountExists, setAdminAccountExists] = useState<boolean | null>(null);
+  const { addNewEmployee, loading: authLoading } = useAuth();
+  const [adminAccountExists, setAdminAccountExists] = useState<boolean | null>(null); // Changed default to null
 
 
   useEffect(() => {
     document.title = 'Create Admin Account - KarobHR';
-    // Check if any admin user exists AT ALL in the system (across all companies)
-    // This is a simplified check. A robust multi-tenant app might allow multiple admins for different companies.
-    // For now, we'll assume one admin setup globally initially via this page can occur if no admins exist.
-    // A better check would be to see if the specific company trying to be registered already has an admin.
-    // But for a first-time setup page, checking if *any* admin exists is a common pattern for "initial setup locked"
     const checkAdminExistence = async () => {
-        if (authLoading) return; // Wait for auth context to load
+        if (authLoading) return;
         const { db } = getFirebaseInstances();
         try {
             const q = query(collection(db, "userDirectory"), where("role", "==", "admin"));
             const adminSnapshot = await getDocs(q);
             if (!adminSnapshot.empty) {
+                // Temporarily allow proceeding even if admin exists for debugging
+                console.warn(">>> KAROBHR TRACE: Admin account(s) exist, but admin-signup page is temporarily allowing new signups for debugging.");
                 toast({
-                    title: "Admin Account(s) Exist",
-                    description: "Administrator accounts have already been set up. Please log in or contact support if this is an error.",
-                    variant: "default", // Changed from destructive as it's informational
-                    duration: 7000,
+                    title: "Admin Account(s) Exist (Debug Mode)",
+                    description: "Admin-signup is temporarily enabled even if admins exist. Use with caution or delete old admin data in Firebase for a clean setup.",
+                    variant: "default",
+                    duration: 9000,
                 });
-                 setAdminAccountExists(true);
-                // router.replace('/login'); // Consider if redirect is always appropriate
+                // setAdminAccountExists(true); // Original line that disables form
+                setAdminAccountExists(false); // TEMPORARY: Allow form to be active
             } else {
                 setAdminAccountExists(false);
             }
         } catch (error) {
             console.error("Error checking for existing admins:", error);
             toast({ title: "Error", description: "Could not verify admin status. Please try again.", variant: "destructive"});
-            setAdminAccountExists(null); // Error state
+            setAdminAccountExists(null);
         }
     };
     checkAdminExistence();
@@ -82,31 +79,30 @@ export default function AdminSignupPage() {
   const onSubmit = async (data: AdminSignupFormValues) => {
     setIsLoading(true);
     
-    // For a new company, generate a unique company ID
     const newCompanyId = uuidv4();
 
     const adminDataForContext: NewEmployeeData = {
       name: data.adminName,
       employeeId: data.adminId,
       email: data.adminEmail, 
-      department: 'Administration', // Default for admin
+      department: 'Administration',
       role: 'admin' as UserRole,
       companyId: newCompanyId, 
       joiningDate: new Date().toISOString().split('T')[0],
-      baseSalary: 0, // Default for admin
+      baseSalary: 0,
     };
 
     try {
       // Optional: Re-check admin existence before submission, though initial check should cover most cases.
-      if (adminAccountExists) {
-          toast({
-              title: "Admin Account Exists",
-              description: "An admin account setup process is already active or completed. Please log in.",
-              variant: "destructive",
-          });
-          setIsLoading(false);
-          return;
-      }
+      // if (adminAccountExists && !confirm("An admin account seems to exist. Are you sure you want to create another one? This is for debug only.")) {
+      //     toast({
+      //         title: "Admin Creation Cancelled",
+      //         description: "Admin setup was cancelled.",
+      //         variant: "default",
+      //     });
+      //     setIsLoading(false);
+      //     return;
+      // }
 
       await addNewEmployee(adminDataForContext, data.password);
       toast({
@@ -115,7 +111,7 @@ export default function AdminSignupPage() {
         duration: 9000,
       });
       form.reset();
-      router.push('/login'); // Redirect to login after successful signup
+      router.push('/login');
     } catch (error) {
         toast({
             title: "Error Creating Admin Account",
@@ -140,21 +136,9 @@ export default function AdminSignupPage() {
     },
   });
 
-  if (authLoading || adminAccountExists === null) {
+  if (authLoading || adminAccountExists === null) { // Wait if check is in progress
     return <div className="flex items-center justify-center min-h-screen">Loading setup information...</div>;
   }
-
-  // if (adminAccountExists === true) { // This will be handled by redirect or message
-  //    return <div className="flex items-center justify-center min-h-screen p-4 text-center">
-  //       <Card className="w-full max-w-md shadow-xl">
-  //         <CardHeader><CardTitle>Setup Complete</CardTitle></CardHeader>
-  //         <CardContent>
-  //           <p>An administrator account already exists for this system. Please proceed to login.</p>
-  //           <Button asChild className="mt-4"><Link href="/login">Go to Login</Link></Button>
-  //         </CardContent>
-  //       </Card>
-  //     </div>;
-  // }
 
 
   return (
@@ -166,16 +150,15 @@ export default function AdminSignupPage() {
               <ShieldPlus className="mr-2 h-8 w-8 text-primary" />
               <CardTitle className="text-2xl font-bold">Setup Company & Admin Account</CardTitle>
             </div>
-             {adminAccountExists !== false && // Show login link if admin check is done and some admin exists (or if check failed)
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/login">
-                    <ArrowLeft className="mr-1 h-4 w-4" /> Back to Login
-                  </Link>
-                </Button>
-             }
+             <Button variant="outline" size="sm" asChild>
+               <Link href="/login">
+                 <ArrowLeft className="mr-1 h-4 w-4" /> Back to Login
+               </Link>
+             </Button>
           </div>
           <CardDescription>
             Register your company and create the first administrator account for KarobHR.
+            {adminAccountExists === true && <span className="block text-destructive font-semibold mt-1">Warning: Admin account(s) detected. New signup temporarily enabled for debugging.</span>}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -231,7 +214,7 @@ export default function AdminSignupPage() {
                       <FormControl>
                         <Input type="email" placeholder="e.g., admin@company.com" {...field} />
                       </FormControl>
-                      <FormDescription>If blank, one will be auto-generated based on Admin Login ID.</FormDescription>
+                      <FormDescription>If blank, one will be auto-generated.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -267,10 +250,10 @@ export default function AdminSignupPage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authLoading || adminAccountExists === true}>
+              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authLoading}>
                 {isLoading ? 'Creating Account...' : 'Create Company & Admin Account'}
               </Button>
-               {adminAccountExists === true && <p className="text-sm text-destructive mt-2">Admin setup is already complete or in progress. Please go to login.</p>}
+               {/* Removed the "admin setup is already complete" message when form is enabled */}
             </form>
           </Form>
         </CardContent>
