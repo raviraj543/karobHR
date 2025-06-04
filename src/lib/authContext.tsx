@@ -33,6 +33,8 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
+console.log(">>> KAROBHR TRACE: AuthProvider module loaded"); // Trace log
+
 // --- Helper: Firebase Email Convention ---
 const TEMP_AUTH_DOMAIN = "karobhr-temp.firebaseapp.com"; // Make this consistent
 const createFirebaseEmail = (employeeId: string): string => {
@@ -86,6 +88,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
+  console.log(">>> KAROBHR TRACE: AuthProvider component rendering/executing"); // Trace log
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -99,6 +102,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const loadCompanyData = useCallback(async (cid: string) => {
     if (!cid) return;
+    console.log(`>>> KAROBHR TRACE: AuthProvider loadCompanyData called for companyId: ${cid}`); // Trace log
     setLoading(true); // Set loading true while fetching company data
     const { db } = getFirebaseInstances();
 
@@ -108,6 +112,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const usersSnapshot = await getDocs(usersCollectionRef);
       const companyUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       setAllUsers(companyUsers);
+      console.log(`>>> KAROBHR TRACE: Fetched ${companyUsers.length} users for company ${cid}`);
 
       // Fetch tasks
       const tasksCollectionRef = collection(db, "companies", cid, "tasks");
@@ -123,6 +128,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         } as TaskType;
       });
       setTasks(companyTasks);
+      console.log(`>>> KAROBHR TRACE: Fetched ${companyTasks.length} tasks for company ${cid}`);
 
       // Fetch announcements
       const announcementsCollectionRef = collection(db, "companies", cid, "announcements");
@@ -137,6 +143,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           } as Announcement;
       });
       setAnnouncements(companyAnnouncements);
+      console.log(`>>> KAROBHR TRACE: Fetched ${companyAnnouncements.length} announcements for company ${cid}`);
 
       // Fetch attendance log
       const attendanceCollectionRef = collection(db, "companies", cid, "attendanceLog");
@@ -151,9 +158,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           } as AttendanceEvent;
       });
       setAttendanceLog(companyAttendanceLog);
+      console.log(`>>> KAROBHR TRACE: Fetched ${companyAttendanceLog.length} attendance events for company ${cid}`);
 
     } catch (error) {
-        console.error("Error loading company data:", error);
+        console.error(">>> KAROBHR ERROR: Error loading company data:", error);
         // Reset states if loading fails to prevent stale data issues
         setAllUsers([]);
         setTasks([]);
@@ -161,20 +169,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setAttendanceLog([]);
     } finally {
         setLoading(false); // Ensure loading is set to false in all cases
+        console.log(`>>> KAROBHR TRACE: AuthProvider loadCompanyData finished for companyId: ${cid}. Loading state: false.`);
     }
   }, []);
 
 
   useEffect(() => {
+    console.log(">>> KAROBHR TRACE: AuthProvider useEffect for onAuthStateChanged triggered.");
     setLoading(true);
     const { auth: firebaseAuthService, db: firestore } = getFirebaseInstances();
     if (!firebaseAuthService || !firestore) {
-      console.error("Firebase services not initialized in AuthProvider listener.");
+      console.error(">>> KAROBHR ERROR: Firebase services not initialized in AuthProvider listener.");
       setLoading(false);
       return;
     }
 
     const unsubscribe = onAuthStateChanged(firebaseAuthService, async (fbUser) => {
+      console.log(">>> KAROBHR TRACE: onAuthStateChanged callback. Firebase user:", fbUser ? fbUser.uid : 'null');
       setFirebaseUser(fbUser);
       if (fbUser) {
         try {
@@ -183,6 +194,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
           if (userDirSnap.exists()) {
             const userDirData = userDirSnap.data() as UserDirectoryEntry;
+            console.log(">>> KAROBHR TRACE: User directory entry found:", userDirData);
             setCompanyId(userDirData.companyId); // Set companyId first
             setRole(userDirData.role);
 
@@ -191,24 +203,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
             if (userProfileSnap.exists()) {
               const userProfileData = { id: userProfileSnap.id, ...userProfileSnap.data() } as User;
+              console.log(">>> KAROBHR TRACE: User profile found:", userProfileData);
               setUser(userProfileData);
               await loadCompanyData(userDirData.companyId); // Load company data *after* companyId is set
             } else {
-              console.warn(`KarobHR profile not found for UID: ${fbUser.uid} in company ${userDirData.companyId}. Logging out.`);
+              console.warn(`>>> KAROBHR WARNING: KarobHR profile not found for UID: ${fbUser.uid} in company ${userDirData.companyId}. Logging out.`);
               await signOut(firebaseAuthService); // Log out if profile is missing
               setUser(null); setCompanyId(null); setRole(null); // Clear states
             }
           } else {
-            console.warn(`User directory entry not found for UID: ${fbUser.uid}. Logging out.`);
+            console.warn(`>>> KAROBHR WARNING: User directory entry not found for UID: ${fbUser.uid}. Logging out.`);
             await signOut(firebaseAuthService); // Log out if directory entry is missing
             setUser(null); setCompanyId(null); setRole(null); // Clear states
           }
         } catch (error) {
-          console.error("Error fetching user data post-auth:", error);
-          await signOut(firebaseAuthService).catch(err => console.error("Error signing out after fetch error:", err));
+          console.error(">>> KAROBHR ERROR: Error fetching user data post-auth:", error);
+          await signOut(firebaseAuthService).catch(err => console.error(">>> KAROBHR ERROR: Error signing out after fetch error:", err));
           setUser(null); setCompanyId(null); setRole(null); // Clear states
         }
       } else {
+        console.log(">>> KAROBHR TRACE: No Firebase user found in onAuthStateChanged. Clearing user state.");
         setUser(null);
         setCompanyId(null);
         setRole(null);
@@ -220,15 +234,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       // setLoading(false); // Moved to be inside conditions or finally block of loadCompanyData
     });
-    return () => unsubscribe();
+    return () => {
+      console.log(">>> KAROBHR TRACE: AuthProvider onAuthStateChanged listener cleanup.");
+      unsubscribe();
+    }
   }, [loadCompanyData]); // loadCompanyData is now a dependency
 
   const login = async (employeeId: string, pass: string): Promise<User | null> => {
     setLoading(true);
     const { auth: firebaseAuthService } = getFirebaseInstances();
-    console.log(`Login attempt with employeeId: "${employeeId}"`); // Added this diagnostic log
+    console.log(`>>> KAROBHR TRACE: Login attempt with employeeId: "${employeeId}"`); // Added this diagnostic log
     const authEmail = createFirebaseEmail(employeeId);
-    console.log(`Attempting Firebase login with email: ${authEmail}`); 
+    console.log(`>>> KAROBHR TRACE: Attempting Firebase login with email: ${authEmail}`); 
 
     try {
       const userCredential = await signInWithEmailAndPassword(firebaseAuthService, authEmail, pass);
@@ -250,25 +267,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                 const userProfileRef = doc(db, "companies", userDirData.companyId, "employees", fbUser.uid);
                 const userProfileSnap = await getDoc(userProfileRef);
                 if (userProfileSnap.exists()) {
+                    console.log(">>> KAROBHR TRACE: Login successful, user profile fetched for immediate return.");
                     resolve({ id: userProfileSnap.id, ...userProfileSnap.data() } as User);
                 } else {
+                    console.error(">>> KAROBHR ERROR: User profile not found after login.");
                     reject(new Error("User profile not found after login."));
                 }
             } else {
+                 console.error(">>> KAROBHR ERROR: User directory entry not found after login.");
                  reject(new Error("User directory entry not found after login."));
             }
           } else if (!fbUser) {
+             console.warn(">>> KAROBHR WARNING: User disappeared after login attempt during promise resolution.");
              reject(new Error("User disappeared after login attempt."));
           }
         });
          // Timeout to prevent hanging indefinitely if onAuthStateChanged doesn't fire as expected for this new login
         setTimeout(() => {
             unsubscribe(); // Clean up listener
+            console.warn(">>> KAROBHR WARNING: Login timed out waiting for auth state update promise.");
             reject(new Error("Login timed out waiting for auth state update."));
-        }, 5000); 
+        }, 7000); // Increased timeout slightly
       });
     } catch (error: any) {
-      console.error("Firebase login error:", error);
+      console.error(">>> KAROBHR ERROR: Firebase login error in login function:", error);
       setLoading(false);
       throw error; // Re-throw to be caught by the form
     }
@@ -276,22 +298,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
+    console.log(">>> KAROBHR TRACE: Logout initiated.");
     setLoading(true);
     const { auth: firebaseAuthService } = getFirebaseInstances();
     try {
       await signOut(firebaseAuthService);
+      console.log(">>> KAROBHR TRACE: Firebase signOut successful.");
       // onAuthStateChanged will clear user, companyId, role, and other data
     } catch (error) {
-      console.error("Error signing out from Firebase:", error);
+      console.error(">>> KAROBHR ERROR: Error signing out from Firebase:", error);
     }
     // setLoading(false) is handled by onAuthStateChanged
   };
 
   const addNewEmployee = async (employeeData: NewEmployeeData, passwordToSet: string) => {
+    console.log(">>> KAROBHR TRACE: addNewEmployee called for:", employeeData.employeeId);
     const { auth: firebaseAuthService, db: firestore } = getFirebaseInstances();
     const { employeeId, name, role: newEmployeeRole, department, joiningDate, baseSalary, companyId: empCompanyId, email: providedEmail } = employeeData;
 
-    if (!empCompanyId) throw new Error("Company ID is required to add a new employee.");
+    if (!empCompanyId) {
+      console.error(">>> KAROBHR ERROR: Company ID is required to add a new employee.");
+      throw new Error("Company ID is required to add a new employee.");
+    }
 
     const firebaseEmail = providedEmail || createFirebaseEmail(employeeId);
     let newFirebaseUser: FirebaseUser | null = null;
@@ -303,6 +331,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     );
     const existingEmployeeSnap = await getDocs(employeeDirQuery);
     if (!existingEmployeeSnap.empty) {
+        console.warn(`>>> KAROBHR WARNING: Employee ID "${employeeId}" already exists in company "${empCompanyId}".`);
         throw new Error(`Employee ID "${employeeId}" already exists in company "${empCompanyId}".`);
     }
 
@@ -310,8 +339,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuthService, firebaseEmail, passwordToSet);
       newFirebaseUser = userCredential.user;
+      console.log(">>> KAROBHR TRACE: Firebase Auth user created:", newFirebaseUser.uid);
     } catch (error: any) {
-      console.error("Error creating employee in Firebase Auth:", error);
+      console.error(">>> KAROBHR ERROR: Error creating employee in Firebase Auth:", error);
       if (error.code === 'auth/email-already-in-use') {
         throw new Error(`The email address ${firebaseEmail} is already in use by another account. Employee IDs must be unique for login.`);
       }
@@ -354,25 +384,32 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     try {
       await batch.commit();
+      console.log(">>> KAROBHR TRACE: New employee data committed to Firestore.");
       // If the current admin is adding an employee to their own company, update allUsers state
       if (user && user.companyId === empCompanyId) {
          setAllUsers(prev => [...prev, newUserProfile]);
       }
     } catch (error) {
-      console.error("Error writing employee data to Firestore:", error);
+      console.error(">>> KAROBHR ERROR: Error writing employee data to Firestore:", error);
       // Attempt to delete the Firebase Auth user if Firestore write fails (rollback)
-      await newFirebaseUser.delete().catch(delErr => console.error("Failed to rollback Firebase Auth user:", delErr));
+      await newFirebaseUser.delete().catch(delErr => console.error(">>> KAROBHR ERROR: Failed to rollback Firebase Auth user:", delErr));
       throw new Error("Failed to store employee profile in Firestore. Auth user creation rolled back if possible.");
     }
   };
   
   const requestAdvance = async (employeeIdToUse: string, amount: number, reason: string) => {
-    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    if (!user || !companyId) {
+      console.error(">>> KAROBHR ERROR: User not logged in or companyId missing for requestAdvance.");
+      throw new Error("User not logged in or companyId missing.");
+    }
     const { db } = getFirebaseInstances();
 
     // Find the target user's UID from their employeeId within the current company
     const targetUserEntry = allUsers.find(u => u.employeeId === employeeIdToUse && u.companyId === companyId);
-    if (!targetUserEntry) throw new Error("Target employee for advance request not found in current company.");
+    if (!targetUserEntry) {
+      console.error(">>> KAROBHR ERROR: Target employee for advance request not found in current company.");
+      throw new Error("Target employee for advance request not found in current company.");
+    }
     const targetUserUid = targetUserEntry.id; // This is the Firebase Auth UID
 
     const newAdvance: Advance = {
@@ -390,6 +427,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       await updateDoc(userProfileRef, {
         advances: arrayUnion(advanceForFirestore)
       });
+      console.log(">>> KAROBHR TRACE: Advance requested and updated in Firestore for", employeeIdToUse);
       // Update the specific user in allUsers state (using client time for display)
       setAllUsers(prevAllUsers => prevAllUsers.map(u => 
         u.id === targetUserUid ? { ...u, advances: [...(u.advances || []), newAdvance].sort((a,b) => new Date(b.dateRequested).getTime() - new Date(a.dateRequested).getTime()) } : u
@@ -399,24 +437,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(prev => prev ? ({ ...prev, advances: [...(prev.advances || []), newAdvance].sort((a,b) => new Date(b.dateRequested).getTime() - new Date(a.dateRequested).getTime()) }) : null);
       }
     } catch (error) {
-      console.error("Error requesting advance:", error);
+      console.error(">>> KAROBHR ERROR: Error requesting advance:", error);
       throw error;
     }
   };
 
   const processAdvance = async (targetEmployeeUid: string, advanceId: string, newStatus: 'approved' | 'rejected') => {
-    if (!user || !companyId || user.role !== 'admin') throw new Error("Unauthorized or missing company context.");
+    if (!user || !companyId || user.role !== 'admin') {
+      console.error(">>> KAROBHR ERROR: Unauthorized or missing company context for processAdvance.");
+      throw new Error("Unauthorized or missing company context.");
+    }
     const { db } = getFirebaseInstances();
     const targetUserProfileRef = doc(db, "companies", companyId, "employees", targetEmployeeUid);
     
     try {
         const targetUserDoc = await getDoc(targetUserProfileRef);
-        if (!targetUserDoc.exists()) throw new Error("Target employee profile not found.");
+        if (!targetUserDoc.exists()) {
+          console.error(">>> KAROBHR ERROR: Target employee profile not found for processAdvance.");
+          throw new Error("Target employee profile not found.");
+        }
         const targetUserData = targetUserDoc.data() as User;
         const advances = targetUserData.advances || [];
         const advanceIndex = advances.findIndex(adv => adv.id === advanceId);
 
-        if (advanceIndex === -1) throw new Error("Advance not found for target employee.");
+        if (advanceIndex === -1) {
+          console.error(">>> KAROBHR ERROR: Advance not found for target employee for processAdvance.");
+          throw new Error("Advance not found for target employee.");
+        }
         
         const updatedAdvances = [...advances];
         const processedAdvance = {
@@ -432,6 +479,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         );
 
         await updateDoc(targetUserProfileRef, { advances: advancesForFirestore });
+        console.log(">>> KAROBHR TRACE: Advance processed in Firestore for UID", targetEmployeeUid);
         
         const sortedAdvances = updatedAdvances.sort((a,b) => new Date(b.dateRequested).getTime() - new Date(a.dateRequested).getTime());
         setAllUsers(prevAllUsers => prevAllUsers.map(u => 
@@ -442,13 +490,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
     } catch (error) {
-        console.error("Error processing advance:", error);
+        console.error(">>> KAROBHR ERROR: Error processing advance:", error);
         throw error;
     }
   };
   
   const updateUserInContext = async (updatedProfileData: Partial<User> & { id: string }) => {
-    if (!firebaseUser || !companyId) throw new Error("No authenticated user or company context to update profile.");
+    if (!firebaseUser || !companyId) {
+      console.error(">>> KAROBHR ERROR: No authenticated user or company context to update profile.");
+      throw new Error("No authenticated user or company context to update profile.");
+    }
     const { db } = getFirebaseInstances();
     const { id: targetUserId, ...dataToUpdate } = updatedProfileData;
 
@@ -462,19 +513,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             batch.update(userDirRef, { name: dataToUpdate.name });
         }
         await batch.commit();
+        console.log(">>> KAROBHR TRACE: User profile updated in Firestore for UID", targetUserId);
 
         if (targetUserId === user?.id) {
             setUser(prev => prev ? ({ ...prev, ...dataToUpdate }) : null);
         }
         setAllUsers(prevAll => prevAll.map(u => u.id === targetUserId ? ({ ...u, ...dataToUpdate } as User) : u));
     } catch (error) {
-        console.error("Error updating user profile in Firestore:", error);
+        console.error(">>> KAROBHR ERROR: Error updating user profile in Firestore:", error);
         throw error;
     }
   };
 
   const addAnnouncement = async (title: string, content: string) => {
-    if (!user || !companyId || user.role !== 'admin') throw new Error("User not authorized or company context missing.");
+    if (!user || !companyId || user.role !== 'admin') {
+      console.error(">>> KAROBHR ERROR: User not authorized or company context missing for addAnnouncement.");
+      throw new Error("User not authorized or company context missing.");
+    }
     const { db } = getFirebaseInstances();
     const newAnnouncementData: Omit<Announcement, 'id' | 'postedAt'> = {
       title,
@@ -488,17 +543,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         ...newAnnouncementData,
         postedAt: serverTimestamp() 
       });
+      console.log(">>> KAROBHR TRACE: Announcement added to Firestore with ID", docRef.id);
       // For local state, use client time for immediate display, sort by this.
       const displayAnnouncement = { ...newAnnouncementData, id: docRef.id, postedAt: new Date().toISOString()};
       setAnnouncements(prev => [displayAnnouncement, ...prev].sort((a,b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()));
     } catch (error) {
-      console.error("Error adding announcement:", error);
+      console.error(">>> KAROBHR ERROR: Error adding announcement:", error);
       throw error;
     }
   };
 
   const addAttendanceEvent = async (eventData: Omit<AttendanceEvent, 'id' | 'timestamp' | 'userName' | 'userId' | 'employeeId'> & { photoDataUrl?: string | null }) => {
-    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    if (!user || !companyId) {
+      console.error(">>> KAROBHR ERROR: User not logged in or companyId missing for addAttendanceEvent.");
+      throw new Error("User not logged in or companyId missing.");
+    }
     const { db, storage } = getFirebaseInstances();
     const { photoDataUrl, ...restOfEventData } = eventData;
     let photoFirebaseUrl: string | null = null;
@@ -509,8 +568,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             await uploadString(photoRef, photoDataUrl, 'data_url');
             photoFirebaseUrl = await getDownloadURL(photoRef);
+            console.log(">>> KAROBHR TRACE: Attendance photo uploaded to", photoFirebaseUrl);
         } catch (uploadError) {
-            console.error("Error uploading attendance photo:", uploadError);
+            console.error(">>> KAROBHR ERROR: Error uploading attendance photo:", uploadError);
             // Decide if you want to proceed without photo or throw error
         }
     }
@@ -530,17 +590,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           ...fullEventData,
           timestamp: serverTimestamp() 
       });
+      console.log(">>> KAROBHR TRACE: Attendance event added to Firestore with ID", eventId);
       // For local state, use client time for immediate display
       const displayEvent = { ...fullEventData, id: eventId, timestamp: new Date().toISOString()};
       setAttendanceLog(prev => [displayEvent, ...prev].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     } catch (error) {
-      console.error("Error adding attendance event:", error);
+      console.error(">>> KAROBHR ERROR: Error adding attendance event:", error);
       throw error;
     }
   };
   
   const addTask = async (taskData: Omit<TaskType, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    if (!user || !companyId) {
+      console.error(">>> KAROBHR ERROR: User not logged in or companyId missing for addTask.");
+      throw new Error("User not logged in or companyId missing.");
+    }
     const { db } = getFirebaseInstances();
     const newTaskPayload = {
         ...taskData,
@@ -550,6 +614,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
         const tasksCollectionRef = collection(db, "companies", companyId, "tasks");
         const docRef = await addDoc(tasksCollectionRef, newTaskPayload);
+        console.log(">>> KAROBHR TRACE: Task added to Firestore with ID", docRef.id);
         const displayTask = { 
             ...taskData, 
             id: docRef.id, 
@@ -558,13 +623,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         };
         setTasks(prev => [displayTask, ...prev].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (error) {
-        console.error("Error adding task:", error);
+        console.error(">>> KAROBHR ERROR: Error adding task:", error);
         throw error;
     }
   };
 
   const updateTask = async (updatedTaskData: Partial<TaskType> & { id: string }) => {
-    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    if (!user || !companyId) {
+      console.error(">>> KAROBHR ERROR: User not logged in or companyId missing for updateTask.");
+      throw new Error("User not logged in or companyId missing.");
+    }
     const { db } = getFirebaseInstances();
     const { id: taskId, ...dataToUpdate } = updatedTaskData;
     const taskDocRef = doc(db, "companies", companyId, "tasks", taskId);
@@ -573,16 +641,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             ...dataToUpdate,
             updatedAt: serverTimestamp()
         });
+        console.log(">>> KAROBHR TRACE: Task updated in Firestore with ID", taskId);
         setTasks(prev => prev.map(t => t.id === taskId ? ({ ...t, ...dataToUpdate, updatedAt: new Date().toISOString() } as TaskType) : t)
                              .sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (error) {
-        console.error("Error updating task:", error);
+        console.error(">>> KAROBHR ERROR: Error updating task:", error);
         throw error;
     }
   };
 
   const addLeaveApplication = async (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => {
-    if (!user || !companyId) throw new Error("User not logged in or companyId missing.");
+    if (!user || !companyId) {
+      console.error(">>> KAROBHR ERROR: User not logged in or companyId missing for addLeaveApplication.");
+      throw new Error("User not logged in or companyId missing.");
+    }
     const { db } = getFirebaseInstances();
     const newLeaveId = uuidv4();
     const newLeaveApp: LeaveApplication = { // This is for local state with client time
@@ -602,30 +674,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         await updateDoc(userProfileRef, {
             leaves: arrayUnion(leaveAppForFirestore)
         });
+        console.log(">>> KAROBHR TRACE: Leave application added to Firestore for user", user.id);
         setUser(prev => prev ? ({ ...prev, leaves: [...(prev.leaves || []), newLeaveApp].sort((a,b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime()) }) : null);
          // Also update in allUsers state if current user is admin or looking at their own profile in a list
         setAllUsers(prevAllUsers => prevAllUsers.map(u => 
             u.id === user.id ? { ...u, leaves: [...(u.leaves || []), newLeaveApp].sort((a,b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime()) } : u
         ));
     } catch (error) {
-        console.error("Error adding leave application:", error);
+        console.error(">>> KAROBHR ERROR: Error adding leave application:", error);
         throw error;
     }
   };
 
   const processLeaveApplication = async (targetEmployeeUid: string, leaveId: string, newStatus: 'approved' | 'rejected') => {
-    if (!user || !companyId || user.role !== 'admin') throw new Error("Unauthorized or missing company context.");
+    if (!user || !companyId || user.role !== 'admin') {
+      console.error(">>> KAROBHR ERROR: Unauthorized or missing company context for processLeaveApplication.");
+      throw new Error("Unauthorized or missing company context.");
+    }
     const { db } = getFirebaseInstances();
     const targetUserProfileRef = doc(db, "companies", companyId, "employees", targetEmployeeUid);
 
     try {
         const targetUserDoc = await getDoc(targetUserProfileRef);
-        if (!targetUserDoc.exists()) throw new Error("Target employee profile not found.");
+        if (!targetUserDoc.exists()) {
+          console.error(">>> KAROBHR ERROR: Target employee profile not found for processLeaveApplication.");
+          throw new Error("Target employee profile not found.");
+        }
         const targetUserData = targetUserDoc.data() as User;
         const leaves = targetUserData.leaves || [];
         const leaveIndex = leaves.findIndex(l => l.id === leaveId);
 
-        if (leaveIndex === -1) throw new Error("Leave application not found for target employee.");
+        if (leaveIndex === -1) {
+          console.error(">>> KAROBHR ERROR: Leave application not found for target employee for processLeaveApplication.");
+          throw new Error("Leave application not found for target employee.");
+        }
         
         // Create the updated leave object for local state (with client time)
         const updatedLeavesLocal = [...leaves];
@@ -641,6 +723,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         );
 
         await updateDoc(targetUserProfileRef, { leaves: leavesForFirestore });
+        console.log(">>> KAROBHR TRACE: Leave application processed in Firestore for UID", targetEmployeeUid);
         
         const sortedLeavesLocal = updatedLeavesLocal.sort((a,b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
         setAllUsers(prevAllUsers => prevAllUsers.map(u => 
@@ -650,7 +733,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             setUser(prev => prev ? { ...prev, leaves: sortedLeavesLocal } : null);
         }
     } catch (error) {
-        console.error("Error processing leave application:", error);
+        console.error(">>> KAROBHR ERROR: Error processing leave application:", error);
         throw error;
     }
   };
@@ -684,7 +767,3 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     </AuthContext.Provider>
   );
 };
-
-    
-
-    
