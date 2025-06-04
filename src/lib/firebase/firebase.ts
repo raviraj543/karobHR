@@ -5,94 +5,73 @@ import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { firebaseConfig } from "./config"; // Correctly import firebaseConfig
 
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
+let app: FirebaseApp | undefined = undefined;
+let auth: Auth | undefined = undefined;
+let db: Firestore | undefined = undefined;
+let storage: FirebaseStorage | undefined = undefined;
 
-// Ensure Firebase is initialized only on the client-side and only once
-if (typeof window !== "undefined") {
-  if (!getApps().length) {
-    try {
-      // Check if firebaseConfig exists and then if it has placeholder values
-      if (!firebaseConfig) {
-        console.error(
-          "CRITICAL: Firebase configuration is missing. " +
-          "Please ensure 'firebaseConfig' is exported from src/lib/firebase/config.ts " +
-          "and contains your actual Firebase project credentials."
-        );
-        // Initialization will fail if firebaseConfig is not provided to initializeApp
-      } else if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.apiKey) {
-        console.warn(
-          "Firebase config might be using placeholder values or is incomplete. " +
-          "Please update src/lib/firebase/config.ts with your actual Firebase project credentials."
-        );
-      }
+const CRITICAL_CONFIG_ERROR_MESSAGE =
+  "CRITICAL: Firebase configuration is missing, incomplete, or uses placeholder values. " +
+  "Please ensure 'firebaseConfig' is correctly exported from 'src/lib/firebase/config.ts' " +
+  "and all placeholder values (like YOUR_API_KEY) have been replaced with your actual Firebase project credentials. " +
+  "After updating, stop the server, delete the .next folder, and restart the server.";
 
-      // Only attempt to initialize if firebaseConfig is defined
-      if (firebaseConfig && firebaseConfig.apiKey) { // Added check for apiKey to ensure config is somewhat valid
-        app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-        storage = getStorage(app);
-        console.log("Firebase initialized.");
-      } else {
-        console.error("Firebase initialization skipped due to missing or incomplete configuration. Check src/lib/firebase/config.ts.");
-      }
-    } catch (error) {
-      console.error("Firebase initialization error:", error);
-      // Fallback or error display might be needed here for the user
+// Function to initialize Firebase if not already done.
+function initializeFirebaseServices() {
+  if (getApps().length === 0) { // Only initialize if no apps exist
+    if (!firebaseConfig) {
+      console.error(CRITICAL_CONFIG_ERROR_MESSAGE + " (Reason: firebaseConfig object was not imported or is undefined).");
+      return; // Exit if firebaseConfig itself is not even imported/defined
     }
-  } else {
-    // If already initialized, get the default app
-    app = getApps()[0];
-    auth = getAuth(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-  }
-}
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY" || firebaseConfig.apiKey.includes("PLACEHOLDER") || firebaseConfig.apiKey.length < 10) {
+      console.error(CRITICAL_CONFIG_ERROR_MESSAGE + " (Reason: apiKey is missing, a placeholder, or invalid). Please verify your actual apiKey in src/lib/firebase/config.ts.");
+      return; // Exit if critical apiKey is missing, a placeholder, or looks invalid
+    }
 
-// Export a function to get the instances, ensures they are initialized if called
-export const getFirebaseInstances = () => {
-  if (!app && typeof window !== "undefined") {
-    if (!getApps().length) {
-       if (!firebaseConfig) {
-          console.error(
-            "CRITICAL: Firebase configuration is missing inside getFirebaseInstances. " +
-            "Please ensure 'firebaseConfig' is exported from src/lib/firebase/config.ts."
-          );
-       } else if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.apiKey) {
-        console.warn(
-          "Firebase config might be using placeholder values or is incomplete inside getFirebaseInstances. " +
-          "Please update src/lib/firebase/config.ts."
-        );
-      }
-      
-      if (firebaseConfig && firebaseConfig.apiKey) { // Added check for apiKey
-        app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-        storage = getStorage(app);
-      } else {
-         console.error("Firebase initialization skipped in getFirebaseInstances due to missing or incomplete configuration.");
-      }
-    } else {
-      app = getApps()[0];
+    try {
+      console.log("Attempting to initialize Firebase app with apiKey starting: " + firebaseConfig.apiKey.substring(0, 10) + "...");
+      app = initializeApp(firebaseConfig);
       auth = getAuth(app);
       db = getFirestore(app);
       storage = getStorage(app);
+      console.log("Firebase initialized successfully.");
+    } catch (error) {
+      console.error("Firebase initialization error during initializeApp():", error);
+      // Ensure services are reset to undefined if initialization fails
+      app = undefined;
+      auth = undefined;
+      db = undefined;
+      storage = undefined;
     }
+  } else {
+    // console.log("Firebase app already initialized. Getting existing instance.");
+    app = getApps()[0]; // Get the already initialized app
+    // Ensure auth, db, storage are also assigned from this existing app
+    if (app && !auth) auth = getAuth(app);
+    if (app && !db) db = getFirestore(app);
+    if (app && !storage) storage = getStorage(app);
   }
+}
 
-  if (!app) {
-    if (!firebaseConfig || !firebaseConfig.apiKey) {
-      console.error("Firebase app instance is not available due to missing/incomplete configuration. Ensure src/lib/firebase/config.ts is correctly set up and populated.");
-    } else {
-      console.error("Firebase app instance is not available, but configuration seems present. Check initialization logs for other errors.");
-    }
+// Attempt to initialize Firebase services eagerly.
+// This will run on both client and server when the module is first imported.
+initializeFirebaseServices();
+
+// Export a function to get the instances.
+export const getFirebaseInstances = () => {
+  // If app is not initialized (e.g. due to bad config), the variables will be undefined.
+  if (!app || !auth || !db || !storage) {
+    // The detailed reason should have been logged by initializeFirebaseServices.
+    // This error indicates that dependent code is trying to use Firebase when it's not ready.
+    const serviceErrorMsg = "Firebase services (app, auth, db, or storage) are not available. Initialization likely failed. " +
+                            "Check server logs for 'CRITICAL: Firebase configuration...' messages or other initialization errors. " +
+                            "Ensure 'src/lib/firebase/config.ts' is correctly populated with your actual Firebase project credentials and that the file is saved.";
+    console.error("getFirebaseInstances: " + serviceErrorMsg);
+    throw new Error(serviceErrorMsg);
   }
   return { app, auth, db, storage };
 };
 
-// Direct exports are also possible but be mindful of initialization timing
+// Direct exports for convenience, but use getFirebaseInstances for guaranteed check.
+// These might be undefined if initialization failed.
 export { app, auth, db, storage };
