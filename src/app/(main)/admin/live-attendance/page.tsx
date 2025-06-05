@@ -35,19 +35,38 @@ export default function AdminLiveAttendancePage() {
 
   const handleRefresh = () => {
     setLastRefreshed(new Date());
-    // Data will be re-memoized due to attendanceLog potentially changing in useAuth context
   };
 
   const employeeAttendanceData = useMemo(() => {
     if (authLoading) return [];
 
     const displayableUsers = allUsers.filter(u => u.role === 'employee' || u.role === 'manager');
-    const todayAttendanceLog = attendanceLog.filter(event => isToday(parseISO(event.timestamp)));
+    
+    const todayAttendanceLog = attendanceLog.filter(event => {
+      if (event && typeof event.timestamp === 'string' && event.timestamp.length > 0) {
+        try {
+          // Ensure timestamp is a valid ISO string before parsing
+          const dateObj = parseISO(event.timestamp);
+          return isToday(dateObj);
+        } catch (e) {
+          console.warn(`AdminLiveAttendancePage: Invalid timestamp string for event ${event.id}: ${event.timestamp}`, e);
+          return false;
+        }
+      }
+      // console.warn(`AdminLiveAttendancePage: Skipping event with invalid or missing timestamp:`, event);
+      return false;
+    });
 
     return displayableUsers.map(user => {
       const userEventsToday = todayAttendanceLog
         .filter(event => event.employeeId === user.employeeId)
-        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); // Sort oldest to newest for pairing
+        .sort((a, b) => {
+            try {
+                return parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime();
+            } catch {
+                return 0; // Fallback sort if timestamps are invalid
+            }
+        });
 
       let status: EmployeeAttendanceStatus['status'] = 'Away';
       let lastActivityTime: string | undefined;
@@ -60,21 +79,23 @@ export default function AdminLiveAttendancePage() {
         const latestEvent = userEventsToday[userEventsToday.length -1];
         status = latestEvent.type === 'check-in' ? 'Checked In' : 'Checked Out';
         lastActivityTime = latestEvent.timestamp;
-        lastActivityPhoto = latestEvent.photoDataUrl;
+        lastActivityPhoto = latestEvent.photoUrl;
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.location;
 
-        // Calculate working hours for today
         let lastCheckInTime: Date | null = null;
         for (const event of userEventsToday) {
-          if (event.type === 'check-in') {
-            lastCheckInTime = parseISO(event.timestamp);
-          } else if (event.type === 'check-out' && lastCheckInTime) {
-            workingHoursTodayMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
-            lastCheckInTime = null; // Reset for next pair
+          try {
+            if (event.type === 'check-in') {
+              lastCheckInTime = parseISO(event.timestamp);
+            } else if (event.type === 'check-out' && lastCheckInTime) {
+              workingHoursTodayMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
+              lastCheckInTime = null; 
+            }
+          } catch (e) {
+            console.warn(`Error processing timestamp for work hours calculation for event ${event.id}: ${event.timestamp}`);
           }
         }
-        // If currently checked in, add time from last check-in till now
         if (status === 'Checked In' && lastCheckInTime) {
           workingHoursTodayMs += differenceInMilliseconds(new Date(), lastCheckInTime);
         }
@@ -162,10 +183,18 @@ export default function AdminLiveAttendancePage() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {lastActivityTime ? 
-                        <>
-                         {format(parseISO(lastActivityTime), 'p')}
-                         <span className="text-xs block">({formatDistanceToNow(parseISO(lastActivityTime), { addSuffix: true })})</span>
-                        </>
+                        (() => {
+                            try {
+                                return (
+                                    <>
+                                        {format(parseISO(lastActivityTime), 'p')}
+                                        <span className="text-xs block">({formatDistanceToNow(parseISO(lastActivityTime), { addSuffix: true })})</span>
+                                    </>
+                                );
+                            } catch {
+                                return 'Invalid date';
+                            }
+                        })()
                          : 'N/A'}
                   </TableCell>
                   <TableCell>
@@ -206,3 +235,4 @@ export default function AdminLiveAttendancePage() {
     </div>
   );
 }
+
