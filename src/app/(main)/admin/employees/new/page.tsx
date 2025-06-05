@@ -12,11 +12,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, ArrowLeft, IndianRupee } from 'lucide-react';
+import { UserPlus, ArrowLeft, IndianRupee, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import type { NewEmployeeData } from '@/lib/authContext';
 import type { UserRole } from '@/lib/types';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const newEmployeeSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -42,7 +43,7 @@ type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
 export default function AddNewEmployeePage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { addNewEmployee } = useAuth();
+  const { addNewEmployee, companyId: adminCompanyId, loading: authLoading } = useAuth(); // Get admin's companyId
 
   const form = useForm<NewEmployeeFormValues>({
     resolver: zodResolver(newEmployeeSchema),
@@ -62,21 +63,33 @@ export default function AddNewEmployeePage() {
   const onSubmit = async (data: NewEmployeeFormValues) => {
     setIsLoading(true);
 
+    if (!adminCompanyId) {
+      toast({
+        title: "Error: Admin Context Missing",
+        description: "The administrator's company information is not available. Cannot add employee.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     const employeeDataForContext: NewEmployeeData = {
       name: data.name,
       employeeId: data.employeeId,
       email: data.email,
       department: data.department,
       role: data.role as UserRole,
+      companyId: adminCompanyId, // Use the admin's companyId
       joiningDate: data.joiningDate,
       baseSalary: data.baseSalary,
     };
 
     try {
-      await addNewEmployee(employeeDataForContext, data.password);
+      // Pass false for isFirstAdmin, as this is an admin adding a new employee
+      await addNewEmployee(employeeDataForContext, data.password, false); 
       toast({
         title: "Employee Account Added",
-        description: `Account for ${data.name} (${data.employeeId}) has been added. They can now log in with the password you set. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}`,
+        description: `Account for ${data.name} (${data.employeeId}) in company ${adminCompanyId} has been added. They can now log in. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}`,
         duration: 7000,
       });
       form.reset();
@@ -95,12 +108,14 @@ export default function AddNewEmployeePage() {
     document.title = 'Add New Employee - Admin - KarobHR';
   }, []);
 
+  const isSubmitDisabled = isLoading || authLoading || !adminCompanyId;
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Add New Employee</h1>
-          <p className="text-muted-foreground">Fill in the details to create a new employee account.</p>
+          <p className="text-muted-foreground">Fill in the details to create a new employee account for your company.</p>
         </div>
          <Button variant="outline" asChild>
           <Link href="/admin/employees">
@@ -108,6 +123,16 @@ export default function AddNewEmployeePage() {
           </Link>
         </Button>
       </div>
+
+      {!authLoading && !adminCompanyId && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Admin Company Context Missing</AlertTitle>
+          <AlertDescription>
+            The system could not identify the administrator's company. Please ensure you are properly logged in as an admin with company details.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -156,6 +181,7 @@ export default function AddNewEmployeePage() {
                     <FormControl>
                       <Input type="email" placeholder="e.g., john.doe@example.com" {...field} />
                     </FormControl>
+                     <FormDescription>If blank, one will be auto-generated based on Employee ID and Company.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -235,7 +261,7 @@ export default function AddNewEmployeePage() {
                         <SelectContent>
                           <SelectItem value="employee">Employee</SelectItem>
                           <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                          {/* Admin cannot create another admin from this page */}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -259,7 +285,7 @@ export default function AddNewEmployeePage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full md:w-auto" disabled={isLoading}>
+              <Button type="submit" className="w-full md:w-auto" disabled={isSubmitDisabled}>
                 {isLoading ? 'Adding Account...' : 'Add Employee Account'}
               </Button>
             </form>
@@ -269,3 +295,4 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
+
