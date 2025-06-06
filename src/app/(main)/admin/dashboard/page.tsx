@@ -186,7 +186,7 @@ export default function AdminDashboardPage() {
                   <li key={ann.id} className="p-4 border rounded-md bg-muted/50 shadow-sm">
                     <h4 className="font-semibold text-foreground">{ann.title}</h4>
                     <p className="text-xs text-muted-foreground">
-                      Posted by {ann.postedBy} on {new Date(ann.postedAt).toLocaleDateString()} at {new Date(ann.postedAt).toLocaleTimeString()}
+                      Posted by {ann.postedByName} on {new Date(ann.postedAt).toLocaleDateString()} at {new Date(ann.postedAt).toLocaleTimeString()}
                     </p>
                     <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{ann.content}</p>
                   </li>
