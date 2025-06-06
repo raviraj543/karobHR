@@ -45,7 +45,18 @@ export default function AdminDashboardPage() {
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log(">>> KAROBHR TRACE: AdminDashboardPage - handlePostAnnouncement triggered.");
+    if (!user || user.role !== 'admin') {
+      console.error(">>> KAROBHR TRACE: AdminDashboardPage - User is not an admin or not logged in. Cannot post announcement.");
+      toast({
+        title: "Permission Denied",
+        description: "You do not have permission to post announcements.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!announcementTitle.trim() || !announcementContent.trim()) {
+      console.log(">>> KAROBHR TRACE: AdminDashboardPage - Announcement title or content is empty.");
       toast({
         title: "Missing Information",
         description: "Please provide both a title and content for the announcement.",
@@ -53,9 +64,12 @@ export default function AdminDashboardPage() {
       });
       return;
     }
+    console.log(">>> KAROBHR TRACE: AdminDashboardPage - Setting isPostingAnnouncement to true.");
     setIsPostingAnnouncement(true);
     try {
-      await addAnnouncement(announcementTitle, announcementContent);
+      console.log(`>>> KAROBHR TRACE: AdminDashboardPage - Calling addAnnouncement from context with title: "${announcementTitle}"`);
+      await addAnnouncement(announcementTitle, announcementContent); // This is from useAuth()
+      console.log(">>> KAROBHR TRACE: AdminDashboardPage - addAnnouncement call successful.");
       toast({
         title: "Announcement Posted!",
         description: "Your announcement is now visible to all employees.",
@@ -63,12 +77,14 @@ export default function AdminDashboardPage() {
       setAnnouncementTitle('');
       setAnnouncementContent('');
     } catch (error) {
+      console.error(">>> KAROBHR TRACE: AdminDashboardPage - Error in handlePostAnnouncement:", error);
       toast({
         title: "Error Posting Announcement",
         description: (error as Error).message || "Could not post the announcement.",
         variant: "destructive",
       });
     } finally {
+      console.log(">>> KAROBHR TRACE: AdminDashboardPage - Setting isPostingAnnouncement to false.");
       setIsPostingAnnouncement(false);
     }
   };
@@ -129,9 +145,8 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             <Button variant="outline" asChild><Link href="/admin/employees/new">Add New Employee</Link></Button>
-            <Button variant="outline" asChild><Link href="/admin/tasks">Assign New Task</Link></Button> {/* Changed from /admin/tasks/new */}
+            <Button variant="outline" asChild><Link href="/admin/tasks">Assign New Task</Link></Button>
             <Button variant="outline" asChild><Link href="/admin/holidays">Manage Holidays</Link></Button>
-            {/* <Button variant="outline" asChild><Link href="/admin/reports">Generate Reports</Link></Button> Removed this link */}
             <p className="text-sm text-muted-foreground col-span-2">Report generation coming soon.</p>
 
           </CardContent>
@@ -166,7 +181,7 @@ export default function AdminDashboardPage() {
                 disabled={isPostingAnnouncement}
               />
             </div>
-            <Button type="submit" disabled={isPostingAnnouncement}>
+            <Button type="submit" disabled={isPostingAnnouncement || !user || user.role !== 'admin'}>
               {isPostingAnnouncement ? 'Posting...' : <><Send className="mr-2 h-4 w-4"/> Post Announcement</>}
             </Button>
           </form>

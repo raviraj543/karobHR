@@ -182,8 +182,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
-    // setLoading(true) here is appropriate as this is the start of the auth flow check.
-    // It will be set to false if no user, or after user data is loaded/failed.
     if (!loading) setLoading(true); 
     let isMounted = true;
 
@@ -193,12 +191,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (currentFirebaseUser) {
         const fetchedUser = await fetchUserData(currentFirebaseUser, dbInstance);
         if (!fetchedUser && isMounted) {
-          console.warn(`>>> KAROBHR TRACE: onAuthStateChanged - User ${currentFirebaseUser.uid} authenticated, but profile data not found/loaded. Setting app user to null and stopping loading.`);
+          console.warn(`>>> KAROBHR TRACE: onAuthStateChanged - User ${currentFirebaseUser.uid} authenticated, but profile data not found/loaded. Setting app user to null and stopping loading state earlier.`);
           setUser(null); setRole(null); setCompanyId(null);
-          setLoading(false);
+          setLoading(false); // Explicitly set loading false here if profile fetch fails
         }
         // If fetchedUser is successful, setUser, setRole, setCompanyId are called within fetchUserData.
-        // Loading remains true here; subsequent data listeners will set it to false.
+        // Loading remains true here; subsequent data listeners will set it to false via the combined effect.
       } else {
         setUser(null); setRole(null); setCompanyId(null);
         setAllUsers([]); setTasks([]); setAnnouncements([]); setAttendanceLog([]);
@@ -211,7 +209,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log(">>> KAROBHR TRACE: Unsubscribing from onAuthStateChanged.");
       unsubscribe();
     };
-  }, [authInstance, dbInstance, fetchUserData, firebaseError]); // Removed 'loading' from here to prevent loops with this effect setting loading true.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authInstance, dbInstance, fetchUserData, firebaseError]); 
 
 
   // Data listeners
@@ -219,20 +218,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let unsub: (() => void) | undefined;
     if (!dbInstance || !user || !companyId || role !== 'admin') {
       setAllUsers([]);
-      // if (loading && role !== 'admin') setLoading(false); // Let a more central logic handle final loading state
       return;
     }
     console.log(">>> KAROBHR TRACE: Admin user detected, subscribing to allUsers for company:", companyId);
-    // setLoading(true); // Do not set loading true here, onAuthStateChanged/login handles it.
     const usersQuery = query(collection(dbInstance, 'users'), where('companyId', '==', companyId));
     unsub = onSnapshot(usersQuery, (snapshot) => {
       const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       setAllUsers(usersList);
       console.log(">>> KAROBHR TRACE: allUsers updated for admin. Count:", usersList.length);
-      // setLoading(false); // Individual listeners contribute to overall loading state in a combined effect
     }, (error) => {
       console.error(">>> KAROBHR TRACE: Error fetching all users:", error);
-      // setLoading(false);
     });
     return () => unsub && unsub();
   }, [dbInstance, user, companyId, role]);
@@ -241,11 +236,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let unsub: (() => void) | undefined;
     if (!dbInstance || !user || !companyId) {
       setTasks([]);
-      // if (loading) setLoading(false);
       return;
     }
     console.log(`>>> KAROBHR TRACE: User ${user.employeeId} (Role: ${role}) detected, subscribing to tasks for company: ${companyId}`);
-    // setLoading(true);
     let tasksQuery;
     if (role === 'admin' || role === 'manager') {
       tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`));
@@ -256,10 +249,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const tasksList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Task));
       setTasks(tasksList);
       console.log(">>> KAROBHR TRACE: Tasks updated. Count:", tasksList.length);
-      // setLoading(false);
     }, (error) => {
       console.error(">>> KAROBHR TRACE: Error fetching tasks:", error);
-      // setLoading(false);
     });
     return () => unsub && unsub();
   }, [dbInstance, user, companyId, role]);
@@ -268,7 +259,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let unsub: (() => void) | undefined;
     if (!dbInstance || !companyId) {
       setAnnouncements([]);
-      // if (loading) setLoading(false);
       return;
     }
     console.log(">>> KAROBHR TRACE: Subscribing to announcements for company:", companyId);
@@ -286,10 +276,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }).sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
       setAnnouncements(announcementsList);
       console.log(">>> KAROBHR TRACE: Announcements updated. Count:", announcementsList.length);
-      // setLoading(false);
     }, (error) => {
       console.error(">>> KAROBHR TRACE: Error fetching announcements:", error);
-      // setLoading(false);
     });
     return () => unsub && unsub();
   }, [dbInstance, companyId]);
@@ -298,7 +286,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let unsub: (() => void) | undefined;
     if (!dbInstance || !companyId || (role !== 'admin' && role !== 'manager')) {
         setAttendanceLog([]);
-        // if (loading) setLoading(false);
         return;
     }
     console.log(`>>> KAROBHR TRACE: Role ${role} detected, subscribing to attendanceLog for company: ${companyId}`);
@@ -330,10 +317,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         setAttendanceLog(logList);
         console.log(">>> KAROBHR TRACE: Attendance log updated. Count:", logList.length);
-        // setLoading(false);
     }, (error) => {
         console.error(">>> KAROBHR TRACE: Error fetching attendance log:", error);
-        // setLoading(false);
     });
     return () => unsub && unsub();
   }, [dbInstance, companyId, role, user ]);
@@ -341,45 +326,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Effect to finalize loading state
   useEffect(() => {
-    if (!authInstance && !firebaseError) { // Case 1: Firebase not even initialized (or error during init)
-        if (loading) setLoading(false);
+    console.log(">>> KAROBHR TRACE: Final loading check - loading:", loading, "authInstance:", !!authInstance, "firebaseError:", !!firebaseError, "user:", !!user, "role:", role);
+    if (!authInstance && !firebaseError) {
+        if (loading) {
+            console.log(">>> KAROBHR TRACE: Final loading check - No auth, no error. Setting loading false.");
+            setLoading(false);
+        }
         return;
     }
-    if (firebaseError) { // Case 2: Firebase initialization error
-        if (loading) setLoading(false);
+    if (firebaseError) {
+        if (loading) {
+            console.log(">>> KAROBHR TRACE: Final loading check - Firebase error exists. Setting loading false.");
+            setLoading(false);
+        }
         return;
     }
-    // At this point, authInstance should be available
-    if (!user) { // Case 3: Auth is initialized, but no user is logged in (or profile fetch failed previously and user is null)
-        // onAuthStateChanged should have set loading to false if no FirebaseUser or fetchUserData failed.
-        // If user is null and onAuthStateChanged completed, loading should be false.
+    
+    if (!user) { // This implies onAuthStateChanged finished and found no currentFirebaseUser, or fetchUserData failed.
+        if (loading) {
+             console.log(">>> KAROBHR TRACE: Final loading check - No user object. Assuming auth check complete. Setting loading false.");
+             setLoading(false);
+        }
         return;
     }
 
-    // Case 4: User is logged in, check if all relevant data for their role has loaded.
-    let roleSpecificDataLoaded = false;
-    if (role === 'admin') {
-        // Admin needs allUsers, tasks, attendanceLog, announcements
-        // Check if these arrays have been populated (even if empty, the listener ran)
-        // This assumes initial state for these is empty array, and they get populated by listeners
-        roleSpecificDataLoaded = true; // Assume true, then check if any essential data is still "conceptually" loading
-                                   // The actual arrays (allUsers, tasks etc) will be checked by components.
-                                   // The listeners themselves don't set loading false anymore directly.
-    } else if (role === 'manager') {
-        // Manager needs tasks, attendanceLog, announcements
-        roleSpecificDataLoaded = true;
-    } else if (role === 'employee') {
-        // Employee needs tasks, announcements
-        roleSpecificDataLoaded = true;
-    }
-
-    if (roleSpecificDataLoaded && loading) {
-      console.log(`>>> KAROBHR TRACE: All relevant data for role ${role} seems to be processed by listeners. Setting loading to false.`);
+    // If user exists, assume data listeners are active or have run.
+    // For simplicity, we now set loading to false if a user object is present,
+    // assuming that if fetchUserData succeeded, the critical part of loading is done.
+    // Individual page components can show their own loading states for specific data if needed.
+    if (user && loading) {
+      console.log(`>>> KAROBHR TRACE: Final loading check - User ${user.employeeId} exists. Setting loading false.`);
       setLoading(false);
     }
-    // If roleSpecificDataLoaded is false, it means we are still waiting for one of the listeners to finish.
-    // `loading` remains true (or was set true by onAuthStateChanged).
-  }, [user, role, allUsers, tasks, attendanceLog, announcements, authInstance, firebaseError, loading]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, role, authInstance, firebaseError]); // Removed data arrays from dependencies to simplify and rely on user object presence
 
 
 
@@ -430,13 +411,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           throw new Error("User data integrity error. Please contact support.");
       }
 
-      // fetchUserData will set user, role, companyId. onAuthStateChanged will pick this up, and its useEffect
-      // will keep loading=true until data listeners finish.
+      // fetchUserData will set user, role, companyId. 
+      // The main loading effect will handle setting loading=false once user is set.
       const loggedInUser = await fetchUserData(firebaseUser, dbInstance, userCompanyIdFromDirectory);
 
       if (loggedInUser) {
         console.log(`>>> KAROBHR TRACE: login - Successfully fetched profile for ${loggedInUser.name} (${loggedInUser.employeeId}). Login complete. Role: ${loggedInUser.role}, Company: ${loggedInUser.companyId}`);
-        // setLoading(false) will be handled by the main loading effect once all data listeners complete
         return loggedInUser;
       } else {
         console.error(`>>> KAROBHR TRACE: login - Firebase Auth successful for UID: ${firebaseUser.uid}, but Firestore profile NOT FOUND or fetchUserData failed. This is a critical issue.`);
@@ -556,7 +536,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const companyDocRef = doc(dbInstance, `companies/${employeeData.companyId}`);
             batch.set(companyDocRef, {
                 companyId: employeeData.companyId,
-                companyName: employeeData.name,
+                companyName: employeeData.name, // Use admin's name as initial company name, can be edited later
                 createdAt: serverTimestamp(),
                 adminUid: newFirebaseUser.uid,
             });
@@ -704,25 +684,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addAnnouncement = useCallback(async (title: string, content: string) => {
     if (!dbInstance || !user || user.role !== 'admin' || !companyId) {
-      console.error(">>> KAROBHR TRACE: Unauthorized or context missing for addAnnouncement.");
+      console.error(">>> KAROBHR TRACE: AuthContext - addAnnouncement - Pre-condition failed. DB:", !!dbInstance, "User:", !!user, "IsAdmin:", user?.role === 'admin', "CompanyID:", companyId);
       throw new Error("Operation not allowed or company context missing.");
     }
-    console.log(`>>> KAROBHR TRACE: Admin ${user.employeeId} posting announcement in company ${companyId}: ${title}`);
+    const currentUserName = user.name || user.employeeId || 'Unknown Admin';
+    console.log(`>>> KAROBHR TRACE: AuthContext - addAnnouncement - Admin ${user.employeeId} (UID: ${user.id}, Name: ${currentUserName}) posting announcement in company ${companyId}: "${title}"`);
+    
     const newAnnouncementData: Omit<Announcement, 'id' | 'postedAt'> = {
       title,
       content,
       postedByUid: user.id,
-      postedByName: user.name || user.employeeId,
+      postedByName: currentUserName,
     };
+
     try {
       await addDoc(collection(dbInstance, `companies/${companyId}/announcements`), {
         ...newAnnouncementData,
         postedAt: serverTimestamp()
       });
-      console.log(">>> KAROBHR TRACE: Announcement posted successfully.");
+      console.log(">>> KAROBHR TRACE: AuthContext - addAnnouncement - Announcement posted successfully to Firestore.");
     } catch (error) {
-      console.error(">>> KAROBHR TRACE: Error posting announcement:", error);
-      throw new Error("Failed to post announcement.");
+      console.error(">>> KAROBHR TRACE: AuthContext - addAnnouncement - Error posting announcement to Firestore:", error);
+      throw new Error("Failed to post announcement to Firestore.");
     }
   }, [dbInstance, user, companyId]);
 
@@ -1032,4 +1015,3 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export default AuthProvider;
-
