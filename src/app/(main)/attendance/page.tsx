@@ -62,8 +62,9 @@ export default function AttendancePage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+        console.log(">>> KAROBHR TRACE: Camera permission granted.");
       } catch (err) {
-        console.error('Error accessing camera:', err);
+        console.error('>>> KAROBHR TRACE: Error accessing camera:', err);
         setHasCameraPermission(false);
         setError('Camera permission denied. Please enable camera access in your browser settings.');
         toast({
@@ -80,6 +81,7 @@ export default function AttendancePage() {
       }
       if (videoRef.current) videoRef.current.srcObject = null;
       streamRef.current = null;
+      console.log(">>> KAROBHR TRACE: Camera stream stopped on component unmount/cleanup.");
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -87,8 +89,10 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!db || !user || !companyId) {
       setMyTodaysAttendanceEvents([]);
+      console.log(">>> KAROBHR TRACE: useEffect for myTodaysAttendanceEvents - No DB, user, or companyId. Clearing events.");
       return;
     }
+    console.log(`>>> KAROBHR TRACE: useEffect for myTodaysAttendanceEvents - Subscribing for user ${user.id}, company ${companyId}.`);
 
     const todayStart = Timestamp.fromDate(startOfToday());
     const todayEnd = Timestamp.fromDate(endOfToday());
@@ -98,7 +102,7 @@ export default function AttendancePage() {
       where('userId', '==', user.id),
       where('timestamp', '>=', todayStart),
       where('timestamp', '<=', todayEnd),
-      orderBy('timestamp', 'desc')
+      orderBy('timestamp', 'asc') // Sort ascending to easily get the latest
     );
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -111,29 +115,38 @@ export default function AttendancePage() {
           timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
         } as AttendanceEvent);
       });
-      setMyTodaysAttendanceEvents(events.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
+      console.log(`>>> KAROBHR TRACE: myTodaysAttendanceEvents updated from Firestore. Count: ${events.length}. Events:`, events.map(e => ({type: e.type, time: e.timestamp})));
+      setMyTodaysAttendanceEvents(events); // Already sorted by query
     }, (err) => {
-      console.error("Error fetching today's attendance for user:", err);
+      console.error(">>> KAROBHR TRACE: Error fetching today's attendance for user:", err);
       setError("Could not load your attendance data for today.");
       setMyTodaysAttendanceEvents([]);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log(">>> KAROBHR TRACE: Unsubscribing from myTodaysAttendanceEvents listener.");
+      unsubscribe();
+    };
   }, [db, user, companyId]);
 
 
   useEffect(() => {
     document.title = 'My Attendance & Daily Report - KarobHR';
+    const previousCheckInStatus = checkInStatus; // Capture state before this effect potentially changes it
 
     if (user && myTodaysAttendanceEvents.length > 0) {
       const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
+      console.log(">>> KAROBHR TRACE: useEffect for checkInStatus - Latest event:", {type: latestEvent.type, time: latestEvent.timestamp});
       
       if (latestEvent.type === 'check-in') {
         setCheckInStatus('checked-in');
-      } else {
+        console.log(">>> KAROBHR TRACE: Set checkInStatus to 'checked-in'.");
+      } else { // latestEvent.type === 'check-out'
         setCheckInStatus('checked-out');
-        // Reset task-related states if previously checked in and now checked out
-        if (checkInStatus === 'checked-in') { // Compare with previous local state
+        console.log(">>> KAROBHR TRACE: Set checkInStatus to 'checked-out'.");
+        // Reset task-related states ONLY if the user just transitioned from checked-in to checked-out
+        if (previousCheckInStatus === 'checked-in') { 
+             console.log(">>> KAROBHR TRACE: Transitioning from checked-in to checked-out. Resetting tasks.");
              setTasksSubmittedForDay(false);
              setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
              setTaskSummary(null);
@@ -149,12 +162,17 @@ export default function AttendancePage() {
       });
     } else if (user) {
       // No events today means user is checked out
+      console.log(">>> KAROBHR TRACE: useEffect for checkInStatus - No events today for user. Setting to 'checked-out'.");
       setCheckInStatus('checked-out');
+      if (previousCheckInStatus === 'checked-in') {
+        console.log(">>> KAROBHR TRACE: No events today, but was previously checked-in (e.g., admin deleted). Resetting tasks.");
+        setTasksSubmittedForDay(false);
+        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+        setTaskSummary(null);
+      }
       setLastDisplayRecord(null);
-      setTasksSubmittedForDay(false);
-      setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
-      setTaskSummary(null);
     }
+  // IMPORTANT: Do not add `checkInStatus` to this dependency array, as it's set by this effect.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, myTodaysAttendanceEvents]);
 
@@ -163,6 +181,7 @@ export default function AttendancePage() {
     if (!videoRef.current || !canvasRef.current || !hasCameraPermission) {
       setError('Cannot capture photo. Camera not ready or permission denied.');
       toast({ variant: 'destructive', title: 'Photo Capture Failed', description: 'Camera not available.' });
+      console.warn(">>> KAROBHR TRACE: capturePhoto - Failed. videoRef:", !!videoRef.current, "canvasRef:", !!canvasRef.current, "hasCameraPermission:", hasCameraPermission);
       return null;
     }
     const video = videoRef.current;
@@ -172,9 +191,11 @@ export default function AttendancePage() {
     const context = canvas.getContext('2d');
     if (!context) {
         setError('Could not get canvas context for photo capture.');
+        console.warn(">>> KAROBHR TRACE: capturePhoto - Failed, no canvas context.");
         return null;
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    console.log(">>> KAROBHR TRACE: capturePhoto - Photo captured successfully.");
     return canvas.toDataURL('image/jpeg', 0.8);
   };
 
@@ -195,7 +216,7 @@ export default function AttendancePage() {
           });
         },
         (err) => {
-          console.error('Error getting geolocation:', err);
+          console.error('>>> KAROBHR TRACE: Error getting geolocation:', err);
           setError(`Geolocation error: ${err.message}. Please ensure location services are enabled.`);
           resolve(null);
         },
@@ -205,29 +226,37 @@ export default function AttendancePage() {
   };
 
   const handleActualCheckInOrOut = async (type: 'check-in' | 'check-out') => {
+    console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut called with type: "${type}"`);
     if (!user || !companyId) {
       setError('User not identified or company context missing. Cannot record attendance.');
       toast({ variant: 'destructive', title: 'User Error', description: 'Could not identify user or company.' });
+      console.error(">>> KAROBHR TRACE: handleActualCheckInOrOut - User or companyId missing.");
       return;
     }
     setIsSubmittingAttendance(true);
+    console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - isSubmittingAttendance set to true for type: ${type}`);
 
     let photoDataUrlString: string | null = null;
 
     if (type === 'check-in') {
+      console.log(">>> KAROBHR TRACE: handleActualCheckInOrOut - Processing CHECK-IN.");
       if (hasCameraPermission !== true) {
         setError('Camera permission is required for check-in.');
         toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required for check-in.' });
         setIsSubmittingAttendance(false);
+        console.warn(">>> KAROBHR TRACE: handleActualCheckInOrOut - Check-in aborted, no camera permission.");
         return;
       }
       photoDataUrlString = capturePhoto();
       if (!photoDataUrlString) { // If photo capture failed for check-in
         setIsSubmittingAttendance(false);
+        console.warn(">>> KAROBHR TRACE: handleActualCheckInOrOut - Check-in aborted, photo capture failed.");
         return;
       }
+    } else { // type === 'check-out'
+      console.log(">>> KAROBHR TRACE: handleActualCheckInOrOut - Processing CHECK-OUT. No photo will be taken.");
+      photoDataUrlString = null; 
     }
-    // For 'check-out', photoDataUrlString remains null (no camera used)
 
     const location = await getGeolocation();
 
@@ -235,56 +264,31 @@ export default function AttendancePage() {
     let toastDescSuffix = "";
 
     if (location) {
-        let inOffice = false;
-        let inRemote = false;
-        let officeDistStr = "";
-        let remoteDistStr = "";
-
-        if (companySettings?.officeLocation) {
-            const dist = calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
-            officeDistStr = ` (Office: ${dist.toFixed(0)}m)`;
-            if (dist <= companySettings.officeLocation.radius) {
-                inOffice = true;
-            }
-        }
-        if (user.remoteWorkLocation) {
-            const dist = calculateDistance(location.latitude, location.longitude, user.remoteWorkLocation.latitude, user.remoteWorkLocation.longitude);
-            remoteDistStr = ` (Remote: ${dist.toFixed(0)}m)`;
-            if (dist <= user.remoteWorkLocation.radius) {
-                inRemote = true;
-            }
-        }
-
-        if (inOffice) {
-            toastDescSuffix = "You are within the OFFICE geofence.";
-        } else if (inRemote) {
-            toastDescSuffix = "You are within your REMOTE work geofence.";
-        } else {
-            toastTitle += " (Outside Geofence)";
-            toastDescSuffix = `You are OUTSIDE any valid geofence.${officeDistStr}${remoteDistStr}`;
-        }
+        // Geofence check logic is inside addAttendanceEvent (AuthContext) now
+        // This part is just for immediate toast feedback if needed, though AuthContext handles it too
+        // For now, let AuthContext handle the detailed geofence toast message
     } else {
-        toastDescSuffix = "(Location not available, geofence status cannot be determined).";
+        toastDescSuffix = "(Location not available for immediate geofence check).";
     }
 
     try {
+        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - Calling addAttendanceEvent with type: "${type}"`);
         await addAttendanceEvent({
             type,
-            photoDataUrl: photoDataUrlString, // Will be null for checkout
+            photoDataUrl: photoDataUrlString,
             location,
         });
-        toast({
-            title: toastTitle,
-            description: `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}. ${toastDescSuffix}`,
-            variant: (toastTitle.includes("Outside Geofence") ? 'destructive' : 'default'),
-            duration: (toastTitle.includes("Outside Geofence") ? 9000 : 5000),
-        });
+        // Toast is now primarily handled by addAttendanceEvent or its success/failure
+        // If addAttendanceEvent throws, the catch block below will handle it.
+        // If it succeeds, the listener for myTodaysAttendanceEvents will update UI.
+        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - addAttendanceEvent call for type "${type}" completed.`);
     } catch (submissionError) {
-        console.error("Error submitting attendance:", submissionError);
+        console.error(">>> KAROBHR TRACE: Error submitting attendance via addAttendanceEvent:", submissionError);
         setError((submissionError as Error).message || "Failed to record attendance.");
         toast({ variant: "destructive", title: "Submission Failed", description: (submissionError as Error).message });
     } finally {
         setIsSubmittingAttendance(false);
+        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - isSubmittingAttendance set to false for type: ${type}`);
     }
   };
 
@@ -302,21 +306,24 @@ export default function AttendancePage() {
 
   const handleTaskReportAndCheckout = async (e?: FormEvent) => {
     e?.preventDefault();
+    console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout triggered. Current checkInStatus:", checkInStatus, "TasksSubmittedForDay:", tasksSubmittedForDay);
     if (checkInStatus !== 'checked-in') {
       toast({ title: "Not Checked In", description: "You must be checked in to submit a report and check out.", variant: "destructive" });
+      console.warn(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Aborted, user not checked in.");
       return;
     }
      if (tasksSubmittedForDay) {
-      // If tasks already submitted for this check-in session, just checkout (geofence only)
+      console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Tasks already submitted for this session, proceeding to direct checkout.");
       await handleActualCheckInOrOut('check-out');
       return;
     }
 
     setIsSubmittingTasks(true);
+    console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - isSubmittingTasks set to true.");
     setTaskSummary(null);
 
     const tasksToSummarize: AiTask[] = dailyTasks.map(({ id, ...rest }) => rest)
-                                           .filter(task => task.title.trim() !== '' || task.description.trim() !== ''); // Filter out completely empty tasks
+                                           .filter(task => task.title.trim() !== '' || task.description.trim() !== '');
 
 
     if (tasksToSummarize.length === 0) {
@@ -326,6 +333,7 @@ export default function AttendancePage() {
             variant: "default",
         });
         setTasksSubmittedForDay(true); 
+        console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - No tasks entered. tasksSubmittedForDay set to true. Proceeding to checkout.");
         await handleActualCheckInOrOut('check-out');
         setIsSubmittingTasks(false);
         return;
@@ -338,6 +346,7 @@ export default function AttendancePage() {
             variant: "destructive",
         });
         setIsSubmittingTasks(false);
+        console.warn(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Aborted, no completed tasks.");
         return;
     }
 
@@ -358,9 +367,10 @@ export default function AttendancePage() {
             duration: 7000,
         });
       }
-      await handleActualCheckInOrOut('check-out'); // Proceed to geofence-only checkout
+      console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Task report successful. Now calling handleActualCheckInOrOut('check-out').");
+      await handleActualCheckInOrOut('check-out');
     } catch (error) {
-      console.error('Error summarizing tasks:', error);
+      console.error('>>> KAROBHR TRACE: Error summarizing tasks:', error);
       toast({
         title: "Task Report Error",
         description: "Failed to generate task summary. Please try again or contact support. Checkout not completed.",
@@ -368,6 +378,7 @@ export default function AttendancePage() {
       });
     } finally {
       setIsSubmittingTasks(false);
+      console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - isSubmittingTasks set to false.");
     }
   };
 
@@ -381,10 +392,11 @@ export default function AttendancePage() {
             <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance & Daily Report
           </CardTitle>
           <CardDescription>
-            Check-in requires camera & location. Check-out requires task report then location.
+            Check-in requires camera & location. Check-out requires task report then location (no camera for checkout).
             Office Radius: {officeRadiusDisplay}m
             {user?.remoteWorkLocation && `, or your remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
-            {checkInStatus === 'checked-in' && ' Fill your daily task report before checking out.'}
+            {checkInStatus === 'checked-in' && !tasksSubmittedForDay && ' Fill your daily task report before checking out.'}
+             {checkInStatus === 'checked-in' && tasksSubmittedForDay && ' Task report submitted. Ready for checkout.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -426,7 +438,7 @@ export default function AttendancePage() {
                 <CardDescription>List your tasks for the day. Completed tasks will be summarized when you checkout.</CardDescription>
               </CardHeader>
               <CardContent>
-                <form className="space-y-6"> {/* Removed onSubmit here, handled by main checkout button */}
+                <form className="space-y-6">
                   {dailyTasks.map((task) => (
                     <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -534,7 +546,7 @@ export default function AttendancePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoUrl && ( // Only show photo if it exists (i.e., for check-ins)
+                  {lastDisplayRecord.photoUrl && ( 
                     <div className="w-full sm:w-1/3">
                       <p className="font-semibold mb-1">Photo:</p>
                       <Image
