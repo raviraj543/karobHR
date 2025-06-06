@@ -13,12 +13,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi, FileText, PlusCircle, Trash2 } from 'lucide-react';
+import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi, FileText, PlusCircle, Trash2, LogIn } from 'lucide-react';
 import Image from 'next/image';
 import { calculateDistance } from '@/lib/locationUtils';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
-import { format, startOfToday, endOfToday } from 'date-fns';
+import { format, startOfToday, endOfToday, parseISO } from 'date-fns';
 
 interface CheckInOutDisplayRecord {
   type: 'check-in' | 'check-out';
@@ -133,9 +133,14 @@ export default function AttendancePage() {
         setCheckInStatus('checked-in');
       } else {
         setCheckInStatus('checked-out');
-        setTasksSubmittedForDay(false);
-        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
-        setTaskSummary(null);
+        // Reset task-related states only if previously checked in and now checked out
+        // This ensures that if the page loads and user is already checked out, tasks aren't reset unnecessarily
+        // (though this might be redundant if tasksSubmittedForDay handles it)
+        if (checkInStatus === 'checked-in') { // Compare with previous local state
+             setTasksSubmittedForDay(false);
+             setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+             setTaskSummary(null);
+        }
       }
       setLastDisplayRecord({
         type: latestEvent.type,
@@ -146,13 +151,15 @@ export default function AttendancePage() {
         matchedGeofenceType: latestEvent.matchedGeofenceType,
       });
     } else if (user) {
+      // No events today means user is checked out
       setCheckInStatus('checked-out');
       setLastDisplayRecord(null);
       setTasksSubmittedForDay(false);
       setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
       setTaskSummary(null);
     }
-  }, [user, myTodaysAttendanceEvents]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, myTodaysAttendanceEvents]); // checkInStatus removed from deps to avoid loop
 
 
   const capturePhoto = (): string | null => {
@@ -294,6 +301,7 @@ export default function AttendancePage() {
       return;
     }
      if (tasksSubmittedForDay) {
+      // If tasks already submitted for this check-in session, just checkout
       await handleActualCheckInOrOut('check-out');
       return;
     }
@@ -309,7 +317,7 @@ export default function AttendancePage() {
             description: "No tasks were entered. Proceeding to checkout without a report.",
             variant: "default",
         });
-        setTasksSubmittedForDay(true);
+        setTasksSubmittedForDay(true); // Mark as submitted (even if empty) to allow direct checkout next time
         await handleActualCheckInOrOut('check-out');
         setIsSubmittingTasks(false);
         return;
@@ -468,28 +476,32 @@ export default function AttendancePage() {
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
                     </Button>
                   </div>
+                   {/* Submit button for tasks is now merged with the main Check Out button */}
                 </form>
               </CardContent>
             </Card>
           )}
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            {checkInStatus === 'checked-out' ? (
-              <Button size="lg" onClick={() => handleActualCheckInOrOut('check-in')} disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true} className="w-full sm:w-auto">
-                {isSubmittingAttendance ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />} Check In
-              </Button>
-            ) : (
-              <Button
-                size="lg"
-                variant={tasksSubmittedForDay ? "destructive" : "default"}
-                onClick={handleTaskReportAndCheckout}
-                disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
-                className="w-full sm:w-auto"
-              >
-                {(isSubmittingAttendance || isSubmittingTasks) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
-                {tasksSubmittedForDay ? 'Check Out' : 'Submit Report & Check Out'}
-              </Button>
-            )}
+            <Button
+              size="lg"
+              onClick={() => handleActualCheckInOrOut('check-in')}
+              disabled={checkInStatus === 'checked-in' || isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
+              className="w-full sm:w-auto"
+            >
+              {isSubmittingAttendance && checkInStatus === 'checked-out' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />} Check In
+            </Button>
+            
+            <Button
+              size="lg"
+              variant={checkInStatus === 'checked-in' && !tasksSubmittedForDay ? "default" : "destructive"}
+              onClick={handleTaskReportAndCheckout}
+              disabled={checkInStatus === 'checked-out' || isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
+              className="w-full sm:w-auto"
+            >
+              {(isSubmittingAttendance || isSubmittingTasks) && checkInStatus === 'checked-in' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
+              {checkInStatus === 'checked-in' && !tasksSubmittedForDay ? 'Submit Report & Check Out' : 'Check Out'}
+            </Button>
           </div>
 
           {taskSummary && (
