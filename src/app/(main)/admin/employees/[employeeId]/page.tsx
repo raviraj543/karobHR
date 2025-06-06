@@ -23,6 +23,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock, Clock4, FileSpreadsheet } from 'lucide-react';
 import { formatDuration, isSunday } from '@/lib/dateUtils';
+import { cn } from "@/lib/utils";
+
 
 interface DailyWorkSummary {
   date: string;
@@ -62,17 +64,22 @@ export default function EmployeeDetailPage() {
 
   const employee = useMemo(() => {
     if (authLoading || !allUsers.length) return null;
-    const foundEmployee = allUsers.find(u => u.employeeId === employeeId) || null;
-    if (foundEmployee) {
-      if (!isEditingSalary) {
-        setEditedSalary(foundEmployee.baseSalary || '');
-      }
-      if (!isEditingHours) {
-        setEditedHours(foundEmployee.standardDailyHours || '');
-      }
+    return allUsers.find(u => u.employeeId === employeeId) || null;
+  }, [allUsers, employeeId, authLoading]);
+
+  // Moved setState calls for editedSalary and editedHours into useEffect hooks
+  useEffect(() => {
+    if (employee && !isEditingSalary) {
+      setEditedSalary(employee.baseSalary || '');
     }
-    return foundEmployee;
-  }, [allUsers, employeeId, authLoading, isEditingSalary, isEditingHours]);
+  }, [employee, isEditingSalary]);
+
+  useEffect(() => {
+    if (employee && !isEditingHours) {
+      setEditedHours(employee.standardDailyHours || '');
+    }
+  }, [employee, isEditingHours]);
+
 
   const employeeAttendanceEvents = useMemo(() => {
     if (!employee || authLoading) return [];
@@ -186,7 +193,7 @@ export default function EmployeeDetailPage() {
   }, [employeeAttendanceEvents]);
 
   useEffect(() => {
-    if (employee && calculateMonthlyPayrollDetails) {
+    if (employee && calculateMonthlyPayrollDetails && employeeAttendanceEvents) { // ensure employeeAttendanceEvents is available
       const report = calculateMonthlyPayrollDetails(employee, reportYear, reportMonth, employeeAttendanceEvents);
       setMonthlyPayrollReport(report);
     }
@@ -213,7 +220,7 @@ export default function EmployeeDetailPage() {
         employeeName: employee.name || employee.employeeId,
         tasks: tasksForSummary,
         leaveApplications: (employee.leaves || []).map(l => ({ leaveType: l.leaveType, status: l.status, startDate: l.startDate, endDate: l.endDate, reason: l.reason })),
-        attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0, // This might be deprecated with new payroll
+        attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0, 
         baseSalary: employee.baseSalary || 0,
       };
       const result = await summarizeEmployeePerformance(performanceInput);
@@ -234,7 +241,7 @@ export default function EmployeeDetailPage() {
       return;
     }
     const updatedEmployee = { ...employee, baseSalary: newSalary };
-    updateUserInContext(updatedEmployee);
+    await updateUserInContext(updatedEmployee); // ensure await for async operation
     setIsEditingSalary(false);
     toast({ title: "Salary Updated", description: `${employee.name || employee.employeeId}'s base salary updated to ₹${newSalary.toLocaleString('en-IN')}.` });
   };
@@ -247,7 +254,7 @@ export default function EmployeeDetailPage() {
       return;
     }
     const updatedEmployee = { ...employee, standardDailyHours: newHours };
-    updateUserInContext(updatedEmployee);
+    await updateUserInContext(updatedEmployee); // ensure await for async operation
     setIsEditingHours(false);
     toast({ title: "Standard Hours Updated", description: `${employee.name || employee.employeeId}'s standard daily hours updated to ${newHours}h.` });
   };
@@ -273,11 +280,6 @@ export default function EmployeeDetailPage() {
   const initials = employee.name ? employee.name.split(' ').map((n) => n[0]).join('').toUpperCase() : employee.employeeId[0].toUpperCase();
   const baseSalary = employee.baseSalary || 0;
   const standardHours = employee.standardDailyHours || 8;
-  // const attendanceFactor = employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0; // Less relevant now
-  // const salaryAfterAttendance = baseSalary * attendanceFactor; // Replaced by detailed calculation
-  // const approvedAdvancesTotal = employee.advances?.filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0) || 0;
-  // const netPayable = salaryAfterAttendance - approvedAdvancesTotal; // Replaced by detailed calculation
-
 
   const getRoleDisplayName = (role: typeof employee.role) => {
     if (!role) return 'N/A';
@@ -345,8 +347,6 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Department" icon={Briefcase} value={employee.department || 'N/A'} />
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
             <InfoCard title="Std. Daily Hours" icon={Clock4} value={`${standardHours}h`} />
-            {/* Mock Attendance Factor is now less relevant */}
-            {/* <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} /> */}
           </div>
 
           <Separator />
@@ -739,3 +739,6 @@ function ReportItem({ label, value, className }: ReportItemProps) {
         </div>
     );
 }
+
+
+    
