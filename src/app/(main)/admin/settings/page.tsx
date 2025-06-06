@@ -20,7 +20,7 @@ import type { CompanySettings } from '@/lib/types';
 // };
 
 export default function AdminSettingsPage() {
-  const { companySettings, updateCompanySettings, companyId, loading: authLoading } = useAuth();
+  const { companySettings, updateCompanySettings, companyId, loading: authLoading, user } = useAuth();
   const { toast } = useToast();
 
   const [officeName, setOfficeName] = useState('');
@@ -38,10 +38,11 @@ export default function AdminSettingsPage() {
       setOfficeRadius(String(companySettings.officeLocation.radius));
     } else if (!authLoading && companyId && !companySettings) {
       // If companyId exists but no settings yet, initialize with defaults
+      // This typically happens if the company doc was created without officeLocation
       setOfficeName('Main Office');
-      setOfficeLat('0');
-      setOfficeLon('0');
-      setOfficeRadius('100');
+      setOfficeLat('0'); // Default to 0, admin must update
+      setOfficeLon('0'); // Default to 0, admin must update
+      setOfficeRadius('100'); // Default radius
     }
   }, [companySettings, authLoading, companyId]);
 
@@ -58,6 +59,11 @@ export default function AdminSettingsPage() {
         toast({ title: "Invalid Coordinates", description: "Latitude must be between -90 and 90. Longitude must be between -180 and 180.", variant: "destructive"});
         return;
     }
+    
+    if (!companyId) {
+      toast({ title: "Error Saving Geofence", description: "Company context is missing. Please try logging out and back in.", variant: "destructive" });
+      return;
+    }
 
     setIsSavingGeofence(true);
     try {
@@ -69,6 +75,7 @@ export default function AdminSettingsPage() {
       });
       toast({ title: "Geofence Settings Saved", description: "Office location and radius have been updated." });
     } catch (error) {
+      console.error(">>> KAROBHR TRACE: Error in handleSaveGeofence on settings page:", error);
       toast({ title: "Error Saving Geofence", description: (error as Error).message || "Could not save settings.", variant: "destructive" });
     } finally {
       setIsSavingGeofence(false);
@@ -91,7 +98,7 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="companyName">Company Name</Label>
-            <Input id="companyName" defaultValue={companySettings?.companyName || "KarobHR Solutions Inc."} disabled />
+            <Input id="companyName" value={companySettings?.companyName || "Loading company name..."} readOnly disabled />
             <p className="text-xs text-muted-foreground">Company name is set during initial admin setup.</p>
           </div>
           <div className="space-y-1">
@@ -130,7 +137,7 @@ export default function AdminSettingsPage() {
             <Label htmlFor="geofenceRadius">Geofence Radius (meters)</Label>
             <Input id="geofenceRadius" type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)} placeholder="e.g., 100"/>
           </div>
-          <Button onClick={handleSaveGeofence} disabled={isSavingGeofence || authLoading}>
+          <Button onClick={handleSaveGeofence} disabled={isSavingGeofence || authLoading || !companyId || !user || user.role !== 'admin'}>
             {isSavingGeofence && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Office Geofence
           </Button>
