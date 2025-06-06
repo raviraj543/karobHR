@@ -34,7 +34,7 @@ export default function AttendancePage() {
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<'checked-out' | 'checked-in'>('checked-out');
-  const checkInStatusRef = useRef(checkInStatus); // To track status transitions for task reset
+  const checkInStatusRef = useRef(checkInStatus);
   const [error, setError] = useState<string | null>(null);
 
   const [dailyTasks, setDailyTasks] = useState<ClientTask[]>([
@@ -132,12 +132,10 @@ export default function AttendancePage() {
 
 
   useEffect(() => {
-    // This ref stores the status as it was *before* this current effect execution.
-    // It's crucial for comparing if a transition happened (e.g., checked-in -> checked-out).
-    const previousStatusFromRef = checkInStatusRef.current;
-    let newDerivedStatus: 'checked-in' | 'checked-out' = 'checked-out';
+    const previousStatusFromRef = checkInStatusRef.current; // Status before this effect run
+    console.log(`>>> KAROBHR TRACE: (useEffect[user,myTodaysAttendanceEvents]) Start. User: ${!!user}, Events Today: ${myTodaysAttendanceEvents.length}, PreviousStatusFromRef(before current run): ${previousStatusFromRef}, CurrentActualState(before this run): ${checkInStatus}`);
 
-    console.log(`>>> KAROBHR TRACE: (useEffect[user,myTodaysAttendanceEvents]) Start. User: ${!!user}, Events Today: ${myTodaysAttendanceEvents.length}, PreviousStatusFromRef: ${previousStatusFromRef}, CurrentActualState: ${checkInStatus}`);
+    let newDerivedStatus: 'checked-in' | 'checked-out' = 'checked-out';
 
     if (user && myTodaysAttendanceEvents.length > 0) {
         const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
@@ -157,8 +155,17 @@ export default function AttendancePage() {
         setLastDisplayRecord(null);
     }
 
+    // Task Reset Logic: This must compare the status *before this effect run* (previousStatusFromRef)
+    // with the status *derived in this* effect run (newDerivedStatus).
+    console.log(`>>> KAROBHR TRACE: (useEffect) Task reset check: PreviousStatusFromRef='${previousStatusFromRef}', NewDerivedStatus='${newDerivedStatus}'`);
+    if (previousStatusFromRef === 'checked-in' && newDerivedStatus === 'checked-out') {
+        console.log(">>> KAROBHR TRACE: (useEffect) Transition from checked-in to checked-out DETECTED (ref vs derived). Resetting tasks.");
+        setTasksSubmittedForDay(false);
+        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+        setTaskSummary(null);
+    }
+
     // Only update the actual checkInStatus state if the newly derived status is different from what's already in state.
-    // This prevents unnecessary re-renders if the derived status hasn't changed.
     if (checkInStatus !== newDerivedStatus) {
         console.log(`>>> KAROBHR TRACE: (useEffect) Status changing! Current state '${checkInStatus}' -> New derived '${newDerivedStatus}'. Updating state.`);
         setCheckInStatus(newDerivedStatus);
@@ -166,24 +173,12 @@ export default function AttendancePage() {
         console.log(`>>> KAROBHR TRACE: (useEffect) Status unchanged. Current state '${checkInStatus}' == New derived '${newDerivedStatus}'. No state update for checkInStatus needed.`);
     }
 
-    // Task Reset Logic:
-    // This should only happen when transitioning FROM 'checked-in' TO 'checked-out'.
-    // Compare the status *before* this effect run (previousStatusFromRef)
-    // with the status derived *in this* effect run (newDerivedStatus).
-    console.log(`>>> KAROBHR TRACE: (useEffect) Task reset check: PreviousStatusFromRef='${previousStatusFromRef}', NewDerivedStatus='${newDerivedStatus}'`);
-    if (previousStatusFromRef === 'checked-in' && newDerivedStatus === 'checked-out') {
-        console.log(">>> KAROBHR TRACE: (useEffect) Transition from checked-in to checked-out DETECTED (via ref comparison). Resetting tasks.");
-        setTasksSubmittedForDay(false);
-        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
-        setTaskSummary(null);
-    }
-
     // AFTER all logic in this effect, update the ref to hold the status
     // that was derived *in this run*. This becomes the "previous" status for the *next* run.
     checkInStatusRef.current = newDerivedStatus;
     console.log(`>>> KAROBHR TRACE: (useEffect) End. Updated checkInStatusRef.current to: ${newDerivedStatus}`);
 
-  }, [user, myTodaysAttendanceEvents]); // DEPEND ON THE SOURCE OF TRUTH (Firestore events) and user context.
+  }, [user, myTodaysAttendanceEvents]);
 
 
   const capturePhoto = (): string | null => {
@@ -264,7 +259,7 @@ export default function AttendancePage() {
       }
     } else { // type === 'check-out'
       console.log(">>> KAROBHR TRACE: handleActualCheckInOrOut - Processing CHECK-OUT. No photo will be taken.");
-      photoDataUrlString = null;
+      photoDataUrlString = null; // Explicitly no photo for checkout
     }
 
     const location = await getGeolocation();
@@ -301,7 +296,8 @@ export default function AttendancePage() {
 
   const handleTaskReportAndCheckout = async (e?: FormEvent) => {
     e?.preventDefault();
-    console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout triggered. Current checkInStatus (from state variable):", checkInStatus, "TasksSubmittedForDay:", tasksSubmittedForDay);
+    console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current checkInStatus (from state variable):", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
+
     if (checkInStatus !== 'checked-in') {
       toast({ title: "Not Checked In", description: "You must be checked in to submit a report and check out.", variant: "destructive" });
       console.warn(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Aborted, user not checked in according to local state.");
@@ -353,7 +349,7 @@ export default function AttendancePage() {
       setTasksSubmittedForDay(true);
       toast({
         title: "Task Report Submitted!",
-        description: "Your task summary has been successfully created. Now proceeding to geofenced checkout.",
+        description: "Your task summary has been created. Now proceeding to geofenced checkout.",
         duration: 5000,
       });
       if (user?.name) {
@@ -398,8 +394,6 @@ export default function AttendancePage() {
             Check-in requires camera & location. Check-out (after report) needs location only.
             Office Radius: {officeRadiusDisplay}m
             {user?.remoteWorkLocation && `, or your remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
-            {checkInStatus === 'checked-in' && !tasksSubmittedForDay && ' Fill your daily task report before checking out.'}
-            {checkInStatus === 'checked-in' && tasksSubmittedForDay && ' Task report submitted. Ready for checkout.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -411,9 +405,15 @@ export default function AttendancePage() {
             </Alert>
           )}
 
+          {/* Check-In Section */}
           <Card>
-            <CardHeader><CardTitle className="text-lg">Camera Feed (Required for Check-In Only)</CardTitle></CardHeader>
-            <CardContent>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <LogIn className="mr-2 h-5 w-5 text-primary" /> Check-In
+              </CardTitle>
+              <CardDescription>Use camera and location for check-in.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="relative aspect-video w-full max-w-md mx-auto bg-muted rounded-md overflow-hidden border">
                 <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
                 {hasCameraPermission === false && (
@@ -431,117 +431,120 @@ export default function AttendancePage() {
                 )}
               </div>
               <canvas ref={canvasRef} className="hidden" />
+              <Button
+                size="lg"
+                onClick={() => {
+                  console.log(">>> KAROBHR TRACE: Check In button clicked. Current checkInStatus (from state variable):", checkInStatus);
+                  handleActualCheckInOrOut('check-in');
+                }}
+                disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-in' || hasCameraPermission !== true}
+                className="w-full sm:w-auto"
+              >
+                {isSubmittingAttendance && checkInStatus === 'checked-out' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}
+                Check In
+              </Button>
             </CardContent>
           </Card>
 
-          {checkInStatus === 'checked-in' && !tasksSubmittedForDay && (
+          {/* Check-Out & Task Report Section - Conditional Rendering */}
+          {checkInStatus === 'checked-in' && (
             <Card className="border-primary/50">
               <CardHeader>
-                <CardTitle className="flex items-center"><FileText className="mr-2 h-5 w-5 text-primary"/>Daily Task Report</CardTitle>
-                <CardDescription>List your tasks for the day. Completed tasks will be summarized when you checkout.</CardDescription>
+                <CardTitle className="flex items-center text-lg">
+                  <LogOut className="mr-2 h-5 w-5 text-primary" /> Check-Out & Report
+                </CardTitle>
+                <CardDescription>
+                  {tasksSubmittedForDay ? "Task report submitted. Ready for geofenced checkout." : "Fill your daily task report before checking out."}
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <form className="space-y-6">
-                  {dailyTasks.map((task) => (
-                    <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <Label htmlFor={`task-title-${task.id}`}>Task Title</Label>
-                          <Input
-                            id={`task-title-${task.id}`}
-                            value={task.title}
-                            onChange={(e) => handleTaskChange(task.id, 'title', e.target.value)}
-                            placeholder="e.g., Design landing page"
-                          />
+              <CardContent className="space-y-4">
+                {!tasksSubmittedForDay && (
+                  <div className="space-y-4">
+                    <h3 className="text-md font-semibold flex items-center"><FileText className="mr-2 h-4 w-4"/>Daily Task Report</h3>
+                    <form className="space-y-6">
+                      {dailyTasks.map((task) => (
+                        <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <Label htmlFor={`task-title-${task.id}`}>Task Title</Label>
+                              <Input
+                                id={`task-title-${task.id}`}
+                                value={task.title}
+                                onChange={(e) => handleTaskChange(task.id, 'title', e.target.value)}
+                                placeholder="e.g., Design landing page"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`task-status-${task.id}`}>Status</Label>
+                              <Select
+                                value={task.status}
+                                onValueChange={(value) => handleTaskChange(task.id, 'status', value as AiTask['status'])}
+                              >
+                                <SelectTrigger id={`task-status-${task.id}`}>
+                                  <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Completed">Completed</SelectItem>
+                                  <SelectItem value="In Progress">In Progress</SelectItem>
+                                  <SelectItem value="Blocked">Blocked</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`task-desc-${task.id}`}>Description/Update</Label>
+                            <Textarea
+                              id={`task-desc-${task.id}`}
+                              value={task.description}
+                              onChange={(e) => handleTaskChange(task.id, 'description', e.target.value)}
+                              placeholder="Brief description or status update"
+                              rows={2}
+                            />
+                          </div>
+                          {dailyTasks.length > 1 && (
+                             <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeTask(task.id)}
+                                className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                                aria-label="Remove task"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                          )}
                         </div>
-                        <div className="space-y-1">
-                          <Label htmlFor={`task-status-${task.id}`}>Status</Label>
-                          <Select
-                            value={task.status}
-                            onValueChange={(value) => handleTaskChange(task.id, 'status', value as AiTask['status'])}
-                          >
-                            <SelectTrigger id={`task-status-${task.id}`}>
-                              <SelectValue placeholder="Select status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Completed">Completed</SelectItem>
-                              <SelectItem value="In Progress">In Progress</SelectItem>
-                              <SelectItem value="Blocked">Blocked</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      ))}
+                      <div className="flex justify-start pt-2">
+                        <Button type="button" variant="outline" onClick={addTask} className="text-sm">
+                          <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
+                        </Button>
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor={`task-desc-${task.id}`}>Description/Update</Label>
-                        <Textarea
-                          id={`task-desc-${task.id}`}
-                          value={task.description}
-                          onChange={(e) => handleTaskChange(task.id, 'description', e.target.value)}
-                          placeholder="Brief description or status update"
-                          rows={2}
-                        />
-                      </div>
-                      {dailyTasks.length > 1 && (
-                         <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeTask(task.id)}
-                            className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
-                            aria-label="Remove task"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex justify-start pt-2">
-                    <Button type="button" variant="outline" onClick={addTask} className="text-sm">
-                      <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
-                    </Button>
+                    </form>
                   </div>
-                </form>
+                )}
+
+                {taskSummary && tasksSubmittedForDay && (
+                  <div className="mt-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 shadow-inner p-4">
+                      <h4 className="text-md font-semibold text-primary mb-2">Submitted Task Report Summary:</h4>
+                      <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br />') }} />
+                  </div>
+                )}
+
+                <Button
+                  size="lg"
+                  variant="default"
+                  onClick={() => {
+                    console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current checkInStatus (from state variable):", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
+                    handleTaskReportAndCheckout();
+                  }}
+                  disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-out'}
+                  className="w-full sm:w-auto mt-4"
+                >
+                  {(isSubmittingAttendance || isSubmittingTasks) && checkInStatus === 'checked-in' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
+                  {tasksSubmittedForDay ? 'Check Out' : 'Submit Report & Check Out'}
+                </Button>
               </CardContent>
-            </Card>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4 border-t">
-            <Button
-              size="lg"
-              onClick={() => {
-                console.log(">>> KAROBHR TRACE: Check In button clicked. Current checkInStatus (from state variable):", checkInStatus);
-                handleActualCheckInOrOut('check-in');
-              }}
-              disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-in' || hasCameraPermission !== true}
-              className="w-full sm:w-auto"
-            >
-              {(isSubmittingAttendance && checkInStatus === 'checked-out') ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}
-              Check In
-            </Button>
-
-            <Button
-              size="lg"
-              variant="default"
-              onClick={() => {
-                console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current checkInStatus (from state variable):", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
-                handleTaskReportAndCheckout();
-              }}
-              disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-out'}
-              className="w-full sm:w-auto"
-            >
-              {(isSubmittingAttendance || isSubmittingTasks) && checkInStatus === 'checked-in' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
-              {checkInStatus === 'checked-in' && !tasksSubmittedForDay ? 'Submit Report & Check Out' : 'Check Out'}
-            </Button>
-          </div>
-
-          {taskSummary && (
-            <Card className="mt-6 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 shadow-inner">
-                <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-primary">Submitted Task Report Summary:</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br />') }} />
-                </CardContent>
             </Card>
           )}
 
