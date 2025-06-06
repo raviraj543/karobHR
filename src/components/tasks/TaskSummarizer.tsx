@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import { summarizeEmployeeTasks } from '@/ai/flows/summarize-employee-tasks';
 import type { ClientTask, AiTask } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,8 @@ export function TaskSummarizer() {
   const [summary, setSummary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth(); 
+  const { user } = useAuth();
+  const router = useRouter(); // Initialize useRouter
 
   const handleTaskChange = (id: string, field: keyof AiTask, value: string) => {
     setTasks(tasks.map(task => task.id === id ? { ...task, [field]: value } : task));
@@ -41,7 +43,7 @@ export function TaskSummarizer() {
     setSummary(null);
 
     const tasksToSummarize: AiTask[] = tasks.map(({ id, ...rest }) => rest);
-    
+
     if (tasksToSummarize.every(task => task.status !== 'Completed')) {
         toast({
             title: "No Completed Tasks",
@@ -57,7 +59,8 @@ export function TaskSummarizer() {
       setSummary(result.summary);
       toast({
         title: "Summary Generated & Report Submitted!",
-        description: "Your task summary has been successfully created.",
+        description: "Your task summary has been successfully created. Please proceed to checkout.",
+        duration: 7000,
       });
       // Mock notification to admin
       toast({
@@ -66,6 +69,10 @@ export function TaskSummarizer() {
         variant: "default",
         duration: 7000,
       });
+
+      // Redirect to attendance page
+      router.push('/attendance');
+
     } catch (error) {
       console.error('Error summarizing tasks:', error);
       toast({
@@ -82,7 +89,7 @@ export function TaskSummarizer() {
     <Card className="w-full max-w-2xl mx-auto shadow-sm">
       <CardHeader>
         <CardTitle className="text-2xl font-semibold flex items-center"><FileText className="mr-2 h-6 w-6 text-primary"/>Daily Task Report & Checkout</CardTitle>
-        <CardDescription>List your tasks for the day. Completed tasks will be summarized and submitted.</CardDescription>
+        <CardDescription>List your tasks for the day. Completed tasks will be summarized and submitted. You will then be redirected to the attendance page to checkout.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
