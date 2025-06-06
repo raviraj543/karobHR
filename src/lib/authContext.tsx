@@ -29,6 +29,7 @@ export interface NewEmployeeData {
   department: string;
   role: UserRole;
   companyId: string;
+  companyName: string; // Added companyName
   joiningDate?: string;
   baseSalary?: number;
   standardDailyHours?: number;
@@ -195,7 +196,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     let isMounted = true;
-    // Set loading true at the beginning of any auth state evaluation
     setLoading(true);
     console.log(">>> KAROBHR TRACE: onAuthStateChanged - Setting loading to TRUE at start of auth check.");
 
@@ -207,18 +207,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (currentFirebaseUser) {
         const fetchedUser = await fetchUserData(currentFirebaseUser, dbInstance);
         if (!fetchedUser || !fetchedUser.companyId) {
-          // If fetching user profile fails or companyId is missing, it's a non-operational state.
           setUser(null); setRole(null); setCompanyId(null); setCompanySettings(undefined);
           setLoading(false);
           console.warn(`>>> KAROBHR TRACE: onAuthStateChanged - User ${currentFirebaseUser.uid} authenticated, but profile/companyId not loaded. Setting loading false.`);
         }
-        // If fetchedUser is OK, loading remains true. The "finalize loading" effect will set it to false
-        // once companySettings are also resolved.
       } else {
-        // No Firebase user. Clear app state.
-        setUser(null); setRole(null); setCompanyId(null); setCompanySettings(undefined); // Crucially reset companySettings to undefined
+        setUser(null); setRole(null); setCompanyId(null); setCompanySettings(undefined);
         setAllUsers([]); setTasks([]); setAnnouncements([]); setAttendanceLog([]);
-        setLoading(false); // No user, so not loading.
+        setLoading(false);
         console.log(">>> KAROBHR TRACE: onAuthStateChanged - No Firebase user. Cleared app state, loading set to false.");
       }
     });
@@ -228,14 +224,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log(">>> KAROBHR TRACE: Unsubscribing from onAuthStateChanged.");
       unsubscribe();
     };
-  }, [authInstance, dbInstance, fetchUserData, firebaseError]); // `loading` is NOT a dependency here
+  }, [authInstance, dbInstance, fetchUserData, firebaseError]);
 
 
   // Listener for company settings if companyId is known
   useEffect(() => {
     let unsub: (() => void) | undefined;
     if (!dbInstance || !companyId) {
-      setCompanySettings(undefined); // Reset to undefined, indicating settings are not resolved/applicable
+      console.log(">>> KAROBHR TRACE: Company settings listener - No DB or companyId. Setting companySettings to undefined.");
+      setCompanySettings(undefined);
       return;
     }
     console.log(">>> KAROBHR TRACE: Subscribing to companySettings for company:", companyId);
@@ -246,12 +243,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCompanySettings(settingsData);
         console.log(">>> KAROBHR TRACE: Company settings updated/loaded:", settingsData);
       } else {
-        setCompanySettings(null); // Explicitly null: settings don't exist, but fetch is "resolved"
+        setCompanySettings(null);
         console.warn(">>> KAROBHR TRACE: Company settings document does not exist for company:", companyId);
       }
     }, (error) => {
       console.error(">>> KAROBHR TRACE: Error fetching company settings:", error);
-      setCompanySettings(null); // Error, but fetch is "resolved" as failed
+      setCompanySettings(null);
     });
     return () => unsub && unsub();
   }, [dbInstance, companyId]);
@@ -260,7 +257,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Effect to finalize loading state based on user and companySettings resolution
   useEffect(() => {
     if (firebaseError || !authInstance) {
-      if (loading) { // Only update if it's currently true
+      if (loading) {
         setLoading(false);
         console.log(">>> KAROBHR TRACE: Final loading (false) due to firebaseError or no authInstance.");
       }
@@ -268,18 +265,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     if (user) {
-      // If user exists, we are "loaded" once companyId is known AND companySettings has been resolved (is not undefined)
       if (companyId && companySettings !== undefined) {
         if (loading) {
           setLoading(false);
           console.log(`>>> KAROBHR TRACE: Final loading (false): User ${user.employeeId}, CompanySettings resolved (value: ${companySettings === null ? 'null' : 'exists'}).`);
         }
       }
-      // If companySettings is still undefined, loading remains true (as set by onAuthStateChanged when user was detected)
-      // No need to set loading = true here, onAuthStateChanged handles that.
-    } else { // No user
-      // onAuthStateChanged should have already set loading to false when user became null.
-      // This is a safeguard: if user is null but we are somehow still loading, set to false.
+    } else {
       if (loading) {
         setLoading(false);
         console.log(">>> KAROBHR TRACE: Final loading (false) due to no user (safeguard).");
@@ -288,9 +280,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [user, companyId, companySettings, firebaseError, authInstance, loading]);
 
 
-  // Data listeners (allUsers, tasks, announcements, attendanceLog)
-  // These listeners should NOT manipulate the main `loading` state.
-  // Components consuming this data should handle their own display states (e.g., showing a spinner if data array is empty).
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -409,7 +398,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!firebaseError) setFirebaseError(new Error("Firebase services not available for login."));
       throw new Error("Authentication service not ready. Check Firebase config.");
     }
-    setLoading(true); // Explicitly set loading true at the start of login attempt
+    setLoading(true); 
     console.log(`>>> KAROBHR TRACE: login - Attempting login for employeeId: ${employeeIdInput}`);
     try {
       console.log(`>>> KAROBHR TRACE: login - Querying userDirectory for employeeId: ${employeeIdInput}`);
@@ -420,7 +409,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (directorySnapshot.empty) {
         console.warn(`>>> KAROBHR TRACE: login - No user found in userDirectory for employeeId: ${employeeIdInput}.`);
-        setLoading(false); // Login attempt failed, set loading false
+        setLoading(false); 
         throw new Error("Invalid User ID or Password.");
       }
 
@@ -449,21 +438,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (firebaseUser.uid !== userIdFromDirectory) {
           console.error(`>>> KAROBHR TRACE: login - UID MISMATCH! Auth UID (${firebaseUser.uid}) vs Directory UID (${userIdFromDirectory}) for ${employeeIdInput}. This is a critical data integrity issue.`);
-          await firebaseSignOut(authInstance); // This will trigger onAuthStateChanged to clear state and set loading false
+          await firebaseSignOut(authInstance); 
           throw new Error("User data integrity error. Please contact support.");
       }
-      // At this point, onAuthStateChanged will take over, call fetchUserData,
-      // and the "finalize loading" effect will set loading to false once companySettings are resolved.
-      // We don't set loading false here directly if auth succeeds.
-      const loggedInUser = await fetchUserData(firebaseUser, dbInstance, userCompanyIdFromDirectory); // Re-fetch or rely on onAuthStateChanged
+      
+      const loggedInUser = await fetchUserData(firebaseUser, dbInstance, userCompanyIdFromDirectory); 
 
       if (loggedInUser) {
         console.log(`>>> KAROBHR TRACE: login - Successfully fetched profile for ${loggedInUser.name} (${loggedInUser.employeeId}). Login complete. Role: ${loggedInUser.role}, Company: ${loggedInUser.companyId}`);
-        // Loading will be set to false by the useEffect hook watching user and companySettings
         return loggedInUser;
       } else {
         console.error(`>>> KAROBHR TRACE: login - Firebase Auth successful for UID: ${firebaseUser.uid}, but Firestore profile NOT FOUND or fetchUserData failed. This is a critical issue.`);
-        await firebaseSignOut(authInstance); // Triggers onAuthStateChanged, which sets loading false
+        await firebaseSignOut(authInstance); 
         throw new Error("Login succeeded but user profile could not be loaded.");
       }
     } catch (error: any) {
@@ -477,7 +463,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else if (error.message && (error.message.startsWith("User data inconsistency") || error.message.startsWith("Login succeeded but user profile could not be loaded") || error.message.startsWith("User configuration error"))) {
         detailedErrorMessage = error.message;
       }
-      setLoading(false); // Ensure loading is false on any login error
+      setLoading(false); 
       if (!firebaseError && !error.message?.includes("Firebase services not available")) {
         setFirebaseError(new Error(detailedErrorMessage + originalFirebaseError));
       }
@@ -492,15 +478,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     console.log(">>> KAROBHR TRACE: Logging out user...");
-    setLoading(true); // Set loading true before sign out, onAuthStateChanged will set it false
+    setLoading(true); 
     try {
       await firebaseSignOut(authInstance);
       console.log(">>> KAROBHR TRACE: User logged out successfully. onAuthStateChanged will clear app state and set loading false.");
-      // onAuthStateChanged will handle resetting user, role, companyId, companySettings, and setLoading(false)
     } catch (error) {
       console.error(">>> KAROBHR TRACE: Logout error:", error);
       if(!firebaseError) setFirebaseError(new Error("Logout failed."));
-      setLoading(false); // Ensure loading is false if signOut itself fails
+      setLoading(false); 
     }
   }, [authInstance, firebaseError]);
 
@@ -518,11 +503,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.error(">>> KAROBHR TRACE: addNewEmployee - CRITICAL - companyId is missing or invalid in employeeData:", employeeData.companyId);
         throw new Error(`Internal error: Company context is missing for new employee creation. CompanyId provided: '${employeeData.companyId}'`);
     }
+    if (employeeData.role === 'admin' && (!employeeData.companyName || employeeData.companyName.trim() === '')) {
+        console.error(">>> KAROBHR TRACE: addNewEmployee - CRITICAL - companyName is missing for admin role setup:", employeeData.companyName);
+        throw new Error("Company Name is required when setting up an admin account.");
+    }
+
 
     const finalEmail = employeeData.email || `${employeeData.employeeId.toLowerCase().replace(/[^a-z0-9]/gi, '')}@${employeeData.companyId.split('-')[0]}.karobhr.local`;
     const isFirstAdminSetup = employeeData.role === 'admin' && (!user || !allUsers.some(u => u.role === 'admin' && u.companyId === employeeData.companyId));
 
-    console.log(`>>> KAROBHR TRACE: addNewEmployee - START - Adding new ${employeeData.role}: ${employeeData.employeeId} for company ${employeeData.companyId} with email ${finalEmail}. Is First Admin: ${isFirstAdminSetup}`);
+    console.log(`>>> KAROBHR TRACE: addNewEmployee - START - Adding new ${employeeData.role}: ${employeeData.employeeId} for company ${employeeData.companyId} with email ${finalEmail}. Is First Admin: ${isFirstAdminSetup}. Company Name for setup: ${employeeData.companyName}`);
 
     const directoryCheckQuery = query(
         collection(dbInstance, 'userDirectory'),
@@ -579,26 +569,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const companyDocRef = doc(dbInstance, `companies/${employeeData.companyId}`);
             const initialCompanySettings: CompanySettings = {
                 companyId: employeeData.companyId,
-                companyName: employeeData.name, // Use admin's name as initial company name
+                companyName: employeeData.companyName, // Use companyName from employeeData
                 adminUid: newFirebaseUser.uid,
-                createdAt: new Date().toISOString(),
-                 officeLocation: {
-                    name: "Main Office (Set by Admin)",
-                    latitude: 0,
-                    longitude: 0,
-                    radius: 100,
+                createdAt: serverTimestamp() as unknown as string, // Use serverTimestamp
+                 officeLocation: { // Default office location
+                    name: "Main Office",
+                    latitude: 0, // Default value, admin should update
+                    longitude: 0, // Default value, admin should update
+                    radius: 100, // Default radius
                 }
             };
-            batch.set(companyDocRef, {
-                ...initialCompanySettings,
-                createdAt: serverTimestamp()
-            });
-            console.log(`>>> KAROBHR TRACE: addNewEmployee - Added set(companyDocRef) to batch for new company: ${employeeData.companyId} with initial settings.`);
-            setCompanySettings(initialCompanySettings);
+            batch.set(companyDocRef, initialCompanySettings);
+            console.log(`>>> KAROBHR TRACE: addNewEmployee - Added set(companyDocRef) to batch for new company: ${employeeData.companyId} with initial settings including default officeLocation.`);
+            // Do not setCompanySettings here directly, let the listener pick it up
         }
 
         await batch.commit();
         console.log(`>>> KAROBHR TRACE: addNewEmployee - SUCCESS - Batch commit successful. User profile and directory entry created for ${newUserDocument.employeeId} (UID: ${newFirebaseUser.uid}).`);
+        
+        // If this was the first admin setup and the current logged-in context doesn't have a companyId yet,
+        // trigger a reload of user data or set companyId to ensure settings listener runs.
+        if (isFirstAdminSetup && (!companyId || companyId !== employeeData.companyId)) {
+            setCompanyId(employeeData.companyId); // This will trigger the companySettings listener
+        }
+
         return newFirebaseUser;
 
     } catch (error: any) {
@@ -619,7 +613,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         throw new Error(error.message || "Could not add new employee due to an unexpected error.");
     }
-}, [authInstance, dbInstance, user, allUsers, firebaseError]);
+}, [authInstance, dbInstance, user, allUsers, companyId, firebaseError]);
 
 
   const addTask = useCallback(async (newTaskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -735,7 +729,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error(">>> KAROBHR TRACE: AuthContext - addAnnouncement - Pre-condition failed. DB:", !!dbInstance, "User:", !!user, "IsAdmin:", user?.role === 'admin', "CompanyID:", companyId);
       throw new Error("Operation not allowed or company context missing.");
     }
-    const currentUserName = user.name || user.employeeId || 'Unknown Admin';
+    const currentUserName = user.name || user.employeeId || 'System Admin'; // More robust fallback
     console.log(`>>> KAROBHR TRACE: AuthContext - addAnnouncement - Admin ${user.employeeId} (UID: ${user.id}, Name: ${currentUserName}) posting announcement in company ${companyId}: "${title}"`);
 
     const newAnnouncementData: Omit<Announcement, 'id' | 'postedAt'> = {
@@ -806,40 +800,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateCompanySettings = useCallback(async (settingsUpdate: Partial<CompanySettings['officeLocation']>) => {
     if (!dbInstance || !companyId || !user || user.role !== 'admin') {
-        console.error(">>> KAROBHR TRACE: Cannot update company settings - insufficient permissions or context.");
+        console.error(">>> KAROBHR TRACE: Cannot update company settings - insufficient permissions or context. DB:", !!dbInstance, "CompanyId:", companyId, "User:", !!user, "AdminRole:", user?.role);
         throw new Error("Operation not allowed or company context missing.");
     }
     console.log(`>>> KAROBHR TRACE: Admin ${user.employeeId} updating company settings for ${companyId}:`, settingsUpdate);
     const companyDocRef = doc(dbInstance, `companies/${companyId}`);
     try {
         const updatePayload: Partial<CompanySettings> = {};
-        if (settingsUpdate.latitude !== undefined && settingsUpdate.longitude !== undefined && settingsUpdate.radius !== undefined) {
-            updatePayload.officeLocation = {
-                name: settingsUpdate.name || companySettings?.officeLocation?.name || "Main Office",
-                latitude: settingsUpdate.latitude,
-                longitude: settingsUpdate.longitude,
-                radius: settingsUpdate.radius,
-            };
-        } else if (Object.keys(settingsUpdate).length > 0) {
-             updatePayload.officeLocation = {
-                name: settingsUpdate.name || companySettings?.officeLocation?.name || "Main Office",
-                latitude: settingsUpdate.latitude ?? companySettings?.officeLocation?.latitude ?? 0,
-                longitude: settingsUpdate.longitude ?? companySettings?.officeLocation?.longitude ?? 0,
-                radius: settingsUpdate.radius ?? companySettings?.officeLocation?.radius ?? 100,
-            };
-        }
+        
+        const currentOfficeLocation = companySettings?.officeLocation || { name: "Main Office", latitude: 0, longitude: 0, radius: 100 };
+        const newOfficeLocation = {
+            name: settingsUpdate.name !== undefined ? settingsUpdate.name : currentOfficeLocation.name,
+            latitude: settingsUpdate.latitude !== undefined ? settingsUpdate.latitude : currentOfficeLocation.latitude,
+            longitude: settingsUpdate.longitude !== undefined ? settingsUpdate.longitude : currentOfficeLocation.longitude,
+            radius: settingsUpdate.radius !== undefined ? settingsUpdate.radius : currentOfficeLocation.radius,
+        };
+        updatePayload.officeLocation = newOfficeLocation;
 
 
-        if (Object.keys(updatePayload).length > 0) {
+        if (Object.keys(updatePayload).length > 0 && updatePayload.officeLocation) {
             await updateDoc(companyDocRef, updatePayload);
-            console.log(">>> KAROBHR TRACE: Company settings updated successfully in Firestore.");
+            console.log(">>> KAROBHR TRACE: Company settings updated successfully in Firestore with payload:", updatePayload);
             setCompanySettings(prev => prev ? ({ ...prev, ...updatePayload }) : (updatePayload as CompanySettings));
         } else {
-            console.log(">>> KAROBHR TRACE: No valid officeLocation data in settingsUpdate, skipping Firestore update.");
+            console.log(">>> KAROBHR TRACE: No valid officeLocation data in settingsUpdate or updatePayload is empty, skipping Firestore update.");
         }
-    } catch (error) {
-        console.error(">>> KAROBHR TRACE: Error updating company settings:", error);
-        throw new Error("Failed to update company settings.");
+    } catch (error: any) {
+        console.error(">>> KAROBHR TRACE: Error updating company settings:", error.message || error);
+        throw new Error(`Failed to update company settings: ${error.message}`);
     }
   }, [dbInstance, companyId, user, companySettings]);
 
@@ -1138,5 +1126,3 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export default AuthProvider;
-
-    

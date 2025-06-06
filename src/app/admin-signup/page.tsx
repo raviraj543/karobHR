@@ -40,20 +40,20 @@ export default function AdminSignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { addNewEmployee, loading: authLoading } = useAuth();
-  const [adminAccountExists, setAdminAccountExists] = useState<boolean | null>(null); // Changed default to null
+  const { addNewEmployee, loading: authContextLoading } = useAuth();
+  const [adminAccountExists, setAdminAccountExists] = useState<boolean | null>(null); 
 
 
   useEffect(() => {
     document.title = 'Create Admin Account - KarobHR';
     const checkAdminExistence = async () => {
-        if (authLoading) return;
+        if (authContextLoading) return;
         const { db } = getFirebaseInstances();
         try {
             const q = query(collection(db, "userDirectory"), where("role", "==", "admin"));
             const adminSnapshot = await getDocs(q);
             if (!adminSnapshot.empty) {
-                // Temporarily allow proceeding even if admin exists for debugging
+                
                 console.warn(">>> KAROBHR TRACE: Admin account(s) exist, but admin-signup page is temporarily allowing new signups for debugging.");
                 toast({
                     title: "Admin Account(s) Exist (Debug Mode)",
@@ -61,8 +61,8 @@ export default function AdminSignupPage() {
                     variant: "default",
                     duration: 9000,
                 });
-                // setAdminAccountExists(true); // Original line that disables form
-                setAdminAccountExists(false); // TEMPORARY: Allow form to be active
+                
+                setAdminAccountExists(false); 
             } else {
                 setAdminAccountExists(false);
             }
@@ -73,7 +73,7 @@ export default function AdminSignupPage() {
         }
     };
     checkAdminExistence();
-  }, [authLoading, router, toast]);
+  }, [authContextLoading, router, toast]);
 
 
   const onSubmit = async (data: AdminSignupFormValues) => {
@@ -87,23 +87,14 @@ export default function AdminSignupPage() {
       email: data.adminEmail, 
       department: 'Administration',
       role: 'admin' as UserRole,
-      companyId: newCompanyId, 
+      companyId: newCompanyId,
+      companyName: data.companyName, // Pass companyName here
       joiningDate: new Date().toISOString().split('T')[0],
-      baseSalary: 0,
+      baseSalary: 0, // Admin salary can be set later if needed
     };
 
     try {
-      // Optional: Re-check admin existence before submission, though initial check should cover most cases.
-      // if (adminAccountExists && !confirm("An admin account seems to exist. Are you sure you want to create another one? This is for debug only.")) {
-      //     toast({
-      //         title: "Admin Creation Cancelled",
-      //         description: "Admin setup was cancelled.",
-      //         variant: "default",
-      //     });
-      //     setIsLoading(false);
-      //     return;
-      // }
-
+      
       await addNewEmployee(adminDataForContext, data.password);
       toast({
         title: "Admin Account & Company Registered!",
@@ -136,7 +127,7 @@ export default function AdminSignupPage() {
     },
   });
 
-  if (authLoading || adminAccountExists === null) { // Wait if check is in progress
+  if (authContextLoading || adminAccountExists === null) { 
     return <div className="flex items-center justify-center min-h-screen">Loading setup information...</div>;
   }
 
@@ -250,10 +241,10 @@ export default function AdminSignupPage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authLoading}>
+              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authContextLoading}>
                 {isLoading ? 'Creating Account...' : 'Create Company & Admin Account'}
               </Button>
-               {/* Removed the "admin setup is already complete" message when form is enabled */}
+               
             </form>
           </Form>
         </CardContent>
