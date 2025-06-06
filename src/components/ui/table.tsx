@@ -1,3 +1,4 @@
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
@@ -54,16 +55,31 @@ TableFooter.displayName = "TableFooter"
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
->(({ className, ...props }, ref) => (
-  <tr
-    ref={ref}
-    className={cn(
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  // Destructure to remove 'key' from props if it exists, preventing it from being spread to the <tr> DOM element.
+  // React handles the 'key' prop at a higher level for list reconciliation.
+  // If 'key' is found here, it means it was passed incorrectly (e.g., as part of a spread object).
+  const { key, ...restProps } = props as any;
+
+  if (key !== undefined && process.env.NODE_ENV === 'development') {
+    // This console.warn helps identify if and where 'key' is being incorrectly passed.
+    // It's better to fix the source of the incorrect prop passing if possible.
+    console.warn(
+      `TableRow component received a 'key' prop directly in its props object (value: "${key}"). This is usually an anti-pattern. 'key' should be a direct prop on elements in an array for React's reconciliation, not part of a spread props object. Check the component rendering this TableRow.`
+    );
+  }
+
+  return (
+    <tr
+      ref={ref}
+      className={cn(
+        "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+        className
+      )}
+      {...restProps} // Spread only the rest of the props
+    />
+  );
+})
 TableRow.displayName = "TableRow"
 
 const TableHead = React.forwardRef<
