@@ -21,7 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format, parseISO, isToday, formatDistanceToNow, differenceInMilliseconds, getYear, getMonth } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock, Clock4, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock, Clock4, FileSpreadsheet, Home, MapPin } from 'lucide-react';
 import { formatDuration, isSunday } from '@/lib/dateUtils';
 import { cn } from "@/lib/utils";
 
@@ -57,8 +57,15 @@ export default function EmployeeDetailPage() {
   const [isEditingHours, setIsEditingHours] = useState(false);
   const [editedHours, setEditedHours] = useState<string | number>('');
 
+  const [isEditingRemoteLocation, setIsEditingRemoteLocation] = useState(false);
+  const [remoteLocationName, setRemoteLocationName] = useState('');
+  const [remoteLocationLat, setRemoteLocationLat] = useState('');
+  const [remoteLocationLon, setRemoteLocationLon] = useState('');
+  const [remoteLocationRadius, setRemoteLocationRadius] = useState('');
+
+
   const [reportYear, setReportYear] = useState<number>(currentYear);
-  const [reportMonth, setReportMonth] = useState<number>(getMonth(new Date())); // Current month (0-11)
+  const [reportMonth, setReportMonth] = useState<number>(getMonth(new Date()));
   const [monthlyPayrollReport, setMonthlyPayrollReport] = useState<MonthlyPayrollReport | null>(null);
 
 
@@ -67,7 +74,6 @@ export default function EmployeeDetailPage() {
     return allUsers.find(u => u.employeeId === employeeId) || null;
   }, [allUsers, employeeId, authLoading]);
 
-  // Moved setState calls for editedSalary and editedHours into useEffect hooks
   useEffect(() => {
     if (employee && !isEditingSalary) {
       setEditedSalary(employee.baseSalary || '');
@@ -79,6 +85,15 @@ export default function EmployeeDetailPage() {
       setEditedHours(employee.standardDailyHours || '');
     }
   }, [employee, isEditingHours]);
+
+  useEffect(() => {
+    if (employee && !isEditingRemoteLocation) {
+        setRemoteLocationName(employee.remoteWorkLocation?.name || 'Home Office');
+        setRemoteLocationLat(employee.remoteWorkLocation ? String(employee.remoteWorkLocation.latitude) : '');
+        setRemoteLocationLon(employee.remoteWorkLocation ? String(employee.remoteWorkLocation.longitude) : '');
+        setRemoteLocationRadius(employee.remoteWorkLocation ? String(employee.remoteWorkLocation.radius) : '50'); // Default radius if not set
+    }
+  }, [employee, isEditingRemoteLocation]);
 
 
   const employeeAttendanceEvents = useMemo(() => {
@@ -193,7 +208,7 @@ export default function EmployeeDetailPage() {
   }, [employeeAttendanceEvents]);
 
   useEffect(() => {
-    if (employee && calculateMonthlyPayrollDetails && employeeAttendanceEvents) { // ensure employeeAttendanceEvents is available
+    if (employee && calculateMonthlyPayrollDetails && employeeAttendanceEvents) {
       const report = calculateMonthlyPayrollDetails(employee, reportYear, reportMonth, employeeAttendanceEvents);
       setMonthlyPayrollReport(report);
     }
@@ -220,7 +235,7 @@ export default function EmployeeDetailPage() {
         employeeName: employee.name || employee.employeeId,
         tasks: tasksForSummary,
         leaveApplications: (employee.leaves || []).map(l => ({ leaveType: l.leaveType, status: l.status, startDate: l.startDate, endDate: l.endDate, reason: l.reason })),
-        attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0, 
+        attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0,
         baseSalary: employee.baseSalary || 0,
       };
       const result = await summarizeEmployeePerformance(performanceInput);
@@ -241,9 +256,13 @@ export default function EmployeeDetailPage() {
       return;
     }
     const updatedEmployee = { ...employee, baseSalary: newSalary };
-    await updateUserInContext(updatedEmployee); // ensure await for async operation
-    setIsEditingSalary(false);
-    toast({ title: "Salary Updated", description: `${employee.name || employee.employeeId}'s base salary updated to ₹${newSalary.toLocaleString('en-IN')}.` });
+    try {
+        await updateUserInContext(updatedEmployee);
+        setIsEditingSalary(false);
+        toast({ title: "Salary Updated", description: `${employee.name || employee.employeeId}'s base salary updated to ₹${newSalary.toLocaleString('en-IN')}.` });
+    } catch (error) {
+        toast({ title: "Error Updating Salary", description: (error as Error).message, variant: "destructive"});
+    }
   };
 
   const handleSaveHours = async () => {
@@ -254,9 +273,57 @@ export default function EmployeeDetailPage() {
       return;
     }
     const updatedEmployee = { ...employee, standardDailyHours: newHours };
-    await updateUserInContext(updatedEmployee); // ensure await for async operation
-    setIsEditingHours(false);
-    toast({ title: "Standard Hours Updated", description: `${employee.name || employee.employeeId}'s standard daily hours updated to ${newHours}h.` });
+     try {
+        await updateUserInContext(updatedEmployee);
+        setIsEditingHours(false);
+        toast({ title: "Standard Hours Updated", description: `${employee.name || employee.employeeId}'s standard daily hours updated to ${newHours}h.` });
+    } catch (error) {
+        toast({ title: "Error Updating Hours", description: (error as Error).message, variant: "destructive"});
+    }
+  };
+
+  const handleSaveRemoteLocation = async () => {
+    if (!employee) return;
+    const lat = parseFloat(remoteLocationLat);
+    const lon = parseFloat(remoteLocationLon);
+    const radius = parseInt(remoteLocationRadius, 10);
+
+    if (remoteLocationLat.trim() === '' && remoteLocationLon.trim() === '' && remoteLocationRadius.trim() === '') {
+        // User wants to clear the remote location
+        const updatedEmployee = { ...employee, remoteWorkLocation: undefined };
+        try {
+            await updateUserInContext(updatedEmployee);
+            setIsEditingRemoteLocation(false);
+            toast({ title: "Remote Location Cleared", description: `${employee.name}'s remote work location has been removed.` });
+        } catch (error) {
+            toast({ title: "Error Clearing Remote Location", description: (error as Error).message, variant: "destructive"});
+        }
+        return;
+    }
+
+    if (isNaN(lat) || isNaN(lon) || isNaN(radius) || radius <= 0) {
+      toast({ title: "Invalid Input", description: "Please enter valid numbers for latitude, longitude, and a positive radius for the remote location, or clear all fields to remove it.", variant: "destructive" });
+      return;
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        toast({ title: "Invalid Coordinates", description: "Remote location latitude must be between -90 and 90, longitude between -180 and 180.", variant: "destructive"});
+        return;
+    }
+
+    const newRemoteLocation = {
+        name: remoteLocationName.trim() || "Remote Location",
+        latitude: lat,
+        longitude: lon,
+        radius: radius,
+    };
+    const updatedEmployee = { ...employee, remoteWorkLocation: newRemoteLocation };
+    try {
+        await updateUserInContext(updatedEmployee);
+        setIsEditingRemoteLocation(false);
+        toast({ title: "Remote Location Updated", description: `${employee.name}'s remote work location has been set/updated.` });
+    } catch (error) {
+        toast({ title: "Error Updating Remote Location", description: (error as Error).message, variant: "destructive"});
+    }
   };
 
 
@@ -278,8 +345,6 @@ export default function EmployeeDetailPage() {
   }
 
   const initials = employee.name ? employee.name.split(' ').map((n) => n[0]).join('').toUpperCase() : employee.employeeId[0].toUpperCase();
-  const baseSalary = employee.baseSalary || 0;
-  const standardHours = employee.standardDailyHours || 8;
 
   const getRoleDisplayName = (role: typeof employee.role) => {
     if (!role) return 'N/A';
@@ -346,7 +411,7 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Phone" icon={Phone} value={employee.contactInfo?.phone || 'N/A'} />
             <InfoCard title="Department" icon={Briefcase} value={employee.department || 'N/A'} />
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
-            <InfoCard title="Std. Daily Hours" icon={Clock4} value={`${standardHours}h`} />
+            <InfoCard title="Std. Daily Hours" icon={Clock4} value={`${employee.standardDailyHours || 8}h`} />
           </div>
 
           <Separator />
@@ -443,6 +508,69 @@ export default function EmployeeDetailPage() {
             </Card>
           </div>
 
+          <Separator />
+
+          <Card className="shadow-sm">
+            <CardHeader>
+                 <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center text-xl">
+                        <Home className="mr-2 h-5 w-5 text-primary" /> Employee Remote Work Location
+                    </CardTitle>
+                     {!isEditingRemoteLocation ? (
+                        <Button variant="ghost" size="sm" onClick={() => {
+                            setRemoteLocationName(employee?.remoteWorkLocation?.name || 'Home Office');
+                            setRemoteLocationLat(employee?.remoteWorkLocation ? String(employee.remoteWorkLocation.latitude) : '');
+                            setRemoteLocationLon(employee?.remoteWorkLocation ? String(employee.remoteWorkLocation.longitude) : '');
+                            setRemoteLocationRadius(employee?.remoteWorkLocation ? String(employee.remoteWorkLocation.radius) : '50');
+                            setIsEditingRemoteLocation(true);
+                        }}>
+                        <Edit2 className="mr-1 h-4 w-4" /> Edit
+                        </Button>
+                    ) : null}
+                </div>
+              <CardDescription>Define an optional secondary geofenced location (e.g., home) for attendance. If not set, only company office location applies.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {isEditingRemoteLocation ? (
+                    <div className="space-y-4">
+                        <div className="space-y-1">
+                            <Label htmlFor="remoteLocationName">Location Name</Label>
+                            <Input id="remoteLocationName" value={remoteLocationName} onChange={e => setRemoteLocationName(e.target.value)} placeholder="e.g., Home Office, Site B" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <Label htmlFor="remoteLocationLat">Latitude</Label>
+                                <Input id="remoteLocationLat" type="number" value={remoteLocationLat} onChange={e => setRemoteLocationLat(e.target.value)} placeholder="e.g., 12.9716" />
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="remoteLocationLon">Longitude</Label>
+                                <Input id="remoteLocationLon" type="number" value={remoteLocationLon} onChange={e => setRemoteLocationLon(e.target.value)} placeholder="e.g., 77.5946" />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label htmlFor="remoteLocationRadius">Radius (meters)</Label>
+                            <Input id="remoteLocationRadius" type="number" value={remoteLocationRadius} onChange={e => setRemoteLocationRadius(e.target.value)} placeholder="e.g., 50" />
+                        </div>
+                        <div className="flex gap-2">
+                            <Button size="sm" onClick={handleSaveRemoteLocation}>Save Remote Location</Button>
+                            <Button variant="outline" size="sm" onClick={() => setIsEditingRemoteLocation(false)}>Cancel</Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Clear all fields and save to remove the remote location.</p>
+                    </div>
+                ) : (
+                    employee?.remoteWorkLocation ? (
+                        <div className="space-y-1 p-3 bg-muted/30 rounded-md border">
+                            <p><strong>Name:</strong> {employee.remoteWorkLocation.name || 'N/A'}</p>
+                            <p><strong>Coordinates:</strong> Lat: {employee.remoteWorkLocation.latitude}, Lon: {employee.remoteWorkLocation.longitude}</p>
+                            <p><strong>Radius:</strong> {employee.remoteWorkLocation.radius} meters</p>
+                        </div>
+                    ) : (
+                        <p className="text-muted-foreground">No remote work location set for this employee.</p>
+                    )
+                )}
+            </CardContent>
+          </Card>
+
 
           <Separator />
 
@@ -485,12 +613,12 @@ export default function EmployeeDetailPage() {
                         <ReportItem label="Std. Daily Hours" value={`${monthlyPayrollReport.standardDailyHours}h`} />
                         <ReportItem label="Working Days in Month" value={`${monthlyPayrollReport.totalWorkingDaysInMonth} days`} />
                         <ReportItem label="Total Standard Hours" value={`${monthlyPayrollReport.totalStandardHoursForMonth.toFixed(2)}h`} />
-                        <ReportItem label="Total Actual Hours Worked" value={`${monthlyPayrollReport.totalActualHoursWorked.toFixed(2)}h`} 
+                        <ReportItem label="Total Actual Hours Worked" value={`${monthlyPayrollReport.totalActualHoursWorked.toFixed(2)}h`}
                             className={monthlyPayrollReport.totalActualHoursWorked < monthlyPayrollReport.totalStandardHoursForMonth ? 'text-orange-600' : 'text-green-600'}/>
-                        <ReportItem label="Total Hours Missed" value={`${monthlyPayrollReport.totalHoursMissed.toFixed(2)}h`} 
+                        <ReportItem label="Total Hours Missed" value={`${monthlyPayrollReport.totalHoursMissed.toFixed(2)}h`}
                             className={monthlyPayrollReport.totalHoursMissed > 0 ? 'text-destructive' : ''} />
                         <ReportItem label="Effective Hourly Rate" value={`₹${monthlyPayrollReport.hourlyRate.toLocaleString('en-IN')}/h`} />
-                        <ReportItem label="Calculated Deductions" value={`₹${monthlyPayrollReport.calculatedDeductions.toLocaleString('en-IN')}`} 
+                        <ReportItem label="Calculated Deductions" value={`₹${monthlyPayrollReport.calculatedDeductions.toLocaleString('en-IN')}`}
                              className={monthlyPayrollReport.calculatedDeductions > 0 ? 'text-destructive' : ''}/>
                         <ReportItem label="Salary After Deductions" value={`₹${monthlyPayrollReport.salaryAfterDeductions.toLocaleString('en-IN')}`} />
                         <ReportItem label="Approved Advances" value={`(₹${monthlyPayrollReport.totalApprovedAdvances.toLocaleString('en-IN')})`} className="text-red-600"/>
@@ -523,6 +651,8 @@ export default function EmployeeDetailPage() {
                             {event.type}
                           </Badge>
                            at {format(parseISO(event.timestamp), 'p')}
+                           {event.isWithinGeofence === false && <Badge variant="destructive" className="ml-2 text-xs">Outside</Badge>}
+                           {event.matchedGeofenceType && <Badge variant="secondary" className="ml-2 text-xs capitalize">{event.matchedGeofenceType}</Badge>}
                         </div>
                         <span className="text-xs text-muted-foreground">({formatDistanceToNow(parseISO(event.timestamp), { addSuffix: true })})</span>
                       </li>
@@ -574,9 +704,9 @@ export default function EmployeeDetailPage() {
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
-                                    {event.isWithinGeofence === undefined || event.isWithinGeofence === null ? <Badge variant="outline">N/A</Badge> :
+                                    {event.isWithinGeofence === null ? <Badge variant="outline">N/A</Badge> :
                                      event.isWithinGeofence ?
-                                     <Badge variant="default" className="bg-green-600 hover:bg-green-700"><Wifi className="mr-1 h-3 w-3"/> Within</Badge> :
+                                     <Badge variant="default" className="bg-green-600 hover:bg-green-700"><Wifi className="mr-1 h-3 w-3"/> Within ({event.matchedGeofenceType || 'Unknown'})</Badge> :
                                      <Badge variant="destructive"><WifiOff className="mr-1 h-3 w-3"/> Outside</Badge>}
                                   </TableCell>
                                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
@@ -739,6 +869,3 @@ function ReportItem({ label, value, className }: ReportItemProps) {
         </div>
     );
 }
-
-
-    

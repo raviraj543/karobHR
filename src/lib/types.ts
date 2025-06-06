@@ -1,6 +1,20 @@
 
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
+export interface CompanySettings {
+  companyId: string;
+  companyName: string;
+  adminUid: string;
+  createdAt: string; // ISO string or Firestore Timestamp
+  officeLocation?: {
+    name?: string; // e.g., "Main Office", "Headquarters"
+    latitude: number;
+    longitude: number;
+    radius: number; // in meters
+  };
+  // other company-wide settings can go here
+}
+
 export interface Advance {
   id: string;
   employeeId: string;
@@ -26,7 +40,8 @@ export interface AttendanceEvent {
   timestamp: string; // ISO Date string (server timestamp preferred for Firestore)
   photoUrl?: string | null; // URL from Firebase Storage
   location: LocationInfo | null;
-  isWithinGeofence: boolean | null;
+  isWithinGeofence: boolean | null; // True if within ANY valid geofence
+  matchedGeofenceType?: 'office' | 'remote' | null; // Which type of geofence was matched
 }
 
 export interface User {
@@ -43,10 +58,16 @@ export interface User {
     phone?: string | null;
   };
   baseSalary?: number;
-  standardDailyHours?: number; // Added standard daily working hours
-  mockAttendanceFactor?: number; // This will be less relevant with precise hour calculations
+  standardDailyHours?: number;
+  mockAttendanceFactor?: number;
   advances?: Advance[];
   leaves?: LeaveApplication[];
+  remoteWorkLocation?: { // For employee's specific remote/home location
+    name?: string; // e.g., "Home Office"
+    latitude: number;
+    longitude: number;
+    radius: number; // in meters
+  };
 }
 
 // For the top-level user directory lookup
@@ -56,7 +77,7 @@ export interface UserDirectoryEntry {
     email: string;
     companyId: string;
     role: UserRole;
-    name?: string; // For easier identification if needed
+    name?: string;
 }
 
 
@@ -75,14 +96,14 @@ export interface Task {
   id: string; // Firestore document ID
   title: string;
   description: string;
-  assigneeId: string; // KarobHR employee ID of assignee
+  assigneeId: string;
   assigneeName: string;
-  assigneeUid?: string; // Firebase Auth UID of assignee (optional, for easier querying)
+  assigneeUid?: string;
   dueDate: string; // ISO Date string
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
   status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked';
-  createdAt: string; // ISO Date string (server timestamp)
-  updatedAt: string; // ISO Date string (server timestamp)
+  createdAt: string; // ISO Date string
+  updatedAt: string; // ISO Date string
 }
 
 
@@ -94,16 +115,16 @@ export interface Holiday {
 }
 
 export interface LeaveApplication {
-  id: string; // Firestore document ID (or sub-collection ID if part of user doc)
-  userId: string; // Firebase Auth UID of the applicant
-  employeeId: string; // KarobHR employee ID of applicant
+  id: string;
+  userId: string;
+  employeeId: string;
   leaveType: string;
   startDate: string;
   endDate: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
-  appliedAt: string; // ISO Date string (server timestamp)
-  processedAt?: string; // ISO Date string (server timestamp)
+  appliedAt: string; // ISO Date string
+  processedAt?: string; // ISO Date string
   supportingDocumentUrl?: string;
   color?: string;
 }
@@ -112,9 +133,9 @@ export interface Announcement {
   id: string; // Firestore document ID
   title: string;
   content: string;
-  postedAt: string; // ISO Date string (server timestamp)
-  postedByUid: string; // Firebase Auth UID of admin
-  postedByName: string; // Admin's name
+  postedAt: string; // ISO Date string
+  postedByUid: string;
+  postedByName: string;
 }
 
 export interface MonthlyPayrollReport {

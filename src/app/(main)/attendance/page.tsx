@@ -8,38 +8,23 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import type { LocationInfo as Location, AttendanceEvent } from '@/lib/types';
-import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert } from 'lucide-react';
-import Image from 'next/image'; // Using next/image for optimization
+import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi } from 'lucide-react';
+import Image from 'next/image';
+import { calculateDistance } from '@/lib/locationUtils';
 
-// --- Geofence Settings (Consider moving to company settings in Firestore later) ---
-const OFFICE_LATITUDE = 37.7749; // Placeholder, should be configurable per company
-const OFFICE_LONGITUDE = -122.4194; // Placeholder
-const GEOFENCE_RADIUS_METERS = 100; // Placeholder
-// --- End Geofence Settings ---
 
 interface CheckInOutDisplayRecord {
   type: 'check-in' | 'check-out';
-  photoUrl: string | null; // Now photoUrl from storage
+  photoUrl: string | null;
   location: Location | null;
   timestamp: Date;
   isWithinGeofence: boolean | null;
+  matchedGeofenceType?: 'office' | 'remote' | null;
 }
 
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3; // Earth radius in meters
-  const phi1 = lat1 * Math.PI / 180;
-  const phi2 = lat2 * Math.PI / 180;
-  const deltaPhi = (lat2 - lat1) * Math.PI / 180;
-  const deltaLambda = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-            Math.cos(phi1) * Math.cos(phi2) *
-            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
 
 export default function AttendancePage() {
-  const { user, addAttendanceEvent, attendanceLog, companyId } = useAuth();
+  const { user, addAttendanceEvent, attendanceLog, companyId, companySettings } = useAuth();
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
@@ -86,27 +71,32 @@ export default function AttendancePage() {
   useEffect(() => {
     document.title = 'Attendance - KarobHR';
     if (user && attendanceLog.length > 0) {
-      // Filter for current user's events today to determine status
       const today = new Date().toISOString().split('T')[0];
       const userEventsToday = attendanceLog
         .filter(event => event.userId === user.id && event.timestamp.startsWith(today))
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-      if (userEventsToday.length > 0 && userEventsToday[0].type === 'check-in') {
-        setCheckInStatus('checked-in');
-        setLastDisplayRecord({ // Initialize with latest check-in for display continuity
-          type: 'check-in',
-          photoUrl: userEventsToday[0].photoUrl || null,
-          location: userEventsToday[0].location,
-          timestamp: new Date(userEventsToday[0].timestamp),
-          isWithinGeofence: userEventsToday[0].isWithinGeofence,
+      if (userEventsToday.length > 0) {
+         const latestEvent = userEventsToday[0];
+        if (latestEvent.type === 'check-in') {
+          setCheckInStatus('checked-in');
+        } else {
+          setCheckInStatus('checked-out');
+        }
+        setLastDisplayRecord({
+          type: latestEvent.type,
+          photoUrl: latestEvent.photoUrl || null,
+          location: latestEvent.location,
+          timestamp: new Date(latestEvent.timestamp),
+          isWithinGeofence: latestEvent.isWithinGeofence,
+          matchedGeofenceType: latestEvent.matchedGeofenceType,
         });
       } else {
         setCheckInStatus('checked-out');
         setLastDisplayRecord(null);
       }
     } else if (user) {
-        setCheckInStatus('checked-out'); // Default if no logs or no logs for today
+        setCheckInStatus('checked-out');
         setLastDisplayRecord(null);
     }
   }, [user, attendanceLog]);
@@ -127,7 +117,7 @@ export default function AttendancePage() {
         return null;
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.8); // Use JPEG with some compression
+    return canvas.toDataURL('image/jpeg', 0.8);
   };
 
   const getGeolocation = (): Promise<Location | null> => {
@@ -163,49 +153,74 @@ export default function AttendancePage() {
       return;
     }
     setIsSubmitting(true);
-    
-    if (hasCameraPermission !== true) { 
+
+    if (hasCameraPermission !== true) {
       setError('Camera permission is required to proceed.');
       toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required.' });
       setIsSubmitting(false);
       return;
     }
 
-    const photoDataUrlString = capturePhoto(); // This is a base64 data URL
+    const photoDataUrlString = capturePhoto();
     const location = await getGeolocation();
-    let isWithinGeofence: boolean | null = null;
-    let toastDescription = `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}`;
+
+    // Geofence check is now primarily handled in AuthContext's addAttendanceEvent
+    // But we can still form a preliminary toast message here
+
+    let toastTitle = `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}!`;
+    let toastDescSuffix = "";
 
     if (location) {
-      // TODO: Fetch office coordinates from company settings in Firestore
-      const distance = calculateDistance(location.latitude, location.longitude, OFFICE_LATITUDE, OFFICE_LONGITUDE);
-      isWithinGeofence = distance <= GEOFENCE_RADIUS_METERS;
-      toastDescription += ` from lat: ${location.latitude.toFixed(4)}, lon: ${location.longitude.toFixed(4)}.`;
-      toastDescription += isWithinGeofence ? ` You are within the office geofence.` : ` You are OUTSIDE the office geofence (Distance: ${distance.toFixed(0)}m).`;
+        let inOffice = false;
+        let inRemote = false;
+        let officeDistStr = "";
+        let remoteDistStr = "";
+
+        if (companySettings?.officeLocation) {
+            const dist = calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
+            officeDistStr = ` (Office: ${dist.toFixed(0)}m)`;
+            if (dist <= companySettings.officeLocation.radius) {
+                inOffice = true;
+            }
+        }
+        if (user.remoteWorkLocation) {
+            const dist = calculateDistance(location.latitude, location.longitude, user.remoteWorkLocation.latitude, user.remoteWorkLocation.longitude);
+            remoteDistStr = ` (Remote: ${dist.toFixed(0)}m)`;
+            if (dist <= user.remoteWorkLocation.radius) {
+                inRemote = true;
+            }
+        }
+
+        if (inOffice) {
+            toastDescSuffix = "You are within the OFFICE geofence.";
+        } else if (inRemote) {
+            toastDescSuffix = "You are within your REMOTE work geofence.";
+        } else {
+            toastTitle += " (Outside Geofence)";
+            toastDescSuffix = `You are OUTSIDE any valid geofence.${officeDistStr}${remoteDistStr}`;
+        }
     } else {
-      toastDescription += ' (Location not available). Geofence status cannot be determined.';
+        toastDescSuffix = "(Location not available, geofence status cannot be determined).";
     }
-    
+
     try {
-        // addAttendanceEvent now handles photo upload to Firebase Storage
+        // addAttendanceEvent now handles photo upload and comprehensive geofence check
         await addAttendanceEvent({
             type,
-            photoDataUrl: photoDataUrlString, // Pass the base64 data URL
+            photoDataUrl: photoDataUrlString,
             location,
-            isWithinGeofence,
+            // isWithinGeofence and matchedGeofenceType will be determined by addAttendanceEvent
         });
 
-        // The actual photoUrl from storage will be set in AuthContext after upload
-        // For immediate display, we can use the local data URL if successful, or wait for context update
-        // For now, let's assume addAttendanceEvent will update the attendanceLog, and useEffect will update lastDisplayRecord
-        
         setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
+        // The actual photoUrl and geofence status from storage will be set in AuthContext after upload
+        // and will update lastDisplayRecord via useEffect
 
         toast({
-            title: `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}! ${isWithinGeofence === false ? '(Outside Geofence)' : ''}`,
-            description: toastDescription,
-            variant: isWithinGeofence === false ? 'destructive' : 'default',
-            duration: isWithinGeofence === false ? 9000 : 5000,
+            title: toastTitle,
+            description: `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}. ${toastDescSuffix}`,
+            variant: (toastTitle.includes("Outside Geofence") ? 'destructive' : 'default'),
+            duration: (toastTitle.includes("Outside Geofence") ? 9000 : 5000),
         });
     } catch (submissionError) {
         console.error("Error submitting attendance:", submissionError);
@@ -216,6 +231,8 @@ export default function AttendancePage() {
     }
   };
 
+  const officeRadiusDisplay = companySettings?.officeLocation?.radius || "N/A";
+
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -224,7 +241,8 @@ export default function AttendancePage() {
             <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance
           </CardTitle>
           <CardDescription>
-            Use your camera and location to check in or check out. Attendance is verified against office geofence (Radius: {GEOFENCE_RADIUS_METERS}m - Placeholder).
+            Use your camera and location to check in or check out. Attendance is verified against company office (Radius: {officeRadiusDisplay}m)
+            {user?.remoteWorkLocation && `, or your registered remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -255,7 +273,7 @@ export default function AttendancePage() {
                   </div>
                 )}
               </div>
-              <canvas ref={canvasRef} className="hidden" /> {/* For capturing frame */}
+              <canvas ref={canvasRef} className="hidden" />
             </CardContent>
           </Card>
 
@@ -276,12 +294,12 @@ export default function AttendancePage() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center">
                   {lastDisplayRecord.type === 'check-in' ? 'Last Check-In' : 'Last Check-Out'} Details
-                  {lastDisplayRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" />}
+                  {lastDisplayRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" title="Outside any valid geofence" />}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoUrl && ( 
+                  {lastDisplayRecord.photoUrl && (
                     <div className="w-full sm:w-1/3">
                       <p className="font-semibold mb-1">Photo:</p>
                       <Image
@@ -305,12 +323,11 @@ export default function AttendancePage() {
                     </div>
                      <div>
                       <p className="font-semibold flex items-center">
-                        {lastDisplayRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <CheckCircle className="mr-1 h-4 w-4 text-green-600" />} Geofence Status:
+                        {lastDisplayRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <Wifi className="mr-1 h-4 w-4 text-green-600" />} Geofence Status:
                       </p>
                       {lastDisplayRecord.location === null ? (<p className="text-muted-foreground">Could not determine.</p>)
-                       : lastDisplayRecord.isWithinGeofence ? (<p className="text-green-600 font-medium">Within office radius.</p>)
-                       : (<p className="text-destructive font-medium">Outside office radius. 
-                          {lastDisplayRecord.location && ` (Approx. ${calculateDistance(lastDisplayRecord.location.latitude, lastDisplayRecord.location.longitude, OFFICE_LATITUDE, OFFICE_LONGITUDE).toFixed(0)}m away)`}</p>
+                       : lastDisplayRecord.isWithinGeofence ? (<p className="text-green-600 font-medium">Within {lastDisplayRecord.matchedGeofenceType || 'valid'} geofence.</p>)
+                       : (<p className="text-destructive font-medium">Outside any valid geofence.</p>
                       )}
                     </div>
                   </div>
