@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Search, Briefcase, User, CalendarDays, AlertCircle, Loader2, Edit2 } from 'lucide-react';
+import { PlusCircle, Search, Briefcase, User, CalendarDays, AlertCircle, Loader2, Edit2, ClipboardPlus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -122,6 +122,8 @@ export default function AdminTasksPage() {
       dueDate: data.dueDate,
       priority: data.priority,
       status: 'Pending',
+      createdAt: new Date().toISOString(), // Or use serverTimestamp from Firestore if preferred
+      updatedAt: new Date().toISOString(),
     };
     await addTask(newTask);
     
@@ -164,6 +166,7 @@ export default function AdminTasksPage() {
         ...editingTask,
         ...data,
         assigneeName: selectedUser.name || selectedUser.employeeId,
+        updatedAt: new Date().toISOString(),
     };
     await updateTask(updatedTaskData);
     toast({
@@ -197,8 +200,10 @@ export default function AdminTasksPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary"/>Assign New Task</DialogTitle>
-              <DialogDescription>Fill in the details to assign a task to an employee or manager.</DialogDescription>
+              <DialogTitle className="flex items-center"><ClipboardPlus className="mr-2 h-5 w-5 text-primary"/>Assign New Task to Employee/Manager</DialogTitle>
+              <DialogDescription>
+                Fill in the details below to create a new task. You will select the employee or manager to assign this task to from the list.
+              </DialogDescription>
             </DialogHeader>
             <Form {...assignForm}>
               <form onSubmit={assignForm.handleSubmit(onAssignTaskSubmit)} className="space-y-4 py-2">
