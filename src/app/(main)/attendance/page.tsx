@@ -94,8 +94,8 @@ export default function AttendancePage() {
           setCheckInStatus('checked-in');
         } else {
           setCheckInStatus('checked-out');
-          setTasksSubmittedForDay(false); // Reset task submission status on checkout
-          setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]); // Reset tasks on checkout
+          setTasksSubmittedForDay(false); 
+          setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]); 
           setTaskSummary(null);
         }
         setLastDisplayRecord({
@@ -227,7 +227,7 @@ export default function AttendancePage() {
             photoDataUrl: photoDataUrlString,
             location,
         });
-        setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
+        // setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out'); // Removed this line
         toast({
             title: toastTitle,
             description: `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}. ${toastDescSuffix}`,
@@ -274,8 +274,8 @@ export default function AttendancePage() {
             description: "No tasks were entered. Proceeding to checkout without a report.",
             variant: "default",
         });
-        setTasksSubmittedForDay(true); // Mark as "submitted" to skip next time
-        await handleActualCheckInOrOut('check-out'); // Proceed to checkout
+        setTasksSubmittedForDay(true); 
+        await handleActualCheckInOrOut('check-out'); 
         setIsSubmittingTasks(false);
         return;
     }
@@ -307,7 +307,7 @@ export default function AttendancePage() {
             duration: 7000,
         });
       }
-      await handleActualCheckInOrOut('check-out'); // Proceed to actual checkout
+      await handleActualCheckInOrOut('check-out'); 
     } catch (error) {
       console.error('Error summarizing tasks:', error);
       toast({
@@ -367,7 +367,6 @@ export default function AttendancePage() {
             </CardContent>
           </Card>
           
-          {/* Task Reporting Section - Visible only when checked-in and tasks not yet submitted for the day */}
           {checkInStatus === 'checked-in' && !tasksSubmittedForDay && (
             <Card className="border-primary/50">
               <CardHeader>
@@ -434,7 +433,6 @@ export default function AttendancePage() {
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
                     </Button>
                   </div>
-                  {/* The main check-out button below will handle form submission */}
                 </form>
               </CardContent>
             </Card>
@@ -449,7 +447,7 @@ export default function AttendancePage() {
               <Button 
                 size="lg" 
                 variant="destructive" 
-                onClick={handleTaskReportAndCheckout} // This button now handles both report and checkout
+                onClick={handleTaskReportAndCheckout} 
                 disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true} 
                 className="w-full sm:w-auto"
               >
@@ -522,3 +520,5 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+    
