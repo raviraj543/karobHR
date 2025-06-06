@@ -1,8 +1,9 @@
+
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface Advance {
   id: string;
-  employeeId: string; 
+  employeeId: string;
   amount: number;
   reason: string;
   dateRequested: string; // ISO Date string
@@ -20,7 +21,7 @@ export interface AttendanceEvent {
   id: string; // Firestore document ID
   employeeId: string; // KarobHR employee ID
   userId: string; // Firebase Auth UID of the employee
-  userName: string; 
+  userName: string;
   type: 'check-in' | 'check-out';
   timestamp: string; // ISO Date string (server timestamp preferred for Firestore)
   photoUrl?: string | null; // URL from Firebase Storage
@@ -30,19 +31,20 @@ export interface AttendanceEvent {
 
 export interface User {
   id: string; // Firebase Auth UID
-  employeeId: string; 
+  employeeId: string;
   email?: string | null;
   name?: string | null;
   role: UserRole;
   companyId: string; // Crucial for multi-tenancy
   profilePictureUrl?: string | null;
   department?: string | null;
-  joiningDate?: string | null; 
+  joiningDate?: string | null;
   contactInfo?: {
     phone?: string | null;
   };
   baseSalary?: number;
-  mockAttendanceFactor?: number; 
+  standardDailyHours?: number; // Added standard daily working hours
+  mockAttendanceFactor?: number;
   advances?: Advance[];
   leaves?: LeaveApplication[];
 }
@@ -96,14 +98,14 @@ export interface LeaveApplication {
   userId: string; // Firebase Auth UID of the applicant
   employeeId: string; // KarobHR employee ID of applicant
   leaveType: string;
-  startDate: string; 
-  endDate: string;   
+  startDate: string;
+  endDate: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   appliedAt: string; // ISO Date string (server timestamp)
   processedAt?: string; // ISO Date string (server timestamp)
-  supportingDocumentUrl?: string; 
-  color?: string; 
+  supportingDocumentUrl?: string;
+  color?: string;
 }
 
 export interface Announcement {

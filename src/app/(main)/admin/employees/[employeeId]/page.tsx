@@ -14,12 +14,13 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format, parseISO, isToday, formatDistanceToNow, differenceInMilliseconds } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock, Clock4 } from 'lucide-react';
 import { formatDuration, isSunday } from '@/lib/dateUtils';
 
 interface DailyWorkSummary {
@@ -42,22 +43,29 @@ export default function EmployeeDetailPage() {
 
   const [isEditingSalary, setIsEditingSalary] = useState(false);
   const [editedSalary, setEditedSalary] = useState<string | number>('');
+  const [isEditingHours, setIsEditingHours] = useState(false);
+  const [editedHours, setEditedHours] = useState<string | number>('');
 
 
   const employee = useMemo(() => {
     if (authLoading || !allUsers.length) return null;
     const foundEmployee = allUsers.find(u => u.employeeId === employeeId) || null;
-    if (foundEmployee && !isEditingSalary) {
-      setEditedSalary(foundEmployee.baseSalary || '');
+    if (foundEmployee) {
+      if (!isEditingSalary) {
+        setEditedSalary(foundEmployee.baseSalary || '');
+      }
+      if (!isEditingHours) {
+        setEditedHours(foundEmployee.standardDailyHours || '');
+      }
     }
     return foundEmployee;
-  }, [allUsers, employeeId, authLoading, isEditingSalary]);
+  }, [allUsers, employeeId, authLoading, isEditingSalary, isEditingHours]);
 
   useEffect(() => {
     if (employee?.name) {
-      document.title = `Employee Details - ${employee.name} - KarobHR`;
+      document.title = `Employee Details - ${employee.name} - BizFlow`;
     } else if (employeeId) {
-      document.title = `Employee Details - ${employeeId} - KarobHR`;
+      document.title = `Employee Details - ${employeeId} - BizFlow`;
     }
   }, [employee, employeeId]);
 
@@ -77,18 +85,19 @@ export default function EmployeeDetailPage() {
     if (!employee || authLoading) return [];
     return attendanceLog
       .filter(event => event.employeeId === employee.employeeId)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // Keep most recent event first globally
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [employee, attendanceLog, authLoading]);
 
   const todaysAttendanceEvents = useMemo(() => {
-    return employeeAttendanceEvents.filter(event => isToday(parseISO(event.timestamp)))
-                                   .sort((a,b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime()); // Chronological for today's summary
+    return employeeAttendanceEvents.filter(event => event.timestamp && isToday(parseISO(event.timestamp)))
+                                   .sort((a,b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
   }, [employeeAttendanceEvents]);
 
   const dailyWorkSummaries = useMemo((): DailyWorkSummary[] => {
     if (!employeeAttendanceEvents.length) return [];
 
     const eventsByDate = employeeAttendanceEvents.reduce((acc, event) => {
+      if(!event.timestamp) return acc;
       const dateStr = format(parseISO(event.timestamp), 'yyyy-MM-dd');
       if (!acc[dateStr]) {
         acc[dateStr] = [];
@@ -106,14 +115,14 @@ export default function EmployeeDetailPage() {
         let isOngoing = false;
 
         if (isSunday(dateStr)) {
-          totalWorkMs = 0; // Work hours for Sunday are 0
+          totalWorkMs = 0;
         } else {
             for (const event of dailyEvents) {
               if (event.type === 'check-in') {
                 lastCheckInTime = parseISO(event.timestamp);
               } else if (event.type === 'check-out' && lastCheckInTime) {
                 totalWorkMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
-                lastCheckInTime = null; 
+                lastCheckInTime = null;
               }
             }
 
@@ -125,15 +134,15 @@ export default function EmployeeDetailPage() {
               }
             }
         }
-        
+
         return {
           date: dateStr,
           totalWorkMs,
-          entries: dailyEvents, 
-          isOngoing: isSunday(dateStr) ? false : isOngoing, // isOngoing should also be false if it's a Sunday
+          entries: dailyEvents,
+          isOngoing: isSunday(dateStr) ? false : isOngoing,
         };
       })
-      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()); 
+      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
 
     return summaries;
   }, [employeeAttendanceEvents]);
@@ -185,6 +194,19 @@ export default function EmployeeDetailPage() {
     toast({ title: "Salary Updated", description: `${employee.name || employee.employeeId}'s base salary updated to ₹${newSalary.toLocaleString('en-IN')}.` });
   };
 
+  const handleSaveHours = async () => {
+    if (!employee) return;
+    const newHours = parseFloat(String(editedHours));
+    if (isNaN(newHours) || newHours <= 0 || newHours > 24) {
+      toast({ title: "Invalid Hours", description: "Please enter a valid number between 1 and 24 for standard daily hours.", variant: "destructive" });
+      return;
+    }
+    const updatedEmployee = { ...employee, standardDailyHours: newHours };
+    updateUserInContext(updatedEmployee);
+    setIsEditingHours(false);
+    toast({ title: "Standard Hours Updated", description: `${employee.name || employee.employeeId}'s standard daily hours updated to ${newHours}h.` });
+  };
+
 
   if (authLoading && !employee) {
     return <div className="text-center py-10"><Loader2 className="mx-auto h-8 w-8 animate-spin" /> Loading employee details...</div>;
@@ -205,6 +227,7 @@ export default function EmployeeDetailPage() {
 
   const initials = employee.name ? employee.name.split(' ').map((n) => n[0]).join('').toUpperCase() : employee.employeeId[0].toUpperCase();
   const baseSalary = employee.baseSalary || 0;
+  const standardHours = employee.standardDailyHours || 8; // Default to 8 if not set
   const attendanceFactor = employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0;
   const salaryAfterAttendance = baseSalary * attendanceFactor;
   const approvedAdvancesTotal = employee.advances?.filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0) || 0;
@@ -230,7 +253,7 @@ export default function EmployeeDetailPage() {
   };
 
   const getStatusBadgeVariant = (status?: string) => {
-    status = status || ''; 
+    status = status || '';
     if (!status) return 'default';
     switch (status.toLowerCase()) {
       case 'completed': return 'default';
@@ -275,50 +298,104 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Phone" icon={Phone} value={employee.contactInfo?.phone || 'N/A'} />
             <InfoCard title="Department" icon={Briefcase} value={employee.department || 'N/A'} />
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
+            <InfoCard title="Std. Daily Hours" icon={Clock4} value={`${standardHours}h`} />
             <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} />
           </div>
 
           <Separator />
 
-          <Card className="shadow-sm">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center text-xl">
-                  <IndianRupee className="mr-2 h-5 w-5 text-primary" /> Base Salary
-                </CardTitle>
-                {!isEditingSalary ? (
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    setEditedSalary(employee?.baseSalary || '');
-                    setIsEditingSalary(true);
-                  }}>
-                    <Edit2 className="mr-1 h-4 w-4" /> Edit
-                  </Button>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isEditingSalary ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    value={editedSalary}
-                    onChange={(e) => setEditedSalary(e.target.value)}
-                    placeholder="Enter base salary"
-                    className="max-w-xs"
-                  />
-                  <Button size="sm" onClick={handleSaveSalary}>Save</Button>
-                  <Button variant="outline" size="sm" onClick={() => {
-                    setIsEditingSalary(false);
-                    setEditedSalary(employee?.baseSalary || '');
-                  }}>Cancel</Button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="shadow-sm">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center text-xl">
+                    <IndianRupee className="mr-2 h-5 w-5 text-primary" /> Base Salary
+                  </CardTitle>
+                  {!isEditingSalary ? (
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditedSalary(employee?.baseSalary || '');
+                      setIsEditingSalary(true);
+                    }}>
+                      <Edit2 className="mr-1 h-4 w-4" /> Edit
+                    </Button>
+                  ) : null}
                 </div>
-              ) : (
-                <p className="text-2xl font-semibold">
-                  ₹{(employee?.baseSalary || 0).toLocaleString('en-IN')}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                {isEditingSalary ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="editSalary">New Base Monthly Salary (₹)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="editSalary"
+                        type="number"
+                        value={editedSalary}
+                        onChange={(e) => setEditedSalary(e.target.value)}
+                        placeholder="Enter base salary"
+                        className="max-w-xs"
+                      />
+                      <Button size="sm" onClick={handleSaveSalary}>Save</Button>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setIsEditingSalary(false);
+                        setEditedSalary(employee?.baseSalary || '');
+                      }}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-semibold">
+                    ₹{(employee?.baseSalary || 0).toLocaleString('en-IN')}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center text-xl">
+                    <Clock4 className="mr-2 h-5 w-5 text-primary" /> Standard Daily Hours
+                  </CardTitle>
+                  {!isEditingHours ? (
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditedHours(employee?.standardDailyHours || '');
+                      setIsEditingHours(true);
+                    }}>
+                      <Edit2 className="mr-1 h-4 w-4" /> Edit
+                    </Button>
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isEditingHours ? (
+                   <div className="space-y-2">
+                    <Label htmlFor="editHours">New Standard Daily Hours</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="editHours"
+                        type="number"
+                        value={editedHours}
+                        onChange={(e) => setEditedHours(e.target.value)}
+                        placeholder="e.g., 8"
+                        className="max-w-xs"
+                        min="1"
+                        max="24"
+                      />
+                      <Button size="sm" onClick={handleSaveHours}>Save</Button>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setIsEditingHours(false);
+                        setEditedHours(employee?.standardDailyHours || '');
+                      }}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-semibold">
+                    {employee?.standardDailyHours || 8} hours/day
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
 
           <Separator />
 
@@ -399,7 +476,7 @@ export default function EmployeeDetailPage() {
                             <TableBody>
                               {summary.entries.map(event => (
                                 <TableRow key={event.id}>
-                                  <TableCell>{format(parseISO(event.timestamp), 'p')}</TableCell>
+                                  <TableCell>{event.timestamp ? format(parseISO(event.timestamp), 'p') : 'N/A'}</TableCell>
                                   <TableCell>
                                     <Badge variant={getStatusBadgeVariant(event.type)} className="capitalize">
                                      {event.type === 'check-in' ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}

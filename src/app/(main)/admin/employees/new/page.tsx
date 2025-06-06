@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, ArrowLeft, IndianRupee, AlertTriangle } from 'lucide-react';
+import { UserPlus, ArrowLeft, IndianRupee, AlertTriangle, Clock4 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import type { NewEmployeeData } from '@/lib/authContext';
@@ -33,6 +33,10 @@ const newEmployeeSchema = z.object({
     (val) => (val === "" ? undefined : Number(val)),
     z.number({ invalid_type_error: 'Base salary must be a number.' }).positive({ message: 'Base salary must be positive.' }).optional()
   ),
+  standardDailyHours: z.preprocess(
+    (val) => (val === "" ? undefined : Number(val)),
+    z.number({ invalid_type_error: 'Standard hours must be a number.' }).min(1, "Must be at least 1 hour").max(24, "Cannot exceed 24 hours").optional()
+  ),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -43,7 +47,7 @@ type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
 export default function AddNewEmployeePage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { addNewEmployee, companyId: adminCompanyId, loading: authLoading } = useAuth(); // Get admin's companyId
+  const { addNewEmployee, companyId: adminCompanyId, loading: authLoading } = useAuth();
 
   const form = useForm<NewEmployeeFormValues>({
     resolver: zodResolver(newEmployeeSchema),
@@ -57,6 +61,7 @@ export default function AddNewEmployeePage() {
       role: 'employee',
       joiningDate: new Date().toISOString().split('T')[0],
       baseSalary: undefined,
+      standardDailyHours: 8, // Default standard hours
     },
   });
 
@@ -79,17 +84,17 @@ export default function AddNewEmployeePage() {
       email: data.email,
       department: data.department,
       role: data.role as UserRole,
-      companyId: adminCompanyId, // Use the admin's companyId
+      companyId: adminCompanyId,
       joiningDate: data.joiningDate,
       baseSalary: data.baseSalary,
+      standardDailyHours: data.standardDailyHours,
     };
 
     try {
-      // Pass false for isFirstAdmin, as this is an admin adding a new employee
-      await addNewEmployee(employeeDataForContext, data.password, false); 
+      await addNewEmployee(employeeDataForContext, data.password);
       toast({
         title: "Employee Account Added",
-        description: `Account for ${data.name} (${data.employeeId}) in company ${adminCompanyId} has been added. They can now log in. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}`,
+        description: `Account for ${data.name} (${data.employeeId}) in company ${adminCompanyId} has been added. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}, Std. Hours: ${data.standardDailyHours || 'N/A'}h.`,
         duration: 7000,
       });
       form.reset();
@@ -284,6 +289,22 @@ export default function AddNewEmployeePage() {
                   )}
                 />
               </div>
+               <FormField
+                  control={form.control}
+                  name="standardDailyHours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        <Clock4 className="mr-1 h-4 w-4 text-muted-foreground" /> Standard Daily Hours (Optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 8" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ''} />
+                      </FormControl>
+                       <FormDescription>Default is 8 hours if not specified.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
               <Button type="submit" className="w-full md:w-auto" disabled={isSubmitDisabled}>
                 {isLoading ? 'Adding Account...' : 'Add Employee Account'}
@@ -295,4 +316,3 @@ export default function AddNewEmployeePage() {
     </div>
   );
 }
-
