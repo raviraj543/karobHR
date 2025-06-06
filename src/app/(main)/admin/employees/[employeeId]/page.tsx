@@ -20,7 +20,7 @@ import { format, parseISO, isToday, formatDistanceToNow, differenceInMillisecond
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock } from 'lucide-react';
-import { formatDuration } from '@/lib/dateUtils';
+import { formatDuration, isSunday } from '@/lib/dateUtils';
 
 interface DailyWorkSummary {
   date: string;
@@ -99,42 +99,41 @@ export default function EmployeeDetailPage() {
 
     const summaries = Object.entries(eventsByDate)
       .map(([dateStr, dailyEvents]) => {
-        // Sort events chronologically for duration calculation
         dailyEvents.sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
 
         let totalWorkMs = 0;
         let lastCheckInTime: Date | null = null;
         let isOngoing = false;
 
-        for (const event of dailyEvents) {
-          if (event.type === 'check-in') {
-            lastCheckInTime = parseISO(event.timestamp);
-          } else if (event.type === 'check-out' && lastCheckInTime) {
-            totalWorkMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
-            lastCheckInTime = null; // Reset for the next pair
-          }
-        }
+        if (isSunday(dateStr)) {
+          totalWorkMs = 0; // Work hours for Sunday are 0
+        } else {
+            for (const event of dailyEvents) {
+              if (event.type === 'check-in') {
+                lastCheckInTime = parseISO(event.timestamp);
+              } else if (event.type === 'check-out' && lastCheckInTime) {
+                totalWorkMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
+                lastCheckInTime = null; 
+              }
+            }
 
-        // If the day is today and the last recorded event was a check-in, calculate duration up to current time
-        if (lastCheckInTime && isToday(parseISO(dateStr))) {
-          // Check if the last event in dailyEvents is actually the check-in we are holding
-          const lastEventOfTheDay = dailyEvents[dailyEvents.length -1];
-          if (lastEventOfTheDay.type === 'check-in' && parseISO(lastEventOfTheDay.timestamp).getTime() === lastCheckInTime.getTime()){
-            totalWorkMs += differenceInMilliseconds(new Date(), lastCheckInTime);
-            isOngoing = true;
-          }
+            if (lastCheckInTime && isToday(parseISO(dateStr))) {
+              const lastEventOfTheDay = dailyEvents[dailyEvents.length -1];
+              if (lastEventOfTheDay.type === 'check-in' && parseISO(lastEventOfTheDay.timestamp).getTime() === lastCheckInTime.getTime()){
+                totalWorkMs += differenceInMilliseconds(new Date(), lastCheckInTime);
+                isOngoing = true;
+              }
+            }
         }
-        // For past days, an unclosed check-in (lastCheckInTime is not null) means incomplete data for that segment,
-        // so we don't add its duration from check-in to end-of-day. Only completed pairs are counted.
-
+        
         return {
           date: dateStr,
           totalWorkMs,
-          entries: dailyEvents, // Chronologically sorted daily events
-          isOngoing,
+          entries: dailyEvents, 
+          isOngoing: isSunday(dateStr) ? false : isOngoing, // isOngoing should also be false if it's a Sunday
         };
       })
-      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()); // Sort days: most recent day first
+      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()); 
 
     return summaries;
   }, [employeeAttendanceEvents]);
@@ -342,7 +341,7 @@ export default function EmployeeDetailPage() {
            <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center text-xl"><Clock className="mr-2 h-5 w-5 text-primary" />Attendance Log & Work Hours</CardTitle>
-              <CardDescription>Daily attendance records and calculated work hours for {employee.name || employee.employeeId}.</CardDescription>
+              <CardDescription>Daily attendance records and calculated work hours for {employee.name || employee.employeeId}. Sundays are excluded from work hour calculations.</CardDescription>
             </CardHeader>
             <CardContent>
               {todaysAttendanceEvents.length > 0 && (
@@ -372,7 +371,9 @@ export default function EmployeeDetailPage() {
                       <AccordionItem value={summary.date} key={summary.date} className="border-b-0 mb-2 rounded-md bg-muted/20 overflow-hidden">
                         <AccordionTrigger className="px-4 py-3 hover:bg-muted/40 rounded-t-md">
                           <div className="flex justify-between items-center w-full">
-                            <span className="font-semibold text-foreground">{format(parseISO(summary.date), 'PPP')} ({format(parseISO(summary.date), 'eeee')})</span>
+                            <span className="font-semibold text-foreground">{format(parseISO(summary.date), 'PPP')} ({format(parseISO(summary.date), 'eeee')})
+                             {isSunday(summary.date) && <Badge variant="outline" className="ml-2 text-xs">Sunday (0h)</Badge>}
+                            </span>
                             <div className="flex items-center">
                               <Badge variant="secondary" className="text-sm">
                                 <Clock className="mr-1.5 h-4 w-4" />
@@ -416,9 +417,9 @@ export default function EmployeeDetailPage() {
                                     {event.location?.accuracy && ` (±${event.location.accuracy.toFixed(0)}m)`}
                                   </TableCell>
                                   <TableCell className="text-center">
-                                    {event.photoDataUrl ? (
+                                    {event.photoUrl ? (
                                         <Avatar className="h-9 w-9 border mx-auto" data-ai-hint="face scan">
-                                            <AvatarImage src={event.photoDataUrl} alt="Attendance photo" />
+                                            <AvatarImage src={event.photoUrl} alt="Attendance photo" />
                                             <AvatarFallback><CameraIcon className="h-4 w-4 text-muted-foreground" /></AvatarFallback>
                                         </Avatar>
                                     ) : (

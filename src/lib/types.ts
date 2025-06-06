@@ -1,4 +1,3 @@
-
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface Advance {

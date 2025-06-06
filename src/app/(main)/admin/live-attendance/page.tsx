@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, CalendarCheck, AlertTriangle, RefreshCw, Camera as CameraIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow, differenceInMilliseconds, format, isToday, parseISO } from 'date-fns';
-import { formatDuration } from '@/lib/dateUtils';
+import { formatDuration, isSunday } from '@/lib/dateUtils';
 
 
 interface EmployeeAttendanceStatus {
@@ -42,10 +42,12 @@ export default function AdminLiveAttendancePage() {
 
     const displayableUsers = allUsers.filter(u => u.role === 'employee' || u.role === 'manager');
     
+    const todayDate = new Date(); 
+    const todayIsSunday = isSunday(todayDate);
+
     const todayAttendanceLog = attendanceLog.filter(event => {
       if (event && typeof event.timestamp === 'string' && event.timestamp.length > 0) {
         try {
-          // Ensure timestamp is a valid ISO string before parsing
           const dateObj = parseISO(event.timestamp);
           return isToday(dateObj);
         } catch (e) {
@@ -53,7 +55,6 @@ export default function AdminLiveAttendancePage() {
           return false;
         }
       }
-      // console.warn(`AdminLiveAttendancePage: Skipping event with invalid or missing timestamp:`, event);
       return false;
     });
 
@@ -64,7 +65,7 @@ export default function AdminLiveAttendancePage() {
             try {
                 return parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime();
             } catch {
-                return 0; // Fallback sort if timestamps are invalid
+                return 0; 
             }
         });
 
@@ -83,21 +84,25 @@ export default function AdminLiveAttendancePage() {
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.location;
 
-        let lastCheckInTime: Date | null = null;
-        for (const event of userEventsToday) {
-          try {
-            if (event.type === 'check-in') {
-              lastCheckInTime = parseISO(event.timestamp);
-            } else if (event.type === 'check-out' && lastCheckInTime) {
-              workingHoursTodayMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
-              lastCheckInTime = null; 
+        if (todayIsSunday) {
+          workingHoursTodayMs = 0;
+        } else {
+            let lastCheckInTime: Date | null = null;
+            for (const event of userEventsToday) {
+              try {
+                if (event.type === 'check-in') {
+                  lastCheckInTime = parseISO(event.timestamp);
+                } else if (event.type === 'check-out' && lastCheckInTime) {
+                  workingHoursTodayMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
+                  lastCheckInTime = null; 
+                }
+              } catch (e) {
+                console.warn(`Error processing timestamp for work hours calculation for event ${event.id}: ${event.timestamp}`);
+              }
             }
-          } catch (e) {
-            console.warn(`Error processing timestamp for work hours calculation for event ${event.id}: ${event.timestamp}`);
-          }
-        }
-        if (status === 'Checked In' && lastCheckInTime) {
-          workingHoursTodayMs += differenceInMilliseconds(new Date(), lastCheckInTime);
+            if (status === 'Checked In' && lastCheckInTime) {
+              workingHoursTodayMs += differenceInMilliseconds(todayDate, lastCheckInTime);
+            }
         }
       }
       
@@ -128,7 +133,7 @@ export default function AdminLiveAttendancePage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Live Employee Attendance</h1>
-          <p className="text-muted-foreground">Real-time overview of employee check-in/out status and working hours for today.</p>
+          <p className="text-muted-foreground">Real-time overview of employee check-in/out status and working hours for today. Sundays are excluded from work hour calculations.</p>
         </div>
          <Button onClick={handleRefresh} variant="outline">
            <RefreshCw className="mr-2 h-4 w-4" /> Refresh Data
@@ -142,7 +147,7 @@ export default function AdminLiveAttendancePage() {
         <CardHeader>
           <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" />Employee Status</CardTitle>
           <CardDescription>
-            Current attendance status and activity for all employees and managers. Working hours are calculated for today's entries.
+            Current attendance status and activity for all employees and managers. Working hours are calculated for today's entries (Sundays excluded).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -235,4 +240,3 @@ export default function AdminLiveAttendancePage() {
     </div>
   );
 }
-
