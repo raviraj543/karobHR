@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType, AttendanceEvent } from '@/lib/types';
+import type { User, Task as TaskType, LeaveApplication as LeaveApplicationType, AttendanceEvent, MonthlyPayrollReport } from '@/lib/types';
 import { summarizeEmployeePerformance } from '@/ai/flows/summarize-employee-performance';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,13 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { format, parseISO, isToday, formatDistanceToNow, differenceInMilliseconds } from 'date-fns';
+import { format, parseISO, isToday, formatDistanceToNow, differenceInMilliseconds, getYear, getMonth } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock, Clock4 } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Briefcase, User as UserIcon, Users, CalendarDays, IndianRupee, Percent, BarChart3, Loader2, AlertTriangle, MessageSquare, ListChecks, CalendarOff, Edit2, Camera as CameraIcon, Wifi, WifiOff, UserCheck, UserX, Clock, Clock4, FileSpreadsheet } from 'lucide-react';
 import { formatDuration, isSunday } from '@/lib/dateUtils';
 
 interface DailyWorkSummary {
@@ -30,10 +31,18 @@ interface DailyWorkSummary {
   isOngoing: boolean;
 }
 
+const currentYear = getYear(new Date());
+const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: i, // 0-11
+  label: format(new Date(currentYear, i), 'MMMM'),
+}));
+
+
 export default function EmployeeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog, tasks: allContextTasks } = useAuth();
+  const { allUsers, loading: authLoading, updateUserInContext, attendanceLog, tasks: allContextTasks, calculateMonthlyPayrollDetails } = useAuth();
   const employeeId = params.employeeId as string;
   const { toast } = useToast();
 
@@ -45,6 +54,10 @@ export default function EmployeeDetailPage() {
   const [editedSalary, setEditedSalary] = useState<string | number>('');
   const [isEditingHours, setIsEditingHours] = useState(false);
   const [editedHours, setEditedHours] = useState<string | number>('');
+
+  const [reportYear, setReportYear] = useState<number>(currentYear);
+  const [reportMonth, setReportMonth] = useState<number>(getMonth(new Date())); // Current month (0-11)
+  const [monthlyPayrollReport, setMonthlyPayrollReport] = useState<MonthlyPayrollReport | null>(null);
 
 
   const employee = useMemo(() => {
@@ -60,6 +73,20 @@ export default function EmployeeDetailPage() {
     }
     return foundEmployee;
   }, [allUsers, employeeId, authLoading, isEditingSalary, isEditingHours]);
+
+  const employeeAttendanceEvents = useMemo(() => {
+    if (!employee || authLoading) return [];
+    return attendanceLog
+      .filter(event => event.employeeId === employee.employeeId)
+      .sort((a, b) => {
+        try {
+          return parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime();
+        } catch (e) {
+          console.warn("Error parsing timestamp in employeeAttendanceEvents sort", a.timestamp, b.timestamp, e);
+          return 0;
+        }
+      });
+  }, [employee, attendanceLog, authLoading]);
 
   useEffect(() => {
     if (employee?.name) {
@@ -81,16 +108,17 @@ export default function EmployeeDetailPage() {
     return employee.leaves || [];
   }, [employee]);
 
-  const employeeAttendanceEvents = useMemo(() => {
-    if (!employee || authLoading) return [];
-    return attendanceLog
-      .filter(event => event.employeeId === employee.employeeId)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [employee, attendanceLog, authLoading]);
 
   const todaysAttendanceEvents = useMemo(() => {
-    return employeeAttendanceEvents.filter(event => event.timestamp && isToday(parseISO(event.timestamp)))
-                                   .sort((a,b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
+    return employeeAttendanceEvents.filter(event => {
+      try {
+        return event.timestamp && isToday(parseISO(event.timestamp));
+      } catch { return false; }
+    }).sort((a,b) => {
+      try {
+        return parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime();
+      } catch { return 0; }
+    });
   }, [employeeAttendanceEvents]);
 
   const dailyWorkSummaries = useMemo((): DailyWorkSummary[] => {
@@ -98,54 +126,71 @@ export default function EmployeeDetailPage() {
 
     const eventsByDate = employeeAttendanceEvents.reduce((acc, event) => {
       if(!event.timestamp) return acc;
-      const dateStr = format(parseISO(event.timestamp), 'yyyy-MM-dd');
-      if (!acc[dateStr]) {
-        acc[dateStr] = [];
+      try {
+        const dateStr = format(parseISO(event.timestamp), 'yyyy-MM-dd');
+        if (!acc[dateStr]) {
+          acc[dateStr] = [];
+        }
+        acc[dateStr].push(event);
+      } catch (e) {
+        console.warn("Error processing event timestamp for dailyWorkSummaries", event.timestamp, e);
       }
-      acc[dateStr].push(event);
       return acc;
     }, {} as Record<string, AttendanceEvent[]>);
 
     const summaries = Object.entries(eventsByDate)
       .map(([dateStr, dailyEvents]) => {
-        dailyEvents.sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
+        try {
+          dailyEvents.sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
 
-        let totalWorkMs = 0;
-        let lastCheckInTime: Date | null = null;
-        let isOngoing = false;
+          let totalWorkMs = 0;
+          let lastCheckInTime: Date | null = null;
+          let isOngoing = false;
 
-        if (isSunday(dateStr)) {
-          totalWorkMs = 0;
-        } else {
-            for (const event of dailyEvents) {
-              if (event.type === 'check-in') {
-                lastCheckInTime = parseISO(event.timestamp);
-              } else if (event.type === 'check-out' && lastCheckInTime) {
-                totalWorkMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
-                lastCheckInTime = null;
+          if (isSunday(dateStr)) {
+            totalWorkMs = 0;
+          } else {
+              for (const event of dailyEvents) {
+                if (event.type === 'check-in') {
+                  lastCheckInTime = parseISO(event.timestamp);
+                } else if (event.type === 'check-out' && lastCheckInTime) {
+                  totalWorkMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTime);
+                  lastCheckInTime = null;
+                }
               }
-            }
 
-            if (lastCheckInTime && isToday(parseISO(dateStr))) {
-              const lastEventOfTheDay = dailyEvents[dailyEvents.length -1];
-              if (lastEventOfTheDay.type === 'check-in' && parseISO(lastEventOfTheDay.timestamp).getTime() === lastCheckInTime.getTime()){
-                totalWorkMs += differenceInMilliseconds(new Date(), lastCheckInTime);
-                isOngoing = true;
+              if (lastCheckInTime && isToday(parseISO(dateStr))) {
+                const lastEventOfTheDay = dailyEvents[dailyEvents.length -1];
+                if (lastEventOfTheDay.type === 'check-in' && parseISO(lastEventOfTheDay.timestamp).getTime() === lastCheckInTime.getTime()){
+                  totalWorkMs += differenceInMilliseconds(new Date(), lastCheckInTime);
+                  isOngoing = true;
+                }
               }
-            }
+          }
+
+          return {
+            date: dateStr,
+            totalWorkMs,
+            entries: dailyEvents,
+            isOngoing: isSunday(dateStr) ? false : isOngoing,
+          };
+        } catch (e) {
+          console.warn("Error creating daily summary for date", dateStr, e);
+          return null;
         }
-
-        return {
-          date: dateStr,
-          totalWorkMs,
-          entries: dailyEvents,
-          isOngoing: isSunday(dateStr) ? false : isOngoing,
-        };
       })
-      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
+      .filter(summary => summary !== null)
+      .sort((a, b) => parseISO(b!.date).getTime() - parseISO(a!.date).getTime()) as DailyWorkSummary[];
 
     return summaries;
   }, [employeeAttendanceEvents]);
+
+  useEffect(() => {
+    if (employee && calculateMonthlyPayrollDetails) {
+      const report = calculateMonthlyPayrollDetails(employee, reportYear, reportMonth, employeeAttendanceEvents);
+      setMonthlyPayrollReport(report);
+    }
+  }, [employee, reportYear, reportMonth, employeeAttendanceEvents, calculateMonthlyPayrollDetails]);
 
 
   const handleGenerateSummary = async () => {
@@ -168,7 +213,7 @@ export default function EmployeeDetailPage() {
         employeeName: employee.name || employee.employeeId,
         tasks: tasksForSummary,
         leaveApplications: (employee.leaves || []).map(l => ({ leaveType: l.leaveType, status: l.status, startDate: l.startDate, endDate: l.endDate, reason: l.reason })),
-        attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0,
+        attendanceFactor: employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0, // This might be deprecated with new payroll
         baseSalary: employee.baseSalary || 0,
       };
       const result = await summarizeEmployeePerformance(performanceInput);
@@ -227,11 +272,12 @@ export default function EmployeeDetailPage() {
 
   const initials = employee.name ? employee.name.split(' ').map((n) => n[0]).join('').toUpperCase() : employee.employeeId[0].toUpperCase();
   const baseSalary = employee.baseSalary || 0;
-  const standardHours = employee.standardDailyHours || 8; // Default to 8 if not set
-  const attendanceFactor = employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0;
-  const salaryAfterAttendance = baseSalary * attendanceFactor;
-  const approvedAdvancesTotal = employee.advances?.filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0) || 0;
-  const netPayable = salaryAfterAttendance - approvedAdvancesTotal;
+  const standardHours = employee.standardDailyHours || 8;
+  // const attendanceFactor = employee.mockAttendanceFactor !== undefined ? employee.mockAttendanceFactor : 1.0; // Less relevant now
+  // const salaryAfterAttendance = baseSalary * attendanceFactor; // Replaced by detailed calculation
+  // const approvedAdvancesTotal = employee.advances?.filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0) || 0;
+  // const netPayable = salaryAfterAttendance - approvedAdvancesTotal; // Replaced by detailed calculation
+
 
   const getRoleDisplayName = (role: typeof employee.role) => {
     if (!role) return 'N/A';
@@ -299,7 +345,8 @@ export default function EmployeeDetailPage() {
             <InfoCard title="Department" icon={Briefcase} value={employee.department || 'N/A'} />
             <InfoCard title="Joining Date" icon={CalendarDays} value={employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : 'N/A'} />
             <InfoCard title="Std. Daily Hours" icon={Clock4} value={`${standardHours}h`} />
-            <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} />
+            {/* Mock Attendance Factor is now less relevant */}
+            {/* <InfoCard title="Attendance Factor" icon={Percent} value={`${(attendanceFactor * 100).toFixed(0)}% (Mock)`} /> */}
           </div>
 
           <Separator />
@@ -401,17 +448,60 @@ export default function EmployeeDetailPage() {
 
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center text-xl"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Payout Summary (Mock)</CardTitle>
-              <CardDescription className="text-xs text-muted-foreground">
-                Net Payable = (Base Salary × Mock Attendance Factor) - Approved Advances.
-              </CardDescription>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                    <CardTitle className="flex items-center text-xl">
+                        <FileSpreadsheet className="mr-2 h-5 w-5 text-primary" /> Monthly Payroll Report
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                        Calculated based on attendance, standard hours, and base salary. Deductions applied for missed hours.
+                    </CardDescription>
+                </div>
+                <div className="flex gap-2 items-center">
+                    <Select value={String(reportMonth)} onValueChange={(val) => setReportMonth(Number(val))}>
+                        <SelectTrigger className="w-[150px] h-9">
+                            <SelectValue placeholder="Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Select value={String(reportYear)} onValueChange={(val) => setReportYear(Number(val))}>
+                         <SelectTrigger className="w-[100px] h-9">
+                            <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm p-4 bg-muted/30 rounded-md">
-              <div><span className="font-medium">Salary (Post-Attendance):</span> ₹{salaryAfterAttendance.toLocaleString('en-IN')}</div>
-              <div><span className="font-medium">Approved Advances:</span> ₹{approvedAdvancesTotal.toLocaleString('en-IN')}</div>
-              <div className="font-semibold text-lg"><span className="font-medium">Net Payable:</span> ₹{netPayable.toLocaleString('en-IN')}</div>
+            <CardContent className="p-4 bg-muted/30 rounded-md">
+                {monthlyPayrollReport ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                        <ReportItem label="Report For" value={`${months.find(m=>m.value === reportMonth)?.label} ${reportYear}`} />
+                        <ReportItem label="Base Salary" value={`₹${monthlyPayrollReport.baseSalary.toLocaleString('en-IN')}`} />
+                        <ReportItem label="Std. Daily Hours" value={`${monthlyPayrollReport.standardDailyHours}h`} />
+                        <ReportItem label="Working Days in Month" value={`${monthlyPayrollReport.totalWorkingDaysInMonth} days`} />
+                        <ReportItem label="Total Standard Hours" value={`${monthlyPayrollReport.totalStandardHoursForMonth.toFixed(2)}h`} />
+                        <ReportItem label="Total Actual Hours Worked" value={`${monthlyPayrollReport.totalActualHoursWorked.toFixed(2)}h`} 
+                            className={monthlyPayrollReport.totalActualHoursWorked < monthlyPayrollReport.totalStandardHoursForMonth ? 'text-orange-600' : 'text-green-600'}/>
+                        <ReportItem label="Total Hours Missed" value={`${monthlyPayrollReport.totalHoursMissed.toFixed(2)}h`} 
+                            className={monthlyPayrollReport.totalHoursMissed > 0 ? 'text-destructive' : ''} />
+                        <ReportItem label="Effective Hourly Rate" value={`₹${monthlyPayrollReport.hourlyRate.toLocaleString('en-IN')}/h`} />
+                        <ReportItem label="Calculated Deductions" value={`₹${monthlyPayrollReport.calculatedDeductions.toLocaleString('en-IN')}`} 
+                             className={monthlyPayrollReport.calculatedDeductions > 0 ? 'text-destructive' : ''}/>
+                        <ReportItem label="Salary After Deductions" value={`₹${monthlyPayrollReport.salaryAfterDeductions.toLocaleString('en-IN')}`} />
+                        <ReportItem label="Approved Advances" value={`(₹${monthlyPayrollReport.totalApprovedAdvances.toLocaleString('en-IN')})`} className="text-red-600"/>
+                        <ReportItem label="Final Net Payable" value={`₹${monthlyPayrollReport.finalNetPayable.toLocaleString('en-IN')}`} className="text-lg font-semibold text-primary" />
+                    </div>
+                ) : (
+                     <p className="text-muted-foreground text-center py-4">Calculating payroll report...</p>
+                )}
             </CardContent>
           </Card>
+
 
           <Separator />
 
@@ -634,4 +724,18 @@ function InfoCard({ title, value, icon: Icon }: InfoCardProps) {
       <p className="text-md font-semibold text-foreground truncate" title={String(value)}>{value}</p>
     </div>
   );
+}
+
+interface ReportItemProps {
+    label: string;
+    value: string | number;
+    className?: string;
+}
+function ReportItem({ label, value, className }: ReportItemProps) {
+    return (
+        <div>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className={cn("font-medium text-foreground", className)}>{value}</p>
+        </div>
+    );
 }

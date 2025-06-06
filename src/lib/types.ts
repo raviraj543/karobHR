@@ -44,7 +44,7 @@ export interface User {
   };
   baseSalary?: number;
   standardDailyHours?: number; // Added standard daily working hours
-  mockAttendanceFactor?: number;
+  mockAttendanceFactor?: number; // This will be less relevant with precise hour calculations
   advances?: Advance[];
   leaves?: LeaveApplication[];
 }
@@ -115,4 +115,22 @@ export interface Announcement {
   postedAt: string; // ISO Date string (server timestamp)
   postedByUid: string; // Firebase Auth UID of admin
   postedByName: string; // Admin's name
+}
+
+export interface MonthlyPayrollReport {
+  employeeId: string;
+  employeeName: string;
+  month: number; // 0-11 for Jan-Dec
+  year: number;
+  baseSalary: number;
+  standardDailyHours: number;
+  totalWorkingDaysInMonth: number;
+  totalStandardHoursForMonth: number;
+  totalActualHoursWorked: number;
+  totalHoursMissed: number;
+  hourlyRate: number;
+  calculatedDeductions: number;
+  salaryAfterDeductions: number;
+  totalApprovedAdvances: number;
+  finalNetPayable: number;
 }

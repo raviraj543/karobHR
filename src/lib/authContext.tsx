@@ -12,9 +12,11 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, Timestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
-import type { User, UserRole, Task, LeaveApplication, Announcement, UserDirectoryEntry, Advance, AttendanceEvent, LocationInfo } from '@/lib/types';
+import type { User, UserRole, Task, LeaveApplication, Announcement, UserDirectoryEntry, Advance, AttendanceEvent, LocationInfo, MonthlyPayrollReport } from '@/lib/types';
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
+import { getWorkingDaysInMonth, isSunday, formatDuration } from '@/lib/dateUtils';
+import { differenceInMilliseconds, parseISO, isToday, getMonth, getYear, format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 
 
 console.log(">>> KAROBHR TRACE: Attempting to load src/lib/authContext.tsx module...");
@@ -28,7 +30,7 @@ export interface NewEmployeeData {
   companyId: string;
   joiningDate?: string;
   baseSalary?: number;
-  standardDailyHours?: number; // Added standard daily working hours
+  standardDailyHours?: number;
   profilePictureUrl?: string | null;
 }
 
@@ -56,6 +58,13 @@ export interface AuthContextType {
   addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'userId' | 'employeeId' | 'userName' | 'timestamp'> & { photoDataUrl?: string | null }) => Promise<void>;
   requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
   processAdvance: (employeeId: string, advanceId: string, status: 'approved' | 'rejected') => Promise<void>;
+  calculateMonthlyPayrollDetails: (
+    employee: User,
+    forYear: number,
+    forMonth: number, // 0-11
+    employeeAttendanceEvents: AttendanceEvent[],
+    companyHolidays?: Holiday[] // Assuming Holiday type exists
+  ) => MonthlyPayrollReport;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -119,7 +128,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         const completeUserData: User = {
-            id: uidToFetch,
+            id: uidToFetch, // Ensure ID is Auth UID
             employeeId: userDataFromDb.employeeId,
             email: userDataFromDb.email,
             name: userDataFromDb.name,
@@ -127,14 +136,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             companyId: userDataFromDb.companyId,
             department: userDataFromDb.department,
             joiningDate: userDataFromDb.joiningDate,
-            baseSalary: userDataFromDb.baseSalary,
-            standardDailyHours: userDataFromDb.standardDailyHours, // Added standardDailyHours
+            baseSalary: userDataFromDb.baseSalary || 0,
+            standardDailyHours: userDataFromDb.standardDailyHours || 8,
             profilePictureUrl: userDataFromDb.profilePictureUrl || null,
             advances: userDataFromDb.advances || [],
             leaves: (userDataFromDb.leaves || []).map((leave: any) => ({
               ...leave,
-              appliedAt: leave.appliedAt && typeof leave.appliedAt.toDate === 'function' ? leave.appliedAt.toDate().toISOString() : leave.appliedAt,
-              processedAt: leave.processedAt && typeof leave.processedAt.toDate === 'function' ? leave.processedAt.toDate().toISOString() : leave.processedAt,
+              appliedAt: leave.appliedAt && typeof leave.appliedAt.toDate === 'function' ? leave.appliedAt.toDate().toISOString() : (typeof leave.appliedAt === 'string' ? leave.appliedAt : new Date(0).toISOString()),
+              processedAt: leave.processedAt && typeof leave.processedAt.toDate === 'function' ? leave.processedAt.toDate().toISOString() : (typeof leave.processedAt === 'string' ? leave.processedAt : undefined),
             })),
             mockAttendanceFactor: userDataFromDb.mockAttendanceFactor !== undefined ? userDataFromDb.mockAttendanceFactor : 1.0,
         };
@@ -147,7 +156,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         console.warn(`>>> KAROBHR TRACE: fetchUserData - WARNING - No user document found in Firestore 'users/${uidToFetch}'. Auth UID: ${uidToFetch}.`);
         if (expectedCompanyId) setCompanyId(expectedCompanyId);
-        else setCompanyId(null);
+        else setCompanyId(null); // Should not happen if login flow is correct
         setUser(null);
         setRole(null);
         return null;
@@ -172,20 +181,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
+    setLoading(true); // Set loading true when onAuthStateChanged starts
     let isMounted = true;
     const unsubscribe = onAuthStateChanged(authInstance, async (currentFirebaseUser) => {
       if (!isMounted) return;
       console.log(">>> KAROBHR TRACE: onAuthStateChanged triggered. Firebase user UID:", currentFirebaseUser ? currentFirebaseUser.uid : 'null');
-      setLoading(true);
       if (currentFirebaseUser) {
         const fetchedUser = await fetchUserData(currentFirebaseUser, dbInstance);
-        if (fetchedUser) {
-          // setLoading will be handled by data listeners or if no listeners are active
-        } else {
+        if (!fetchedUser && isMounted) { // If fetchUserData returns null (e.g., profile not found after auth)
           console.warn(`>>> KAROBHR TRACE: onAuthStateChanged - User ${currentFirebaseUser.uid} authenticated, but profile data not found/loaded. Setting app user to null.`);
           setUser(null); setRole(null); setCompanyId(null);
-          setLoading(false);
+          setLoading(false); // User is authed, but no profile, so stop loading
         }
+        // If fetchedUser is successful, setUser, setRole, setCompanyId are called within fetchUserData
+        // Loading will be set to false by other data listeners or the main loading effect
       } else {
         setUser(null); setRole(null); setCompanyId(null);
         setAllUsers([]); setTasks([]); setAnnouncements([]); setAttendanceLog([]);
@@ -200,164 +209,124 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [authInstance, dbInstance, fetchUserData, firebaseError]);
 
-  useEffect(() => {
-    if (loading && firebaseError) {
-      console.log(">>> KAROBHR TRACE: AuthProvider: Firebase error occurred WHILE loading, stopping loading state.");
-      setLoading(false);
-    }
-  }, [firebaseError, loading]);
 
   // Data listeners
   useEffect(() => {
+    let unsub: (() => void) | undefined;
     if (!dbInstance || !user || !companyId || role !== 'admin') {
       setAllUsers([]);
-      return;
+      if (role !== 'admin' && loading && user) setLoading(false); // If not admin, stop loading if user context exists
+    } else {
+      setLoading(true);
+      const usersQuery = query(collection(dbInstance, 'users'), where('companyId', '==', companyId));
+      unsub = onSnapshot(usersQuery, (snapshot) => {
+        const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setAllUsers(usersList);
+        if (loading) setLoading(false); // Stop loading once admin's user list is fetched
+      }, (error) => {
+        console.error(">>> KAROBHR TRACE: Error fetching all users:", error);
+        if (loading) setLoading(false);
+      });
     }
-    const usersQuery = query(collection(dbInstance, 'users'), where('companyId', '==', companyId));
-    const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
-      const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-      setAllUsers(usersList);
-    }, (error) => {
-      console.error(">>> KAROBHR TRACE: Error fetching all users:", error);
-    });
-    return () => unsubscribe();
-  }, [dbInstance, user, companyId, role]);
+    return () => unsub && unsub();
+  }, [dbInstance, user, companyId, role, loading]);
 
    useEffect(() => {
+    let unsub: (() => void) | undefined;
     if (!dbInstance || !user || !companyId) {
       setTasks([]);
-      return;
-    }
-    let tasksQuery;
-    if (role === 'admin' || role === 'manager') {
-      tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`));
+      if (loading && user && role !== 'admin') setLoading(false); // If basic user and tasks should have loaded, stop loading
     } else {
-      tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`), where('assigneeId', '==', user.employeeId));
+      setLoading(true);
+      let tasksQuery;
+      if (role === 'admin' || role === 'manager') {
+        tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`));
+      } else { // employee
+        tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`), where('assigneeId', '==', user.employeeId));
+      }
+      unsub = onSnapshot(tasksQuery, (snapshot) => {
+        const tasksList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Task));
+        setTasks(tasksList);
+        if (loading) setLoading(false); // Stop loading once tasks are fetched
+      }, (error) => {
+        console.error(">>> KAROBHR TRACE: Error fetching tasks:", error);
+        if (loading) setLoading(false);
+      });
     }
-    const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
-      const tasksList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Task));
-      setTasks(tasksList);
-    }, (error) => {
-      console.error(">>> KAROBHR TRACE: Error fetching tasks:", error);
-    });
-    return () => unsubscribe();
-  }, [dbInstance, user, companyId, role]);
+    return () => unsub && unsub();
+  }, [dbInstance, user, companyId, role, loading]);
 
   useEffect(() => {
-    if (!dbInstance || !companyId) {
+    let unsub: (() => void) | undefined;
+    if (!dbInstance || !companyId) { // Announcements are company-wide, not user-specific for loading state trigger
       setAnnouncements([]);
-      return;
+    } else {
+      // setLoading(true); // Announcements might not gate the core app loading state
+      const announcementsQuery = query(collection(dbInstance, `companies/${companyId}/announcements`));
+      unsub = onSnapshot(announcementsQuery, (snapshot) => {
+        const announcementsList = snapshot.docs.map(docSnapshot => {
+          const data = docSnapshot.data();
+          return {
+            ...data,
+            id: docSnapshot.id,
+            postedAt: data.postedAt && typeof (data.postedAt as any).toDate === 'function'
+                        ? (data.postedAt as any).toDate().toISOString()
+                        : (typeof data.postedAt === 'string' ? data.postedAt : new Date(0).toISOString()),
+          } as Announcement;
+        }).sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
+        setAnnouncements(announcementsList);
+        // if (loading) setLoading(false); // Decide if announcements should gate loading
+      }, (error) => {
+        console.error(">>> KAROBHR TRACE: Error fetching announcements:", error);
+        // if (loading) setLoading(false);
+      });
     }
-    const announcementsQuery = query(collection(dbInstance, `companies/${companyId}/announcements`));
-    const unsubscribe = onSnapshot(announcementsQuery, (snapshot) => {
-      const announcementsList = snapshot.docs.map(docSnapshot => {
-        const data = docSnapshot.data();
-        return {
-          ...data,
-          id: docSnapshot.id,
-          postedAt: data.postedAt && typeof (data.postedAt as any).toDate === 'function'
-                      ? (data.postedAt as any).toDate().toISOString()
-                      : data.postedAt,
-        } as Announcement;
-      }).sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
-      setAnnouncements(announcementsList);
-    }, (error) => {
-      console.error(">>> KAROBHR TRACE: Error fetching announcements:", error);
-    });
-    return () => unsubscribe();
-  }, [dbInstance, companyId]);
+    return () => unsub && unsub();
+  }, [dbInstance, companyId, loading]);
 
   useEffect(() => {
+    let unsub: (() => void) | undefined;
     if (!dbInstance || !companyId || (role !== 'admin' && role !== 'manager')) {
         setAttendanceLog([]);
-        return;
+        if (loading && user && (role === 'employee')) setLoading(false); // Employee doesn't directly use full log, stop loading.
+    } else {
+      setLoading(true);
+      const attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`));
+      unsub = onSnapshot(attendanceQuery, (snapshot) => {
+          const logList = snapshot.docs.map(docSnapshot => {
+              const data = docSnapshot.data();
+              const eventTimestamp = data.timestamp;
+              let isoTimestamp: string;
+              if (eventTimestamp && typeof (eventTimestamp as any).toDate === 'function') {
+                  isoTimestamp = (eventTimestamp as any).toDate().toISOString();
+              } else if (typeof eventTimestamp === 'string') {
+                  isoTimestamp = eventTimestamp;
+              } else {
+                  console.warn(`>>> KAROBHR TRACE: Attendance event ${docSnapshot.id} has invalid or missing timestamp:`, eventTimestamp);
+                  isoTimestamp = new Date(0).toISOString(); // Default to epoch if invalid
+              }
+              return {
+                  id: docSnapshot.id,
+                  employeeId: data.employeeId,
+                  userId: data.userId,
+                  userName: data.userName,
+                  type: data.type,
+                  timestamp: isoTimestamp,
+                  photoUrl: data.photoUrl || null,
+                  location: data.location || null,
+                  isWithinGeofence: data.isWithinGeofence === undefined ? null : data.isWithinGeofence,
+              } as AttendanceEvent;
+          });
+          setAttendanceLog(logList);
+          if (loading && (role === 'admin' || role === 'manager')) setLoading(false); // Stop loading for admin/manager once log is fetched
+      }, (error) => {
+          console.error(">>> KAROBHR TRACE: Error fetching attendance log:", error);
+          if (loading) setLoading(false);
+      });
     }
-    const attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`));
-    const unsubscribe = onSnapshot(attendanceQuery, (snapshot) => {
-        const logList = snapshot.docs.map(docSnapshot => {
-            const data = docSnapshot.data();
-            const eventTimestamp = data.timestamp;
-            let isoTimestamp: string;
-            if (eventTimestamp && typeof (eventTimestamp as any).toDate === 'function') {
-                isoTimestamp = (eventTimestamp as any).toDate().toISOString();
-            } else if (typeof eventTimestamp === 'string') {
-                isoTimestamp = eventTimestamp;
-            } else {
-                console.warn(`>>> KAROBHR TRACE: Attendance event ${docSnapshot.id} has invalid or missing timestamp:`, eventTimestamp);
-                isoTimestamp = new Date(0).toISOString();
-            }
-            return {
-                id: docSnapshot.id,
-                employeeId: data.employeeId,
-                userId: data.userId,
-                userName: data.userName,
-                type: data.type,
-                timestamp: isoTimestamp,
-                photoUrl: data.photoUrl || null,
-                location: data.location || null,
-                isWithinGeofence: data.isWithinGeofence === undefined ? null : data.isWithinGeofence,
-            } as AttendanceEvent;
-        });
-        setAttendanceLog(logList);
-        // Set loading to false here only if this is the last piece of data to load for this role
-        if (loading && (role === 'admin' || role === 'manager')) {
-          // This is a simplified loading complete check. A more robust solution might track multiple loading states.
-          // Assuming if admin/manager is logged in and attendance log is fetched, they are "loaded" for basic ops.
-          // setLoading(false); // Be cautious with this, ensure other essential data is loaded too
-        }
-    }, (error) => {
-        console.error(">>> KAROBHR TRACE: Error fetching attendance log:", error);
-        if (loading) setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [dbInstance, companyId, role, loading]); // Added loading to dep array for the setLoading(false)
+    return () => unsub && unsub();
+  }, [dbInstance, companyId, role, user, loading]);
 
-  // Effect to manage overall loading state after all data listeners attempt to run
-  useEffect(() => {
-      // If there's no authenticated user, and we're not already trying to log in (auth is not loading), then app isn't loading.
-      if (!authInstance?.currentUser && !loading && !user) {
-          if (loading) setLoading(false); // Ensure loading is false if no user and not auth-loading
-          return;
-      }
-
-      // If user is loaded, determine if all essential data for their role is also loaded
-      if (user && loading) {
-          let allDataConsideredLoaded = false;
-          if (role === 'admin') {
-              // Admin needs allUsers and attendanceLog (and tasks, announcements are company-wide so less critical for "user is loaded" feel)
-              // This is a simple check, could be more refined
-              if (allUsers.length > 0 || attendanceLog.length > 0) { // or use specific flags for each data load
-                  allDataConsideredLoaded = true;
-              }
-          } else if (role === 'manager') {
-              // Manager might need tasks and attendanceLog
-              if (tasks.length > 0 || attendanceLog.length > 0) {
-                  allDataConsideredLoaded = true;
-              }
-          } else if (role === 'employee') {
-              // Employee might primarily need their tasks
-              if (tasks.length > 0 || (user.leaves !== undefined && user.advances !== undefined)) { // Check if user sub-collections are at least initialized
-                allDataConsideredLoaded = true;
-              }
-          }
-
-          // Fallback: if user exists but role-specific data checks don't pass after a timeout, stop loading
-          const timer = setTimeout(() => {
-            if (loading && user) {
-                console.warn(">>> KAROBHR TRACE: Loading timeout for user data, setting loading to false.");
-                setLoading(false);
-            }
-          }, 5000); // 5 second timeout
-
-          if (allDataConsideredLoaded) {
-              clearTimeout(timer);
-              setLoading(false);
-              console.log(`>>> KAROBHR TRACE: All essential data for user ${user.employeeId} (role: ${role}) seems loaded. Loading finished.`);
-          }
-          return () => clearTimeout(timer);
-      }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, role, allUsers, tasks, attendanceLog, companyId, authInstance, loading]); // Added loading here
 
   const login = useCallback(async (employeeIdInput: string, passwordInput: string): Promise<User | null> => {
     if (!authInstance || !dbInstance) {
@@ -382,9 +351,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userDirEntry = directorySnapshot.docs[0].data() as UserDirectoryEntry;
       const userEmail = userDirEntry.email;
       const userCompanyIdFromDirectory = userDirEntry.companyId;
-      const userIdFromDirectory = userDirEntry.userId;
+      const userIdFromDirectory = userDirEntry.userId; // This is the Auth UID
 
-      console.log(`>>> KAROBHR TRACE: login - User found in directory. Email: ${userEmail}, CompanyID from Dir: ${userCompanyIdFromDirectory}, UserID from Dir: ${userIdFromDirectory}.`);
+      console.log(`>>> KAROBHR TRACE: login - User found in directory. Email: ${userEmail}, CompanyID from Dir: ${userCompanyIdFromDirectory}, UserID (Auth UID) from Dir: ${userIdFromDirectory}`);
 
       if (!userEmail) {
         console.error(`>>> KAROBHR TRACE: login - User directory entry for ${employeeIdInput} is missing an email.`);
@@ -395,6 +364,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error("User configuration error (missing UID link). Please contact support.");
       }
 
+
       console.log(`>>> KAROBHR TRACE: login - Attempting Firebase signInWithEmailAndPassword with email: ${userEmail}`);
       const userCredential = await signInWithEmailAndPassword(authInstance, userEmail, passwordInput);
       const firebaseUser = userCredential.user;
@@ -402,30 +372,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (firebaseUser.uid !== userIdFromDirectory) {
           console.error(`>>> KAROBHR TRACE: login - UID MISMATCH! Auth UID (${firebaseUser.uid}) vs Directory UID (${userIdFromDirectory}) for ${employeeIdInput}. This is a critical data integrity issue.`);
-          await firebaseSignOut(authInstance);
+          await firebaseSignOut(authInstance); // Sign out inconsistent user
           throw new Error("User data integrity error. Please contact support.");
       }
 
+      // Fetch user data using the confirmed UID and companyId from directory
       const loggedInUser = await fetchUserData(firebaseUser, dbInstance, userCompanyIdFromDirectory);
 
       if (loggedInUser) {
-        console.log(`>>> KAROBHR TRACE: login - Successfully fetched profile for ${loggedInUser.name} (${loggedInUser.employeeId}). Login complete.`);
+        console.log(`>>> KAROBHR TRACE: login - Successfully fetched profile for ${loggedInUser.name} (${loggedInUser.employeeId}). Login complete. Role: ${loggedInUser.role}, Company: ${loggedInUser.companyId}`);
+        // State (user, role, companyId, loading) will be set by onAuthStateChanged and subsequent data listeners.
         return loggedInUser;
       } else {
         console.error(`>>> KAROBHR TRACE: login - Firebase Auth successful for UID: ${firebaseUser.uid}, but Firestore profile NOT FOUND or fetchUserData failed. This is a critical issue.`);
-        await firebaseSignOut(authInstance);
+        await firebaseSignOut(authInstance); // Sign out if profile can't be loaded
         throw new Error("Login succeeded but user profile could not be loaded.");
       }
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: login - Error during login process:", error.message || error);
-      let detailedErrorMessage = "Invalid User ID or Password.";
+      let detailedErrorMessage = "Invalid User ID or Password."; // Default security-conscious message
        if (error.code && (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential')) {
-        detailedErrorMessage = "Invalid User ID or Password."; // Keep it generic for security
         console.error(`>>> KAROBHR TRACE: login - Firebase Auth FAILED. Original Error Code: ${error.code}, Message: ${error.message}`);
-      } else if (error.message && error.message.startsWith("User data inconsistency")) {
-        detailedErrorMessage = error.message;
-      } else if (error.message && error.message.startsWith("Login succeeded but user profile could not be loaded")) {
-        detailedErrorMessage = error.message;
+        // Keep generic message for these common auth failures
+      } else if (error.message && (error.message.startsWith("User data inconsistency") || error.message.startsWith("Login succeeded but user profile could not be loaded") || error.message.startsWith("User configuration error"))) {
+        detailedErrorMessage = error.message; // Use specific error messages for our custom logic errors
       }
       // setLoading(false); // Let onAuthStateChanged handle overall loading state
       if (!firebaseError && !error.message?.includes("Firebase services not available")) {
@@ -442,15 +412,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     console.log(">>> KAROBHR TRACE: Logging out user...");
-    setLoading(true);
+    setLoading(true); // Indicate loading during logout
     try {
       await firebaseSignOut(authInstance);
+      // onAuthStateChanged will handle clearing user, role, companyId, and setting loading to false
       console.log(">>> KAROBHR TRACE: User logged out successfully. onAuthStateChanged will clear app state.");
     } catch (error) {
       console.error(">>> KAROBHR TRACE: Logout error:", error);
       if(!firebaseError) setFirebaseError(new Error("Logout failed."));
-    } finally {
-      // setLoading(false); // onAuthStateChanged will set user to null, which sets loading to false
+      setLoading(false); // Ensure loading is false if logout errors out
     }
   }, [authInstance, firebaseError]);
 
@@ -470,20 +440,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const finalEmail = employeeData.email || `${employeeData.employeeId.toLowerCase().replace(/[^a-z0-9]/gi, '')}@${employeeData.companyId.split('-')[0]}.karobhr.local`;
-    const isCreatingFirstAdmin = employeeData.role === 'admin' && (!user || user.role !== 'admin'); // Simplified: if creating admin AND no current admin or current user isn't admin. More robust logic might be needed.
+    // Determine if this is the very first admin for a new company
+    const isFirstAdminSetup = employeeData.role === 'admin' && (!user || !allUsers.some(u => u.role === 'admin' && u.companyId === employeeData.companyId));
 
-    console.log(`>>> KAROBHR TRACE: addNewEmployee - START - Adding new ${employeeData.role}: ${employeeData.employeeId} for company ${employeeData.companyId} with email ${finalEmail}. Is First Admin (logic): ${isCreatingFirstAdmin}`);
+    console.log(`>>> KAROBHR TRACE: addNewEmployee - START - Adding new ${employeeData.role}: ${employeeData.employeeId} for company ${employeeData.companyId} with email ${finalEmail}. Is First Admin: ${isFirstAdminSetup}`);
 
     const directoryCheckQuery = query(
         collection(dbInstance, 'userDirectory'),
         where('employeeId', '==', employeeData.employeeId),
-        where('companyId', '==', employeeData.companyId)
+        where('companyId', '==', employeeData.companyId) // Check employeeId only within the same company
     );
     const directoryCheckSnap = await getDocs(directoryCheckQuery);
     if (!directoryCheckSnap.empty) {
         console.error(`>>> KAROBHR TRACE: addNewEmployee - ERROR - Employee ID ${employeeData.employeeId} already exists in company ${employeeData.companyId}.`);
         throw new Error(`Employee ID ${employeeData.employeeId} already exists in this company.`);
     }
+
 
     let newFirebaseUser: FirebaseUser | null = null;
     try {
@@ -493,7 +465,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log(`>>> KAROBHR TRACE: addNewEmployee - Firebase Auth user created successfully. UID: ${newFirebaseUser.uid}`);
 
         const newUserDocument: User = {
-            id: newFirebaseUser.uid, // Use Auth UID as document ID
+            id: newFirebaseUser.uid,
             employeeId: employeeData.employeeId,
             email: finalEmail,
             name: employeeData.name,
@@ -502,15 +474,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             department: employeeData.department,
             joiningDate: employeeData.joiningDate || new Date().toISOString().split('T')[0],
             baseSalary: employeeData.baseSalary || 0,
-            standardDailyHours: employeeData.standardDailyHours || 8, // Default to 8 if not provided
+            standardDailyHours: employeeData.standardDailyHours || 8,
             profilePictureUrl: employeeData.profilePictureUrl || null,
             advances: [],
             leaves: [],
             mockAttendanceFactor: 1.0,
         };
 
-        const userDocRef = doc(dbInstance, `users/${newFirebaseUser.uid}`); // UID as doc ID
-        const userDirectoryDocRef = doc(dbInstance, `userDirectory/${newFirebaseUser.uid}`); // UID as doc ID
+        const userDocRef = doc(dbInstance, `users/${newFirebaseUser.uid}`);
+        const userDirectoryDocRef = doc(dbInstance, `userDirectory/${newFirebaseUser.uid}`); // Use UID for userDirectory doc ID too
 
         console.log(`>>> KAROBHR TRACE: addNewEmployee - Preparing batch write for UID: ${newFirebaseUser.uid}. UserDoc path: users/${newFirebaseUser.uid}, DirDoc path: userDirectory/${newFirebaseUser.uid}`);
         const batch = writeBatch(dbInstance);
@@ -518,8 +490,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         batch.set(userDocRef, newUserDocument);
         console.log(`>>> KAROBHR TRACE: addNewEmployee - Added set(userDocRef) to batch for ${newUserDocument.employeeId}`);
 
-        batch.set(userDirectoryDocRef, {
-            userId: newFirebaseUser.uid,
+        batch.set(userDirectoryDocRef, { // UserDirectory entry using UID as doc ID
+            userId: newFirebaseUser.uid, // Store Auth UID here
             employeeId: newUserDocument.employeeId,
             email: newUserDocument.email,
             companyId: newUserDocument.companyId,
@@ -528,11 +500,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } as UserDirectoryEntry);
         console.log(`>>> KAROBHR TRACE: addNewEmployee - Added set(userDirectoryDocRef) to batch for ${newUserDocument.employeeId}`);
 
-        if (isCreatingFirstAdmin) {
+        if (isFirstAdminSetup) {
             const companyDocRef = doc(dbInstance, `companies/${employeeData.companyId}`);
             batch.set(companyDocRef, {
                 companyId: employeeData.companyId,
-                companyName: employeeData.name, // Assuming admin name for company for simplicity, adjust as needed
+                companyName: employeeData.name, // Can be company name from form for admin signup
                 createdAt: serverTimestamp(),
                 adminUid: newFirebaseUser.uid,
             });
@@ -542,10 +514,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await batch.commit();
         console.log(`>>> KAROBHR TRACE: addNewEmployee - SUCCESS - Batch commit successful. User profile and directory entry created for ${newUserDocument.employeeId} (UID: ${newFirebaseUser.uid}).`);
 
+        // If current user is admin and adding to their own company, update local allUsers state.
         if (user && user.role === 'admin' && user.companyId === newUserDocument.companyId && user.id !== newFirebaseUser.uid) {
-            setAllUsers(prev => [...prev, newUserDocument].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+            setAllUsers(prev => [...prev, newUserDocument].sort((a,b) => (a.name || "").localeCompare(b.name || "")));
             console.log(`>>> KAROBHR TRACE: addNewEmployee - Admin added new user, updated local allUsers state.`);
-        } else if (isCreatingFirstAdmin) {
+        } else if (isFirstAdminSetup) {
+            // For first admin, onAuthStateChanged will handle setting the user context after they log in.
             console.log(">>> KAROBHR TRACE: addNewEmployee - First admin created. Auth state change will handle login context.");
         }
         return newFirebaseUser;
@@ -553,8 +527,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error: any) {
         console.error(`>>> KAROBHR TRACE: addNewEmployee - ERROR during user creation for ${employeeData.employeeId}:`, error.code, error.message, error);
         if (newFirebaseUser && error.code !== 'auth/email-already-in-use') {
-            // Attempt to delete the Auth user if Firestore operations failed to keep things clean
-            // This is a best-effort, might fail if user re-authenticates quickly etc.
             console.warn(`>>> KAROBHR TRACE: addNewEmployee - Firebase Auth user ${newFirebaseUser.uid} was created, but Firestore operations failed. Attempting to delete Auth user.`);
             try {
               await newFirebaseUser.delete();
@@ -570,7 +542,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         throw new Error(error.message || "Could not add new employee due to an unexpected error.");
     }
-}, [authInstance, dbInstance, user, firebaseError]);
+}, [authInstance, dbInstance, user, allUsers, firebaseError]); // Added allUsers here
 
 
   const addTask = useCallback(async (newTaskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -583,8 +555,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const taskCollectionRef = collection(dbInstance, `companies/${companyId}/tasks`);
         const taskWithTimestamps = {
             ...newTaskData,
-            createdAt: serverTimestamp() as unknown as string,
-            updatedAt: serverTimestamp() as unknown as string,
+            createdAt: serverTimestamp() as unknown as string, // Cast for assignment
+            updatedAt: serverTimestamp() as unknown as string, // Cast for assignment
         };
         const taskRef = await addDoc(taskCollectionRef, taskWithTimestamps);
         console.log(">>> KAROBHR TRACE: Task added successfully with ID:", taskRef.id);
@@ -602,7 +574,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     console.log(`>>> KAROBHR TRACE: Updating task ID ${updatedTaskData.id} in company ${companyId}`);
     const taskRef = doc(dbInstance, `companies/${companyId}/tasks/${updatedTaskData.id}`);
     try {
-        const { id, createdAt, ...dataToUpdate } = updatedTaskData;
+        const { id, createdAt, ...dataToUpdate } = updatedTaskData; // Exclude id and createdAt from direct update
         const updatePayload = { ...dataToUpdate, updatedAt: serverTimestamp() };
         await updateDoc(taskRef, updatePayload);
         console.log(">>> KAROBHR TRACE: Task updated successfully.");
@@ -623,25 +595,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         userId: user.id,
         employeeId: user.employeeId,
         status: 'pending',
-        appliedAt: new Date().toISOString(),
+        appliedAt: new Date().toISOString(), // For local state before Firestore confirms timestamp
     };
     try {
         const userDocRef = doc(dbInstance, `users/${user.id}`);
         const leaveWithIdAndTimestamp = {
             ...newLeave,
             id: uuidv4(),
-            appliedAt: serverTimestamp()
+            appliedAt: serverTimestamp() // Firestore server timestamp
         };
         await updateDoc(userDocRef, {
             leaves: arrayUnion(leaveWithIdAndTimestamp)
         });
         console.log(">>> KAROBHR TRACE: Leave application added for user:", user.employeeId);
+        // Optimistically update local state, Firestore listener will eventually sync
         setUser(prevUser => {
             if (!prevUser) return null;
+            // Create a version of the leave that reflects what it will look like after server timestamp resolves (approx)
             const localLeaveToAdd = {
                 ...leaveWithIdAndTimestamp,
-                appliedAt: new Date().toISOString()
-            };
+                appliedAt: new Date().toISOString() // Use local time for optimistic update
+            } as LeaveApplication;
             return { ...prevUser, leaves: [...(prevUser.leaves || []), localLeaveToAdd]};
         });
     } catch (error) {
@@ -671,10 +645,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updatedLeaves[leaveIndex] = {
             ...updatedLeaves[leaveIndex],
             status: newStatus,
-            processedAt: serverTimestamp() as unknown as string,
+            processedAt: serverTimestamp() as unknown as string, // Cast for assignment
         };
         await updateDoc(employeeDocRef, { leaves: updatedLeaves });
         console.log(">>> KAROBHR TRACE: Leave application processed successfully.");
+        // No need to update allUsers state locally for this, onSnapshot will catch it for admin.
     } catch (error) {
         console.error(">>> KAROBHR TRACE: Error processing leave application:", error);
         throw new Error("Failed to process leave application.");
@@ -696,9 +671,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await addDoc(collection(dbInstance, `companies/${companyId}/announcements`), {
         ...newAnnouncementData,
-        postedAt: serverTimestamp()
+        postedAt: serverTimestamp() // Firestore server timestamp
       });
       console.log(">>> KAROBHR TRACE: Announcement posted successfully.");
+      // Listener will update local state
     } catch (error) {
       console.error(">>> KAROBHR TRACE: Error posting announcement:", error);
       throw new Error("Failed to post announcement.");
@@ -707,42 +683,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateUserInContext = useCallback((updatedUser: User) => {
      console.log(">>> KAROBHR TRACE: Attempting to update user in context:", updatedUser.employeeId);
-     if (user && user.id === updatedUser.id) {
+     if (user && user.id === updatedUser.id) { // If updating the currently logged-in user
         setUser(prevUser => ({...prevUser, ...updatedUser}));
-        console.log(">>> KAROBHR TRACE: Current user updated in context.");
+        console.log(">>> KAROBHR TRACE: Current user updated in context (setUser).");
      }
+     // Always update in allUsers list if admin is viewing it
      setAllUsers(prevAllUsers => prevAllUsers.map(u => u.id === updatedUser.id ? {...u, ...updatedUser} : u).sort((a, b) => (a.name || "").localeCompare(b.name || "")));
      console.log(">>> KAROBHR TRACE: User updated in allUsers list (if present).");
 
+     // Sync to Firestore
      if (dbInstance) {
         const userDocRef = doc(dbInstance, `users/${updatedUser.id}`);
-        const { id, ...dataToSync } = updatedUser;
+        const { id, ...dataToSync } = updatedUser; // Exclude 'id' from the object being written to Firestore document fields
 
+        // Ensure timestamps are correctly formatted or are serverTimestamps if appropriate
         const finalDataToSync: any = { ...dataToSync };
+        // Example: If leaves have Timestamps that became date strings, convert back or handle appropriately
         if (finalDataToSync.leaves) {
             finalDataToSync.leaves = finalDataToSync.leaves.map((leave: LeaveApplication) => ({
                 ...leave,
-                appliedAt: leave.appliedAt,
-                processedAt: leave.processedAt,
+                // appliedAt and processedAt are often serverTimestamps on creation/update
+                // If they are just being passed through as ISO strings from local state, that's usually fine for updateDoc
+                // unless you intend to re-set them to serverTimestamp()
             }));
         }
 
         updateDoc(userDocRef, finalDataToSync)
-            .then(() => console.log(`>>> KAROBHR TRACE: User ${updatedUser.employeeId} successfully synced to Firestore.`))
+            .then(() => console.log(`>>> KAROBHR TRACE: User ${updatedUser.employeeId} (UID: ${updatedUser.id}) successfully synced to Firestore users/${updatedUser.id}.`))
             .catch(err => console.error(`>>> KAROBHR TRACE: Failed to sync user update to Firestore for ${updatedUser.employeeId}:`, err));
 
+        // Also update userDirectory if relevant fields changed
         const dirDocRef = doc(dbInstance, `userDirectory/${updatedUser.id}`);
         const dirDataToUpdate: Partial<UserDirectoryEntry> = {};
         if (updatedUser.name !== undefined) dirDataToUpdate.name = updatedUser.name;
         if (updatedUser.email !== undefined) dirDataToUpdate.email = updatedUser.email;
         if (updatedUser.role !== undefined) dirDataToUpdate.role = updatedUser.role;
-        // Ensure standardDailyHours is synced if it changes
-        if (updatedUser.standardDailyHours !== undefined) (dirDataToUpdate as any).standardDailyHours = updatedUser.standardDailyHours;
-
+        // employeeId and companyId usually don't change, but if they could, add them here.
 
         if(Object.keys(dirDataToUpdate).length > 0) {
             updateDoc(dirDocRef, dirDataToUpdate)
-            .then(() => console.log(`>>> KAROBHR TRACE: UserDirectory for ${updatedUser.employeeId} successfully synced to Firestore.`))
+            .then(() => console.log(`>>> KAROBHR TRACE: UserDirectory for ${updatedUser.employeeId} (UID: ${updatedUser.id}) successfully synced.`))
             .catch(err => console.error(`>>> KAROBHR TRACE: Failed to sync UserDirectory update for ${updatedUser.employeeId}:`, err));
         }
      } else {
@@ -761,16 +741,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (eventData.photoDataUrl) {
         console.log(">>> KAROBHR TRACE: Photo data URL provided, attempting to upload to storage...");
         const photoFileName = `${user.employeeId}-${new Date().getTime()}-${uuidv4()}.jpg`;
-        const photoRefStorage = ref(storageInstance, `companies/${companyId}/attendancePhotos/${user.id}/${photoFileName}`);
+        const photoRefStorage = ref(storageInstance, `companies/${companyId}/attendancePhotos/${user.id}/${photoFileName}`); // Store under company/userUID/filename
         try {
-            const base64String = eventData.photoDataUrl.split(',')[1];
+            // Ensure it's just the base64 part
+            const base64String = eventData.photoDataUrl.includes(',') ? eventData.photoDataUrl.split(',')[1] : eventData.photoDataUrl;
             if (!base64String) throw new Error("Invalid photo data URL format for base64 extraction.");
+
             const snapshot = await uploadString(photoRefStorage, base64String, 'base64', { contentType: 'image/jpeg' });
             photoFinalUrl = await getDownloadURL(snapshot.ref);
             console.log(">>> KAROBHR TRACE: Photo uploaded successfully:", photoFinalUrl);
         } catch (uploadError) {
             console.error(">>> KAROBHR TRACE: Error uploading attendance photo:", uploadError);
-            // Decide if you want to throw error or continue without photo
+            // Decide if you want to throw error or continue without photo. For now, continue.
         }
     }
 
@@ -787,9 +769,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const eventRef = await addDoc(collection(dbInstance, `companies/${companyId}/attendanceLog`), {
             ...newAttendanceEventData,
-            timestamp: serverTimestamp()
+            timestamp: serverTimestamp() // Firestore server timestamp
         });
         console.log(">>> KAROBHR TRACE: Attendance event recorded successfully with ID:", eventRef.id);
+        // Listener will update local state
     } catch (error) {
         console.error(">>> KAROBHR TRACE: Error recording attendance event to Firestore:", error);
         throw new Error("Failed to record attendance event.");
@@ -801,23 +784,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.error(">>> KAROBHR TRACE: User context or DB not available to request advance.");
         throw new Error("User context not available to request advance.");
     }
-    if (user.employeeId !== employeeId) {
+    if (user.employeeId !== employeeId) { // Security check
         console.error(">>> KAROBHR TRACE: Mismatch: Auth user trying to request advance for different employeeId.");
         throw new Error("Unauthorized advance request.");
     }
     console.log(`>>> KAROBHR TRACE: User ${employeeId} requesting advance: ${amount}`);
     const newAdvance: Advance = {
         id: uuidv4(),
-        employeeId: user.employeeId,
+        employeeId: user.employeeId, // ensure it's the logged-in user's ID
         amount,
         reason,
-        dateRequested: new Date().toISOString(),
+        dateRequested: new Date().toISOString(), // For local state before Firestore confirms timestamp
         status: 'pending',
     };
     try {
         const userDocRef = doc(dbInstance, `users/${user.id}`);
+        // When writing to Firestore, ensure dateRequested is a server timestamp or a compliant format.
+        // Here we are using local ISO string, which Firestore can store.
         await updateDoc(userDocRef, { advances: arrayUnion(newAdvance) });
 
+        // Optimistically update local user state
         setUser(prevUser => prevUser ? ({ ...prevUser, advances: [...(prevUser.advances || []), newAdvance]}) : null);
         console.log(">>> KAROBHR TRACE: Advance requested successfully by " + employeeId);
     } catch (error) {
@@ -847,15 +833,132 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updatedAdvances[advanceIndex] = {
             ...updatedAdvances[advanceIndex],
             status: newStatus,
-            dateProcessed: new Date().toISOString(),
+            dateProcessed: new Date().toISOString(), // Using local ISO string
         };
         await updateDoc(employeeDocRef, { advances: updatedAdvances });
         console.log(">>> KAROBHR TRACE: Advance processed successfully.");
+        // Admin's allUsers state will update via onSnapshot
     } catch (error) {
         console.error(">>> KAROBHR TRACE: Error processing advance:", error);
         throw new Error("Failed to process advance.");
     }
   },[dbInstance, user]);
+
+  const calculateMonthlyPayrollDetails = useCallback((
+    employee: User,
+    forYear: number,
+    forMonth: number, // 0-11
+    employeeAttendanceEvents: AttendanceEvent[],
+    companyHolidays: Holiday[] = [] // Assuming Holiday type exists
+  ): MonthlyPayrollReport => {
+    console.log(`>>> KAROBHR TRACE: Calculating payroll for ${employee.employeeId} for ${forMonth + 1}/${forYear}`);
+
+    const baseSalary = employee.baseSalary || 0;
+    const standardDailyHours = employee.standardDailyHours || 0; // Default to 0 if not set to avoid NaN
+
+    // TODO: Pass actual company holidays if available
+    const actualHolidaysForMonth: Date[] = []; // Placeholder
+
+    const totalWorkingDaysInMonth = getWorkingDaysInMonth(forYear, forMonth, actualHolidaysForMonth);
+    const totalStandardHoursForMonth = standardDailyHours * totalWorkingDaysInMonth;
+
+    let totalActualHoursWorkedMs = 0;
+    const monthStartDate = startOfMonth(new Date(forYear, forMonth));
+    const monthEndDate = endOfMonth(new Date(forYear, forMonth));
+
+    const dailyWorkMsMap = new Map<string, number>();
+
+    employeeAttendanceEvents.forEach(event => {
+        try {
+            const eventDate = parseISO(event.timestamp);
+            if (!isWithinInterval(eventDate, { start: monthStartDate, end: monthEndDate })) {
+                return; // Skip events outside the target month
+            }
+            const dateStr = format(eventDate, 'yyyy-MM-dd');
+            if (!dailyWorkMsMap.has(dateStr)) {
+                dailyWorkMsMap.set(dateStr, 0);
+            }
+        } catch (e) {
+            console.warn("calculateMonthlyPayrollDetails: Invalid timestamp in attendance event", event.timestamp, e);
+        }
+    });
+
+
+    // Group events by date string (YYYY-MM-DD)
+    const eventsByDate: Record<string, AttendanceEvent[]> = {};
+    employeeAttendanceEvents.forEach(event => {
+      try {
+        const eventDate = parseISO(event.timestamp);
+        if (!isWithinInterval(eventDate, { start: monthStartDate, end: monthEndDate })) {
+            return; // Skip events outside the target month
+        }
+        const dateStr = format(eventDate, 'yyyy-MM-dd');
+        if (!eventsByDate[dateStr]) {
+          eventsByDate[dateStr] = [];
+        }
+        eventsByDate[dateStr].push(event);
+      } catch (e) {
+        console.warn("calculateMonthlyPayrollDetails: Invalid timestamp in attendance event for grouping", event.timestamp, e);
+      }
+    });
+
+
+    for (const dateStr in eventsByDate) {
+      if (isSunday(dateStr)) continue; // Skip Sundays
+
+      const dailyEvents = eventsByDate[dateStr].sort((a,b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
+      let dailyWorkMs = 0;
+      let lastCheckInTime: Date | null = null;
+
+      for (const event of dailyEvents) {
+        try {
+            const eventTime = parseISO(event.timestamp);
+            if (event.type === 'check-in') {
+              lastCheckInTime = eventTime;
+            } else if (event.type === 'check-out' && lastCheckInTime) {
+              dailyWorkMs += differenceInMilliseconds(eventTime, lastCheckInTime);
+              lastCheckInTime = null;
+            }
+        } catch (e) {
+            console.warn("calculateMonthlyPayrollDetails: Error processing daily event", event, e);
+        }
+      }
+      // No ongoing calculation for historical payroll report
+      dailyWorkMsMap.set(dateStr, (dailyWorkMsMap.get(dateStr) || 0) + dailyWorkMs);
+    }
+
+    dailyWorkMsMap.forEach(ms => totalActualHoursWorkedMs += ms);
+    const totalActualHoursWorked = totalActualHoursWorkedMs / (1000 * 60 * 60);
+
+    const totalHoursMissed = Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked);
+    const hourlyRate = totalStandardHoursForMonth > 0 ? baseSalary / totalStandardHoursForMonth : 0;
+    const calculatedDeductions = hourlyRate * totalHoursMissed;
+    const salaryAfterDeductions = Math.max(0, baseSalary - calculatedDeductions); // Salary cannot be negative
+
+    const totalApprovedAdvances = (employee.advances || [])
+      .filter(adv => adv.status === 'approved')
+      .reduce((sum, adv) => sum + adv.amount, 0);
+
+    const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
+
+    return {
+      employeeId: employee.employeeId,
+      employeeName: employee.name || employee.employeeId,
+      month: forMonth,
+      year: forYear,
+      baseSalary,
+      standardDailyHours,
+      totalWorkingDaysInMonth,
+      totalStandardHoursForMonth: parseFloat(totalStandardHoursForMonth.toFixed(2)),
+      totalActualHoursWorked: parseFloat(totalActualHoursWorked.toFixed(2)),
+      totalHoursMissed: parseFloat(totalHoursMissed.toFixed(2)),
+      hourlyRate: parseFloat(hourlyRate.toFixed(2)),
+      calculatedDeductions: parseFloat(calculatedDeductions.toFixed(2)),
+      salaryAfterDeductions: parseFloat(salaryAfterDeductions.toFixed(2)),
+      totalApprovedAdvances,
+      finalNetPayable: parseFloat(finalNetPayable.toFixed(2)),
+    };
+  }, []);
 
 
   const contextValue = useMemo(() => ({
@@ -881,12 +984,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addAttendanceEvent,
     requestAdvance,
     processAdvance,
+    calculateMonthlyPayrollDetails,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [
     user, role, loading, companyId, firebaseError, login, logout, addNewEmployee,
     allUsers, tasks, addTask, updateTask, addLeaveApplication, processLeaveApplication,
     announcements, addAnnouncement, updateUserInContext, attendanceLog, addAttendanceEvent,
-    requestAdvance, processAdvance
+    requestAdvance, processAdvance, calculateMonthlyPayrollDetails
   ]);
 
 
