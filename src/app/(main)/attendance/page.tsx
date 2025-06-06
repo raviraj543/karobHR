@@ -132,38 +132,35 @@ export default function AttendancePage() {
 
 
   useEffect(() => {
-    console.log(`>>> KAROBHR TRACE: (useEffect[user,myTodaysAttendanceEvents]) Start. User: ${!!user}, Events Today: ${myTodaysAttendanceEvents.length}`);
-
-    const previousRenderStatus = checkInStatusRef.current; 
+    const previousRenderStatus = checkInStatusRef.current;
     let newDerivedStatus: 'checked-in' | 'checked-out' = 'checked-out';
+    let newLastDisplayRecord: CheckInOutDisplayRecord | null = null;
 
     if (user && myTodaysAttendanceEvents.length > 0) {
         const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
         newDerivedStatus = latestEvent.type === 'check-in' ? 'checked-in' : 'checked-out';
-        console.log(">>> KAROBHR TRACE: (useEffect) Latest event:", {type: latestEvent.type, time: latestEvent.timestamp, id: latestEvent.id}, `Derived Status: ${newDerivedStatus}`);
-
-        setLastDisplayRecord({
+        newLastDisplayRecord = {
             type: latestEvent.type,
             photoUrl: latestEvent.photoUrl || null,
             location: latestEvent.location,
             timestamp: parseISO(latestEvent.timestamp),
             isWithinGeofence: latestEvent.isWithinGeofence,
             matchedGeofenceType: latestEvent.matchedGeofenceType,
-        });
-    } else {
-        console.log(">>> KAROBHR TRACE: (useEffect) No user or no events today. Defaulting derived status to 'checked-out'.");
-        setLastDisplayRecord(null);
-        newDerivedStatus = 'checked-out'; 
+        };
     }
+    
+    console.log(`>>> KAROBHR TRACE: (useEffect[user,myTodaysAttendanceEvents]) PrevRenderStatus: ${previousRenderStatus}, NewDerivedStatus: ${newDerivedStatus}, CurrentActualStatus: ${checkInStatus}`);
 
     if (checkInStatus !== newDerivedStatus) {
         console.log(`>>> KAROBHR TRACE: (useEffect) Status changing! Current state '${checkInStatus}' -> New derived '${newDerivedStatus}'. Updating state.`);
         setCheckInStatus(newDerivedStatus);
-    } else {
-        console.log(`>>> KAROBHR TRACE: (useEffect) Status unchanged. Current state '${checkInStatus}' == New derived '${newDerivedStatus}'. No state update for checkInStatus needed.`);
+    }
+
+    if (lastDisplayRecord?.timestamp.toISOString() !== newLastDisplayRecord?.timestamp.toISOString() || lastDisplayRecord?.type !== newLastDisplayRecord?.type) {
+        setLastDisplayRecord(newLastDisplayRecord);
     }
     
-    console.log(`>>> KAROBHR TRACE: (useEffect) Task reset check: PreviousRenderStatus='${previousRenderStatus}', NewDerivedStatus='${newDerivedStatus}'`);
+    // Task Reset Logic
     if (previousRenderStatus === 'checked-in' && newDerivedStatus === 'checked-out') {
         console.log(">>> KAROBHR TRACE: (useEffect) Transition from checked-in to checked-out DETECTED (ref vs derived). Resetting tasks.");
         setTasksSubmittedForDay(false);
@@ -171,7 +168,7 @@ export default function AttendancePage() {
         setTaskSummary(null);
     }
     
-    checkInStatusRef.current = newDerivedStatus; 
+    checkInStatusRef.current = newDerivedStatus;
     console.log(`>>> KAROBHR TRACE: (useEffect) End. Updated checkInStatusRef.current to: ${newDerivedStatus}`);
 
   }, [user, myTodaysAttendanceEvents]);
@@ -255,7 +252,7 @@ export default function AttendancePage() {
       }
     } else { 
       console.log(">>> KAROBHR TRACE: handleActualCheckInOrOut - Processing CHECK-OUT. No photo will be taken.");
-      photoDataUrlString = null;
+      photoDataUrlString = null; // Explicitly no photo for checkout
     }
 
     const location = await getGeolocation();
@@ -378,224 +375,213 @@ export default function AttendancePage() {
     document.title = `${user?.name ? user.name + ' - ' : ''}${pageTitle} - BizFlow`;
   }, [pageTitle, user?.name]);
 
-  console.log(">>> KAROBHR TRACE: AttendancePage RENDER - checkInStatus:", checkInStatus, "myTodaysAttendanceEvents count:", myTodaysAttendanceEvents.length, "tasksSubmittedForDay:", tasksSubmittedForDay);
+  console.log(">>> KAROBHR TRACE: AttendancePage RENDER - checkInStatus:", checkInStatus, "myTodaysAttendanceEvents count:", myTodaysAttendanceEvents.length, "tasksSubmittedForDay:", tasksSubmittedForDay, "hasCameraPermission:", hasCameraPermission);
 
   return (
     <div className="space-y-6">
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center text-2xl">
-            <Camera className="mr-2 h-6 w-6 text-primary" /> {pageTitle}
-          </CardTitle>
-          <CardDescription>
-            Check-in requires camera & location. Report submission & Check-out uses location.
-            Office Radius: {officeRadiusDisplay}m
-            {user?.remoteWorkLocation && `, or your remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {error && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-          {/* Check-In Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center">
-                <LogIn className="mr-2 h-5 w-5 text-primary" /> Check-In
-              </CardTitle>
-              <CardDescription>Use camera and location for check-in.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative aspect-video w-full max-w-md mx-auto bg-muted rounded-md overflow-hidden border">
-                <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-                {hasCameraPermission === false && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
-                    <AlertTriangle className="h-12 w-12 mb-2 text-destructive" />
-                    <p className="text-center font-semibold">Camera permission denied.</p>
-                    <p className="text-center text-sm">Please enable camera access for Check-In.</p>
-                  </div>
-                )}
-                 {hasCameraPermission === null && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
-                    <Loader2 className="h-12 w-12 mb-2 animate-spin" />
-                    <p className="text-center font-semibold">Requesting camera access...</p>
-                  </div>
-                )}
-              </div>
-              <canvas ref={canvasRef} className="hidden" />
-              <Button
-                size="lg"
-                onClick={() => {
-                  console.log(">>> KAROBHR TRACE: Check In button clicked. Current checkInStatus (from state variable):", checkInStatus);
-                  handleActualCheckInOrOut('check-in');
-                }}
-                disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-in' || hasCameraPermission !== true}
-                className="w-full sm:w-auto"
-              >
-                {isSubmittingAttendance && checkInStatus === 'checked-out' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}
-                Check In
-              </Button>
-            </CardContent>
-          </Card>
+      {checkInStatus === 'checked-out' && (
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center text-2xl">
+              <Camera className="mr-2 h-6 w-6 text-primary" /> Check-In
+            </CardTitle>
+            <CardDescription>
+              Use camera and location for check-in. Office Radius: {officeRadiusDisplay}m
+              {user?.remoteWorkLocation && `, or your remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
+              Current Status: <span className="font-semibold text-orange-600">Checked Out</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="relative aspect-video w-full max-w-md mx-auto bg-muted rounded-md overflow-hidden border">
+              <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+              {hasCameraPermission === false && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
+                  <AlertTriangle className="h-12 w-12 mb-2 text-destructive" />
+                  <p className="text-center font-semibold">Camera permission denied.</p>
+                  <p className="text-center text-sm">Please enable camera access for Check-In.</p>
+                </div>
+              )}
+              {hasCameraPermission === null && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
+                  <Loader2 className="h-12 w-12 mb-2 animate-spin" />
+                  <p className="text-center font-semibold">Requesting camera access...</p>
+                </div>
+              )}
+            </div>
+            <canvas ref={canvasRef} className="hidden" />
+            <Button
+              size="lg"
+              onClick={() => {
+                console.log(">>> KAROBHR TRACE: Check In button clicked. Current checkInStatus (from state variable):", checkInStatus);
+                handleActualCheckInOrOut('check-in');
+              }}
+              disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
+              className="w-full sm:w-auto"
+            >
+              {isSubmittingAttendance ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}
+              Check In
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Check-Out & Task Report Section - Conditional Rendering */}
-          {checkInStatus === 'checked-in' && (
-            <Card className="border-primary/50 mt-6">
-              <CardHeader>
-                <CardTitle className="flex items-center text-lg">
-                  <LogOut className="mr-2 h-5 w-5 text-primary" /> Daily Report & Check-Out
-                </CardTitle>
-                <CardDescription>
-                  {tasksSubmittedForDay ? "Task report submitted. Ready for geofenced checkout." : "Fill your daily task report before checking out."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!tasksSubmittedForDay && (
-                  <div className="space-y-4">
-                    <h3 className="text-md font-semibold flex items-center"><FileText className="mr-2 h-4 w-4"/>Daily Task Report</h3>
-                    <form className="space-y-6">
-                      {dailyTasks.map((task) => (
-                        <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <Label htmlFor={`task-title-${task.id}`}>Task Title</Label>
-                              <Input
-                                id={`task-title-${task.id}`}
-                                value={task.title}
-                                onChange={(e) => handleTaskChange(task.id, 'title', e.target.value)}
-                                placeholder="e.g., Design landing page"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor={`task-status-${task.id}`}>Status</Label>
-                              <Select
-                                value={task.status}
-                                onValueChange={(value) => handleTaskChange(task.id, 'status', value as AiTask['status'])}
-                              >
-                                <SelectTrigger id={`task-status-${task.id}`}>
-                                  <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Completed">Completed</SelectItem>
-                                  <SelectItem value="In Progress">In Progress</SelectItem>
-                                  <SelectItem value="Blocked">Blocked</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`task-desc-${task.id}`}>Description/Update</Label>
-                            <Textarea
-                              id={`task-desc-${task.id}`}
-                              value={task.description}
-                              onChange={(e) => handleTaskChange(task.id, 'description', e.target.value)}
-                              placeholder="Brief description or status update"
-                              rows={2}
-                            />
-                          </div>
-                          {dailyTasks.length > 1 && (
-                             <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeTask(task.id)}
-                                className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
-                                aria-label="Remove task"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                          )}
+      {checkInStatus === 'checked-in' && (
+        <Card className="border-primary/50 mt-6 shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center text-lg">
+              <LogOut className="mr-2 h-5 w-5 text-primary" /> Daily Report & Check-Out
+            </CardTitle>
+            <CardDescription>
+              {tasksSubmittedForDay ? "Task report submitted. Ready for geofenced checkout." : "Fill your daily task report before checking out."}
+              Current Status: <span className="font-semibold text-green-600">Checked In</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!tasksSubmittedForDay && (
+              <div className="space-y-4">
+                <h3 className="text-md font-semibold flex items-center"><FileText className="mr-2 h-4 w-4"/>Daily Task Report</h3>
+                <form className="space-y-6">
+                  {dailyTasks.map((task) => (
+                    <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label htmlFor={`task-title-${task.id}`}>Task Title</Label>
+                          <Input
+                            id={`task-title-${task.id}`}
+                            value={task.title}
+                            onChange={(e) => handleTaskChange(task.id, 'title', e.target.value)}
+                            placeholder="e.g., Design landing page"
+                          />
                         </div>
-                      ))}
-                      <div className="flex justify-start pt-2">
-                        <Button type="button" variant="outline" onClick={addTask} className="text-sm">
-                          <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
-                        </Button>
+                        <div className="space-y-1">
+                          <Label htmlFor={`task-status-${task.id}`}>Status</Label>
+                          <Select
+                            value={task.status}
+                            onValueChange={(value) => handleTaskChange(task.id, 'status', value as AiTask['status'])}
+                          >
+                            <SelectTrigger id={`task-status-${task.id}`}>
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Completed">Completed</SelectItem>
+                              <SelectItem value="In Progress">In Progress</SelectItem>
+                              <SelectItem value="Blocked">Blocked</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                    </form>
-                  </div>
-                )}
-
-                {taskSummary && tasksSubmittedForDay && (
-                  <div className="mt-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 shadow-inner p-4">
-                      <h4 className="text-md font-semibold text-primary mb-2">Submitted Task Report Summary:</h4>
-                      <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br />') }} />
-                  </div>
-                )}
-
-                <Button
-                  size="lg"
-                  variant="default"
-                  onClick={() => {
-                    console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current actual checkInStatus (from state variable):", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
-                    handleTaskReportAndCheckout();
-                  }}
-                  disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-out'}
-                  className="w-full sm:w-auto mt-4"
-                >
-                  {(isSubmittingAttendance || isSubmittingTasks) && checkInStatus === 'checked-in' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
-                  {tasksSubmittedForDay ? 'Check Out' : 'Submit Report & Check Out'}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-
-          {lastDisplayRecord && (
-            <Card className={`mt-6 ${lastDisplayRecord.isWithinGeofence === false ? 'border-destructive bg-destructive/10' : 'bg-muted/30'}`}>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  {lastDisplayRecord.type === 'check-in' ? 'Last Check-In' : 'Last Check-Out'} Details
-                  (Recorded: {formatDistanceToNow(lastDisplayRecord.timestamp, { addSuffix: true })})
-                  {lastDisplayRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" title="Outside any valid geofence" />}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoUrl && (
-                    <div className="w-full sm:w-1/3">
-                      <p className="font-semibold mb-1">Photo:</p>
-                      <Image
-                        src={lastDisplayRecord.photoUrl}
-                        alt={`Captured photo for ${lastDisplayRecord.type}`}
-                        width={200}
-                        height={150}
-                        className="rounded-md border shadow-sm aspect-video object-cover"
-                        data-ai-hint="person face"
-                      />
-                    </div>
-                  )}
-                  <div className={`w-full ${lastDisplayRecord.photoUrl ? 'sm:w-2/3' : ''} space-y-2`}>
-                    <div><p className="font-semibold">Time:</p><p>{format(lastDisplayRecord.timestamp, 'PPP p')}</p></div>
-                    <div>
-                      <p className="font-semibold flex items-center"><MapPin className="mr-1 h-4 w-4 text-primary" />Location:</p>
-                      {lastDisplayRecord.location ? (
-                        <p>Lat: {lastDisplayRecord.location.latitude.toFixed(5)}, Lon: {lastDisplayRecord.location.longitude.toFixed(5)}
-                           {lastDisplayRecord.location.accuracy && ` (Accuracy: ${lastDisplayRecord.location.accuracy.toFixed(0)}m)`}</p>
-                      ) : (<p className="text-muted-foreground">Location data not available.</p>)}
-                    </div>
-                     <div>
-                      <p className="font-semibold flex items-center">
-                        {lastDisplayRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <Wifi className="mr-1 h-4 w-4 text-green-600" />} Geofence Status:
-                      </p>
-                      {lastDisplayRecord.location === null || lastDisplayRecord.isWithinGeofence === null ? (<p className="text-muted-foreground">Could not determine.</p>)
-                       : lastDisplayRecord.isWithinGeofence ? (<p className="text-green-600 font-medium">Within {lastDisplayRecord.matchedGeofenceType || 'valid'} geofence.</p>)
-                       : (<p className="text-destructive font-medium">Outside any valid geofence.</p>
+                      <div className="space-y-1">
+                        <Label htmlFor={`task-desc-${task.id}`}>Description/Update</Label>
+                        <Textarea
+                          id={`task-desc-${task.id}`}
+                          value={task.description}
+                          onChange={(e) => handleTaskChange(task.id, 'description', e.target.value)}
+                          placeholder="Brief description or status update"
+                          rows={2}
+                        />
+                      </div>
+                      {dailyTasks.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeTask(task.id)}
+                            className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                            aria-label="Remove task"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                       )}
                     </div>
+                  ))}
+                  <div className="flex justify-start pt-2">
+                    <Button type="button" variant="outline" onClick={addTask} className="text-sm">
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
+                    </Button>
                   </div>
+                </form>
+              </div>
+            )}
+
+            {taskSummary && tasksSubmittedForDay && (
+              <div className="mt-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 shadow-inner p-4">
+                  <h4 className="text-md font-semibold text-primary mb-2">Submitted Task Report Summary:</h4>
+                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br />') }} />
+              </div>
+            )}
+            <Button
+              size="lg"
+              variant="default"
+              onClick={() => {
+                console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current checkInStatus (from state variable):", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
+                handleTaskReportAndCheckout();
+              }}
+              disabled={isSubmittingAttendance || isSubmittingTasks}
+              className="w-full sm:w-auto mt-4"
+            >
+              {(isSubmittingAttendance || isSubmittingTasks) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
+              {tasksSubmittedForDay ? 'Check Out' : 'Submit Report & Check Out'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {lastDisplayRecord && (
+        <Card className={`mt-6 ${lastDisplayRecord.isWithinGeofence === false ? 'border-destructive bg-destructive/10' : 'bg-muted/30'}`}>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center">
+              {lastDisplayRecord.type === 'check-in' ? 'Last Check-In' : 'Last Check-Out'} Details
+              (Recorded: {formatDistanceToNow(lastDisplayRecord.timestamp, { addSuffix: true })})
+              {lastDisplayRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" title="Outside any valid geofence" />}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              {lastDisplayRecord.photoUrl && (
+                <div className="w-full sm:w-1/3">
+                  <p className="font-semibold mb-1">Photo:</p>
+                  <Image
+                    src={lastDisplayRecord.photoUrl}
+                    alt={`Captured photo for ${lastDisplayRecord.type}`}
+                    width={200}
+                    height={150}
+                    className="rounded-md border shadow-sm aspect-video object-cover"
+                    data-ai-hint="person face"
+                  />
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </CardContent>
-      </Card>
+              )}
+              <div className={`w-full ${lastDisplayRecord.photoUrl ? 'sm:w-2/3' : ''} space-y-2`}>
+                <div><p className="font-semibold">Time:</p><p>{format(lastDisplayRecord.timestamp, 'PPP p')}</p></div>
+                <div>
+                  <p className="font-semibold flex items-center"><MapPin className="mr-1 h-4 w-4 text-primary" />Location:</p>
+                  {lastDisplayRecord.location ? (
+                    <p>Lat: {lastDisplayRecord.location.latitude.toFixed(5)}, Lon: {lastDisplayRecord.location.longitude.toFixed(5)}
+                        {lastDisplayRecord.location.accuracy && ` (Accuracy: ${lastDisplayRecord.location.accuracy.toFixed(0)}m)`}</p>
+                  ) : (<p className="text-muted-foreground">Location data not available.</p>)}
+                </div>
+                  <div>
+                  <p className="font-semibold flex items-center">
+                    {lastDisplayRecord.isWithinGeofence === false ? <WifiOff className="mr-1 h-4 w-4 text-destructive" /> : <Wifi className="mr-1 h-4 w-4 text-green-600" />} Geofence Status:
+                  </p>
+                  {lastDisplayRecord.location === null || lastDisplayRecord.isWithinGeofence === null ? (<p className="text-muted-foreground">Could not determine.</p>)
+                    : lastDisplayRecord.isWithinGeofence ? (<p className="text-green-600 font-medium">Within {lastDisplayRecord.matchedGeofenceType || 'valid'} geofence.</p>)
+                    : (<p className="text-destructive font-medium">Outside any valid geofence.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
-
+    
