@@ -1,33 +1,23 @@
 
 'use client'; // Required for useAuth hook
 
-import { TaskSummarizer } from '@/components/tasks/TaskSummarizer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { BarChart, CheckSquare, DollarSign, UserCircle, Megaphone } from 'lucide-react';
-import type { Metadata } from 'next';
+import { CheckSquare, DollarSign, UserCircle, Megaphone, FileText, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 import { useEffect } from 'react';
 
-// Metadata cannot be directly exported from client component in App Router
-// Consider moving to layout or parent server component if static generation is needed
-// export const metadata: Metadata = {
-//   title: 'Dashboard - KarobHR',
-//   description: 'Your personal dashboard for KarobHR.',
-// };
-
 export default function EmployeeDashboardPage() {
-  const { user, announcements } = useAuth(); // Get user and announcements
+  const { user, announcements } = useAuth(); 
 
   useEffect(() => {
     document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
   }, [user?.name]);
 
 
-  // Placeholder data - some will be replaced by actual data from useAuth
   const employeeName = user?.name || "Employee";
   const quickStats = [
     { title: "Attendance This Month", value: "20/22 Days", icon: CheckSquare, link: "/attendance" }, // Mock
@@ -70,7 +60,28 @@ export default function EmployeeDashboardPage() {
 
       <Separator />
 
-      <TaskSummarizer />
+      <Card className="w-full shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold flex items-center">
+            <FileText className="mr-3 h-6 w-6 text-primary" />
+            Daily Task Report & Checkout
+          </CardTitle>
+          <CardDescription>
+            Submit your daily task report and complete your checkout process on the My Attendance page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground mb-4">
+            When you're ready to end your workday, head over to the "My Attendance" page. You'll be able to list your completed tasks and then check out with geofencing.
+          </p>
+          <Button asChild size="lg">
+            <Link href="/attendance">
+              <LogOut className="mr-2 h-5 w-5" /> Go to My Attendance (Report & Checkout)
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
          <Card className="shadow-sm">
@@ -89,17 +100,16 @@ export default function EmployeeDashboardPage() {
               <CardTitle className="flex items-center"><Megaphone className="mr-2 h-5 w-5 text-primary" />Company Announcements</CardTitle>
               <CardDescription>Latest updates from the company.</CardDescription>
             </div>
-             {/* Can add a "View All" link if there's a dedicated announcements page later */}
           </CardHeader>
           <CardContent>
             {announcements && announcements.length > 0 ? (
               <ScrollArea className="h-64 border rounded-md p-4 bg-background"> 
                 <ul className="space-y-4">
-                  {announcements.slice(0, 5).map((ann) => ( // Show latest 5 or so
+                  {announcements.slice(0, 5).map((ann) => ( 
                     <li key={ann.id} className="p-3 border-l-4 border-primary bg-primary/5 rounded-r-md shadow-sm">
                       <h4 className="font-semibold text-foreground">{ann.title}</h4>
                       <p className="text-xs text-muted-foreground">
-                        Posted by {ann.postedBy} on {new Date(ann.postedAt).toLocaleDateString()}
+                        Posted by {ann.postedByName} on {new Date(ann.postedAt).toLocaleDateString()}
                       </p>
                       <p className="mt-1 text-sm text-foreground whitespace-pre-wrap text-ellipsis overflow-hidden line-clamp-3">
                         {ann.content}

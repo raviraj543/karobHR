@@ -1,17 +1,21 @@
 
 'use client';
 
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import type { LocationInfo as Location, AttendanceEvent } from '@/lib/types';
-import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi } from 'lucide-react';
+import type { LocationInfo as Location, AttendanceEvent, ClientTask, AiTask } from '@/lib/types';
+import { summarizeEmployeeTasks } from '@/ai/flows/summarize-employee-tasks';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi, FileText, PlusCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { calculateDistance } from '@/lib/locationUtils';
-
 
 interface CheckInOutDisplayRecord {
   type: 'check-in' | 'check-out';
@@ -22,14 +26,22 @@ interface CheckInOutDisplayRecord {
   matchedGeofenceType?: 'office' | 'remote' | null;
 }
 
-
 export default function AttendancePage() {
   const { user, addAttendanceEvent, attendanceLog, companyId, companySettings } = useAuth();
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<'checked-out' | 'checked-in'>('checked-out');
   const [error, setError] = useState<string | null>(null);
+
+  // State for task summarizer logic
+  const [dailyTasks, setDailyTasks] = useState<ClientTask[]>([
+    { id: Date.now().toString(), title: '', description: '', status: 'Completed' },
+  ]);
+  const [taskSummary, setTaskSummary] = useState<string | null>(null);
+  const [isSubmittingTasks, setIsSubmittingTasks] = useState(false);
+  const [tasksSubmittedForDay, setTasksSubmittedForDay] = useState(false);
+
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -69,7 +81,7 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    document.title = 'Attendance - KarobHR';
+    document.title = 'My Attendance & Daily Report - KarobHR';
     if (user && attendanceLog.length > 0) {
       const today = new Date().toISOString().split('T')[0];
       const userEventsToday = attendanceLog
@@ -82,6 +94,9 @@ export default function AttendancePage() {
           setCheckInStatus('checked-in');
         } else {
           setCheckInStatus('checked-out');
+          setTasksSubmittedForDay(false); // Reset task submission status on checkout
+          setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]); // Reset tasks on checkout
+          setTaskSummary(null);
         }
         setLastDisplayRecord({
           type: latestEvent.type,
@@ -94,10 +109,16 @@ export default function AttendancePage() {
       } else {
         setCheckInStatus('checked-out');
         setLastDisplayRecord(null);
+        setTasksSubmittedForDay(false);
+        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+        setTaskSummary(null);
       }
     } else if (user) {
         setCheckInStatus('checked-out');
         setLastDisplayRecord(null);
+        setTasksSubmittedForDay(false);
+        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+        setTaskSummary(null);
     }
   }, [user, attendanceLog]);
 
@@ -146,26 +167,23 @@ export default function AttendancePage() {
     });
   };
 
-  const handleCheckInOrOut = async (type: 'check-in' | 'check-out') => {
+  const handleActualCheckInOrOut = async (type: 'check-in' | 'check-out') => {
     if (!user || !companyId) {
       setError('User not identified or company context missing. Cannot record attendance.');
       toast({ variant: 'destructive', title: 'User Error', description: 'Could not identify user or company.' });
       return;
     }
-    setIsSubmitting(true);
+    setIsSubmittingAttendance(true);
 
     if (hasCameraPermission !== true) {
       setError('Camera permission is required to proceed.');
       toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required.' });
-      setIsSubmitting(false);
+      setIsSubmittingAttendance(false);
       return;
     }
 
     const photoDataUrlString = capturePhoto();
     const location = await getGeolocation();
-
-    // Geofence check is now primarily handled in AuthContext's addAttendanceEvent
-    // But we can still form a preliminary toast message here
 
     let toastTitle = `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}!`;
     let toastDescSuffix = "";
@@ -204,18 +222,12 @@ export default function AttendancePage() {
     }
 
     try {
-        // addAttendanceEvent now handles photo upload and comprehensive geofence check
         await addAttendanceEvent({
             type,
             photoDataUrl: photoDataUrlString,
             location,
-            // isWithinGeofence and matchedGeofenceType will be determined by addAttendanceEvent
         });
-
         setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out');
-        // The actual photoUrl and geofence status from storage will be set in AuthContext after upload
-        // and will update lastDisplayRecord via useEffect
-
         toast({
             title: toastTitle,
             description: `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}. ${toastDescSuffix}`,
@@ -227,10 +239,87 @@ export default function AttendancePage() {
         setError((submissionError as Error).message || "Failed to record attendance.");
         toast({ variant: "destructive", title: "Submission Failed", description: (submissionError as Error).message });
     } finally {
-        setIsSubmitting(false);
+        setIsSubmittingAttendance(false);
     }
   };
 
+  // Task Summarizer Logic
+  const handleTaskChange = (id: string, field: keyof AiTask, value: string) => {
+    setDailyTasks(dailyTasks.map(task => task.id === id ? { ...task, [field]: value } : task));
+  };
+
+  const addTask = () => {
+    setDailyTasks([...dailyTasks, { id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+  };
+
+  const removeTask = (id: string) => {
+    setDailyTasks(dailyTasks.filter(task => task.id !== id));
+  };
+
+  const handleTaskReportAndCheckout = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (checkInStatus !== 'checked-in') {
+      toast({ title: "Not Checked In", description: "You must be checked in to submit a report and check out.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingTasks(true);
+    setTaskSummary(null);
+
+    const tasksToSummarize: AiTask[] = dailyTasks.map(({ id, ...rest }) => rest);
+
+    if (tasksToSummarize.every(task => task.title.trim() === '')) {
+       toast({
+            title: "No Tasks Entered",
+            description: "No tasks were entered. Proceeding to checkout without a report.",
+            variant: "default",
+        });
+        setTasksSubmittedForDay(true); // Mark as "submitted" to skip next time
+        await handleActualCheckInOrOut('check-out'); // Proceed to checkout
+        setIsSubmittingTasks(false);
+        return;
+    }
+
+    if (tasksToSummarize.every(task => task.status !== 'Completed')) {
+        toast({
+            title: "No Completed Tasks",
+            description: "Please mark at least one task as 'Completed' to generate a summary, or clear all tasks to checkout without a report.",
+            variant: "destructive",
+        });
+        setIsSubmittingTasks(false);
+        return;
+    }
+
+    try {
+      const result = await summarizeEmployeeTasks({ tasks: tasksToSummarize });
+      setTaskSummary(result.summary);
+      setTasksSubmittedForDay(true);
+      toast({
+        title: "Task Report Submitted!",
+        description: "Your task summary has been successfully created. Now proceeding to geofenced checkout.",
+        duration: 5000,
+      });
+      if (user?.name) {
+        toast({
+            title: "Mock Admin Notification",
+            description: `${user.name} has submitted their daily task report.`,
+            variant: "default",
+            duration: 7000,
+        });
+      }
+      await handleActualCheckInOrOut('check-out'); // Proceed to actual checkout
+    } catch (error) {
+      console.error('Error summarizing tasks:', error);
+      toast({
+        title: "Task Report Error",
+        description: "Failed to generate task summary. Please try again or contact support. Checkout not completed.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingTasks(false);
+    }
+  };
+  
   const officeRadiusDisplay = companySettings?.officeLocation?.radius || "N/A";
 
   return (
@@ -238,11 +327,12 @@ export default function AttendancePage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center text-2xl">
-            <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance
+            <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance & Daily Report
           </CardTitle>
           <CardDescription>
-            Use your camera and location to check in or check out. Attendance is verified against company office (Radius: {officeRadiusDisplay}m)
-            {user?.remoteWorkLocation && `, or your registered remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
+            Use your camera and location for attendance. Office Radius: {officeRadiusDisplay}m
+            {user?.remoteWorkLocation && `, or your remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
+            {checkInStatus === 'checked-in' && ' Fill your daily task report before checking out.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -276,18 +366,110 @@ export default function AttendancePage() {
               <canvas ref={canvasRef} className="hidden" />
             </CardContent>
           </Card>
+          
+          {/* Task Reporting Section - Visible only when checked-in and tasks not yet submitted for the day */}
+          {checkInStatus === 'checked-in' && !tasksSubmittedForDay && (
+            <Card className="border-primary/50">
+              <CardHeader>
+                <CardTitle className="flex items-center"><FileText className="mr-2 h-5 w-5 text-primary"/>Daily Task Report</CardTitle>
+                <CardDescription>List your tasks for the day. Completed tasks will be summarized when you checkout.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleTaskReportAndCheckout} className="space-y-6">
+                  {dailyTasks.map((task) => (
+                    <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label htmlFor={`task-title-${task.id}`}>Task Title</Label>
+                          <Input
+                            id={`task-title-${task.id}`}
+                            value={task.title}
+                            onChange={(e) => handleTaskChange(task.id, 'title', e.target.value)}
+                            placeholder="e.g., Design landing page"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor={`task-status-${task.id}`}>Status</Label>
+                          <Select
+                            value={task.status}
+                            onValueChange={(value) => handleTaskChange(task.id, 'status', value as AiTask['status'])}
+                          >
+                            <SelectTrigger id={`task-status-${task.id}`}>
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Completed">Completed</SelectItem>
+                              <SelectItem value="In Progress">In Progress</SelectItem>
+                              <SelectItem value="Blocked">Blocked</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`task-desc-${task.id}`}>Description/Update</Label>
+                        <Textarea
+                          id={`task-desc-${task.id}`}
+                          value={task.description}
+                          onChange={(e) => handleTaskChange(task.id, 'description', e.target.value)}
+                          placeholder="Brief description or status update"
+                          rows={2}
+                        />
+                      </div>
+                      {dailyTasks.length > 1 && (
+                         <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeTask(task.id)}
+                            className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                            aria-label="Remove task"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex justify-start pt-2">
+                    <Button type="button" variant="outline" onClick={addTask} className="text-sm">
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
+                    </Button>
+                  </div>
+                  {/* The main check-out button below will handle form submission */}
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {checkInStatus === 'checked-out' ? (
-              <Button size="lg" onClick={() => handleCheckInOrOut('check-in')} disabled={isSubmitting || hasCameraPermission !== true} className="w-full sm:w-auto">
-                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />} Check In
+              <Button size="lg" onClick={() => handleActualCheckInOrOut('check-in')} disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true} className="w-full sm:w-auto">
+                {isSubmittingAttendance ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />} Check In
               </Button>
             ) : (
-              <Button size="lg" variant="destructive" onClick={() => handleCheckInOrOut('check-out')} disabled={isSubmitting || hasCameraPermission !== true} className="w-full sm:w-auto">
-                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />} Check Out
+              <Button 
+                size="lg" 
+                variant="destructive" 
+                onClick={handleTaskReportAndCheckout} // This button now handles both report and checkout
+                disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true} 
+                className="w-full sm:w-auto"
+              >
+                {(isSubmittingAttendance || isSubmittingTasks) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />} 
+                Submit Report & Check Out
               </Button>
             )}
           </div>
+
+          {taskSummary && (
+            <Card className="mt-6 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 shadow-inner">
+                <CardHeader>
+                    <CardTitle className="text-lg font-semibold text-primary">Submitted Task Report Summary:</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n/g, '<br />') }} />
+                </CardContent>
+            </Card>
+          )}
+
 
           {lastDisplayRecord && (
             <Card className={`mt-6 ${lastDisplayRecord.isWithinGeofence === false ? 'border-destructive bg-destructive/10' : 'bg-muted/30'}`}>
