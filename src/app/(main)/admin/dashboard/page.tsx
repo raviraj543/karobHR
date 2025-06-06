@@ -129,9 +129,11 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             <Button variant="outline" asChild><Link href="/admin/employees/new">Add New Employee</Link></Button>
-            <Button variant="outline" asChild><Link href="/admin/tasks/new">Assign New Task</Link></Button>
+            <Button variant="outline" asChild><Link href="/admin/tasks">Assign New Task</Link></Button> {/* Changed from /admin/tasks/new */}
             <Button variant="outline" asChild><Link href="/admin/holidays">Manage Holidays</Link></Button>
-            <Button variant="outline" asChild><Link href="/admin/reports">Generate Reports</Link></Button>
+            {/* <Button variant="outline" asChild><Link href="/admin/reports">Generate Reports</Link></Button> Removed this link */}
+            <p className="text-sm text-muted-foreground col-span-2">Report generation coming soon.</p>
+
           </CardContent>
         </Card>
       </div>
