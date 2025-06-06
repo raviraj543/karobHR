@@ -16,6 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi, FileText, PlusCircle, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { calculateDistance } from '@/lib/locationUtils';
+import { getFirebaseInstances } from '@/lib/firebase/firebase';
+import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
+import { format, startOfToday, endOfToday } from 'date-fns';
 
 interface CheckInOutDisplayRecord {
   type: 'check-in' | 'check-out';
@@ -27,14 +30,13 @@ interface CheckInOutDisplayRecord {
 }
 
 export default function AttendancePage() {
-  const { user, addAttendanceEvent, attendanceLog, companyId, companySettings } = useAuth();
+  const { user, addAttendanceEvent, companyId, companySettings } = useAuth();
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<'checked-out' | 'checked-in'>('checked-out');
   const [error, setError] = useState<string | null>(null);
 
-  // State for task summarizer logic
   const [dailyTasks, setDailyTasks] = useState<ClientTask[]>([
     { id: Date.now().toString(), title: '', description: '', status: 'Completed' },
   ]);
@@ -42,11 +44,14 @@ export default function AttendancePage() {
   const [isSubmittingTasks, setIsSubmittingTasks] = useState(false);
   const [tasksSubmittedForDay, setTasksSubmittedForDay] = useState(false);
 
+  const [myTodaysAttendanceEvents, setMyTodaysAttendanceEvents] = useState<AttendanceEvent[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
+  const { db } = getFirebaseInstances();
+
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -81,46 +86,74 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    document.title = 'My Attendance & Daily Report - KarobHR';
-    if (user && attendanceLog.length > 0) {
-      const today = new Date().toISOString().split('T')[0];
-      const userEventsToday = attendanceLog
-        .filter(event => event.userId === user.id && event.timestamp.startsWith(today))
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    if (!db || !user || !companyId) {
+      setMyTodaysAttendanceEvents([]);
+      return;
+    }
 
-      if (userEventsToday.length > 0) {
-         const latestEvent = userEventsToday[0];
-        if (latestEvent.type === 'check-in') {
-          setCheckInStatus('checked-in');
-        } else {
-          setCheckInStatus('checked-out');
-          setTasksSubmittedForDay(false); 
-          setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]); 
-          setTaskSummary(null);
-        }
-        setLastDisplayRecord({
-          type: latestEvent.type,
-          photoUrl: latestEvent.photoUrl || null,
-          location: latestEvent.location,
-          timestamp: new Date(latestEvent.timestamp),
-          isWithinGeofence: latestEvent.isWithinGeofence,
-          matchedGeofenceType: latestEvent.matchedGeofenceType,
-        });
+    const todayStart = Timestamp.fromDate(startOfToday());
+    const todayEnd = Timestamp.fromDate(endOfToday());
+
+    const q = query(
+      collection(db, `companies/${companyId}/attendanceLog`),
+      where('userId', '==', user.id),
+      where('timestamp', '>=', todayStart),
+      where('timestamp', '<=', todayEnd),
+      orderBy('timestamp', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const events: AttendanceEvent[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        events.push({
+          id: doc.id,
+          ...data,
+          timestamp: (data.timestamp as Timestamp).toDate().toISOString(),
+        } as AttendanceEvent);
+      });
+      setMyTodaysAttendanceEvents(events.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
+    }, (err) => {
+      console.error("Error fetching today's attendance for user:", err);
+      setError("Could not load your attendance data for today.");
+      setMyTodaysAttendanceEvents([]);
+    });
+
+    return () => unsubscribe();
+  }, [db, user, companyId]);
+
+
+  useEffect(() => {
+    document.title = 'My Attendance & Daily Report - KarobHR';
+
+    if (user && myTodaysAttendanceEvents.length > 0) {
+      const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
+      
+      if (latestEvent.type === 'check-in') {
+        setCheckInStatus('checked-in');
       } else {
         setCheckInStatus('checked-out');
-        setLastDisplayRecord(null);
         setTasksSubmittedForDay(false);
         setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
         setTaskSummary(null);
       }
+      setLastDisplayRecord({
+        type: latestEvent.type,
+        photoUrl: latestEvent.photoUrl || null,
+        location: latestEvent.location,
+        timestamp: new Date(latestEvent.timestamp),
+        isWithinGeofence: latestEvent.isWithinGeofence,
+        matchedGeofenceType: latestEvent.matchedGeofenceType,
+      });
     } else if (user) {
-        setCheckInStatus('checked-out');
-        setLastDisplayRecord(null);
-        setTasksSubmittedForDay(false);
-        setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
-        setTaskSummary(null);
+      setCheckInStatus('checked-out');
+      setLastDisplayRecord(null);
+      setTasksSubmittedForDay(false);
+      setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
+      setTaskSummary(null);
     }
-  }, [user, attendanceLog]);
+  }, [user, myTodaysAttendanceEvents]);
+
 
   const capturePhoto = (): string | null => {
     if (!videoRef.current || !canvasRef.current || !hasCameraPermission) {
@@ -227,7 +260,6 @@ export default function AttendancePage() {
             photoDataUrl: photoDataUrlString,
             location,
         });
-        // setCheckInStatus(type === 'check-in' ? 'checked-in' : 'checked-out'); // Removed this line
         toast({
             title: toastTitle,
             description: `${type === 'check-in' ? 'Welcome!' : 'Goodbye!'} Recorded at ${new Date().toLocaleTimeString()}. ${toastDescSuffix}`,
@@ -243,7 +275,6 @@ export default function AttendancePage() {
     }
   };
 
-  // Task Summarizer Logic
   const handleTaskChange = (id: string, field: keyof AiTask, value: string) => {
     setDailyTasks(dailyTasks.map(task => task.id === id ? { ...task, [field]: value } : task));
   };
@@ -262,6 +293,10 @@ export default function AttendancePage() {
       toast({ title: "Not Checked In", description: "You must be checked in to submit a report and check out.", variant: "destructive" });
       return;
     }
+     if (tasksSubmittedForDay) {
+      await handleActualCheckInOrOut('check-out');
+      return;
+    }
 
     setIsSubmittingTasks(true);
     setTaskSummary(null);
@@ -274,8 +309,8 @@ export default function AttendancePage() {
             description: "No tasks were entered. Proceeding to checkout without a report.",
             variant: "default",
         });
-        setTasksSubmittedForDay(true); 
-        await handleActualCheckInOrOut('check-out'); 
+        setTasksSubmittedForDay(true);
+        await handleActualCheckInOrOut('check-out');
         setIsSubmittingTasks(false);
         return;
     }
@@ -307,7 +342,7 @@ export default function AttendancePage() {
             duration: 7000,
         });
       }
-      await handleActualCheckInOrOut('check-out'); 
+      await handleActualCheckInOrOut('check-out');
     } catch (error) {
       console.error('Error summarizing tasks:', error);
       toast({
@@ -319,7 +354,7 @@ export default function AttendancePage() {
       setIsSubmittingTasks(false);
     }
   };
-  
+
   const officeRadiusDisplay = companySettings?.officeLocation?.radius || "N/A";
 
   return (
@@ -366,7 +401,7 @@ export default function AttendancePage() {
               <canvas ref={canvasRef} className="hidden" />
             </CardContent>
           </Card>
-          
+
           {checkInStatus === 'checked-in' && !tasksSubmittedForDay && (
             <Card className="border-primary/50">
               <CardHeader>
@@ -444,15 +479,15 @@ export default function AttendancePage() {
                 {isSubmittingAttendance ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle className="mr-2 h-5 w-5" />} Check In
               </Button>
             ) : (
-              <Button 
-                size="lg" 
-                variant="destructive" 
-                onClick={handleTaskReportAndCheckout} 
-                disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true} 
+              <Button
+                size="lg"
+                variant={tasksSubmittedForDay ? "destructive" : "default"}
+                onClick={handleTaskReportAndCheckout}
+                disabled={isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
                 className="w-full sm:w-auto"
               >
-                {(isSubmittingAttendance || isSubmittingTasks) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />} 
-                Submit Report & Check Out
+                {(isSubmittingAttendance || isSubmittingTasks) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
+                {tasksSubmittedForDay ? 'Check Out' : 'Submit Report & Check Out'}
               </Button>
             )}
           </div>
@@ -520,5 +555,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-    

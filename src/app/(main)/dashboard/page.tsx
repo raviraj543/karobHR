@@ -67,12 +67,12 @@ export default function EmployeeDashboardPage() {
             Daily Task Report & Checkout
           </CardTitle>
           <CardDescription>
-            Submit your daily task report and complete your checkout process on the My Attendance page.
+            To complete your workday, please go to the "My Attendance" page. There, you can submit your daily task report and then perform your geofenced checkout.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground mb-4">
-            When you're ready to end your workday, head over to the "My Attendance" page. You'll be able to list your completed tasks and then check out with geofencing.
+            The "My Attendance" page is your one-stop shop for managing your daily check-ins, task reporting, and checkouts.
           </p>
           <Button asChild size="lg">
             <Link href="/attendance">
@@ -127,3 +127,4 @@ export default function EmployeeDashboardPage() {
     </div>
   );
 }
+    
