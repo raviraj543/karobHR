@@ -17,7 +17,7 @@ import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, B
 import Image from 'next/image';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
-import { format, startOfToday, endOfToday, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 
 interface CheckInOutDisplayRecord {
   type: 'check-in' | 'check-out';
@@ -34,7 +34,7 @@ export default function AttendancePage() {
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<'checked-out' | 'checked-in'>('checked-out');
-  const checkInStatusRef = useRef(checkInStatus); // To track previous status for task reset logic
+  const checkInStatusRef = useRef(checkInStatus);
   const [error, setError] = useState<string | null>(null);
 
   const [dailyTasks, setDailyTasks] = useState<ClientTask[]>([
@@ -95,14 +95,14 @@ export default function AttendancePage() {
     }
     console.log(`>>> KAROBHR TRACE: useEffect for myTodaysAttendanceEvents - Subscribing for user ${user.id}, company ${companyId}.`);
 
-    const todayStart = Timestamp.fromDate(startOfToday());
-    const todayEnd = Timestamp.fromDate(endOfToday());
+    const todayStartTimestamp = Timestamp.fromDate(new Date(new Date().setHours(0,0,0,0)));
+    const todayEndTimestamp = Timestamp.fromDate(new Date(new Date().setHours(23,59,59,999)));
 
     const q = query(
       collection(db, `companies/${companyId}/attendanceLog`),
       where('userId', '==', user.id),
-      where('timestamp', '>=', todayStart),
-      where('timestamp', '<=', todayEnd),
+      where('timestamp', '>=', todayStartTimestamp),
+      where('timestamp', '<=', todayEndTimestamp),
       orderBy('timestamp', 'asc')
     );
 
@@ -131,14 +131,16 @@ export default function AttendancePage() {
   }, [db, user, companyId]);
 
 
- useEffect(() => {
-    const previousStatus = checkInStatusRef.current;
+  useEffect(() => {
+    const previousRenderStatus = checkInStatusRef.current; // Status from the render *before* this effect ran
     let newDerivedStatus: 'checked-in' | 'checked-out' = 'checked-out';
+
+    console.log(`>>> KAROBHR TRACE: (useEffect[user,myTodaysAttendanceEvents]) Start. User: ${!!user}, Events Today: ${myTodaysAttendanceEvents.length}, Previous Render Status (ref): ${previousRenderStatus}, Current State Status: ${checkInStatus}`);
 
     if (user && myTodaysAttendanceEvents.length > 0) {
         const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
-        console.log(">>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Deriving status. Latest event:", {type: latestEvent.type, time: latestEvent.timestamp, id: latestEvent.id});
         newDerivedStatus = latestEvent.type === 'check-in' ? 'checked-in' : 'checked-out';
+        console.log(">>> KAROBHR TRACE: (useEffect) Latest event:", {type: latestEvent.type, time: latestEvent.timestamp, id: latestEvent.id}, `Derived Status: ${newDerivedStatus}`);
 
         setLastDisplayRecord({
             type: latestEvent.type,
@@ -149,26 +151,26 @@ export default function AttendancePage() {
             matchedGeofenceType: latestEvent.matchedGeofenceType,
         });
     } else {
-        console.log(">>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Deriving status. No user or no events today. Defaulting to 'checked-out'. User:", !!user);
+        console.log(">>> KAROBHR TRACE: (useEffect) No user or no events today. Defaulting derived status to 'checked-out'.");
         setLastDisplayRecord(null);
     }
 
     if (checkInStatus !== newDerivedStatus) {
-        console.log(`>>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Setting checkInStatus from current '${checkInStatus}' to newDerived '${newDerivedStatus}'. Based on ${myTodaysAttendanceEvents.length} events.`);
+        console.log(`>>> KAROBHR TRACE: (useEffect) Status changed! Current state '${checkInStatus}' -> New derived '${newDerivedStatus}'. Updating state.`);
         setCheckInStatus(newDerivedStatus);
+    } else {
+        console.log(`>>> KAROBHR TRACE: (useEffect) Status unchanged. Current state '${checkInStatus}' == New derived '${newDerivedStatus}'. No state update.`);
     }
 
-    // Task reset logic:
-    // If the previous status (before this effect ran for the current data) was 'checked-in'
-    // AND the newly derived status for the current render is 'checked-out'.
-    if (previousStatus === 'checked-in' && newDerivedStatus === 'checked-out') {
-        console.log(">>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Transition detected (previous: checked-in, newDerived: checked-out). Resetting tasks.");
+    console.log(`>>> KAROBHR TRACE: (useEffect) Task reset check: PreviousRenderStatus='${previousRenderStatus}', NewDerivedStatus='${newDerivedStatus}'`);
+    if (previousRenderStatus === 'checked-in' && newDerivedStatus === 'checked-out') {
+        console.log(">>> KAROBHR TRACE: (useEffect) Transition from checked-in to checked-out DETECTED. Resetting tasks.");
         setTasksSubmittedForDay(false);
         setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
         setTaskSummary(null);
     }
-    checkInStatusRef.current = newDerivedStatus; // Update ref for next render AFTER all logic for current render
-  }, [user, myTodaysAttendanceEvents, checkInStatus]); // Added checkInStatus to dependencies
+    checkInStatusRef.current = newDerivedStatus; // Store the status derived in *this run* for the *next run*
+  }, [user, myTodaysAttendanceEvents]);
 
 
   const capturePhoto = (): string | null => {
@@ -249,7 +251,7 @@ export default function AttendancePage() {
       }
     } else { // type === 'check-out'
       console.log(">>> KAROBHR TRACE: handleActualCheckInOrOut - Processing CHECK-OUT. No photo will be taken.");
-      photoDataUrlString = null; // Explicitly no photo for checkout
+      photoDataUrlString = null;
     }
 
     const location = await getGeolocation();
@@ -261,7 +263,7 @@ export default function AttendancePage() {
             photoDataUrl: photoDataUrlString,
             location,
         });
-        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - addAttendanceEvent call for type "${type}" completed. Firestore listener on this page will update 'myTodaysAttendanceEvents' and subsequently 'checkInStatus'.`);
+        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - addAttendanceEvent call for type "${type}" completed. Firestore listener on this page should update 'myTodaysAttendanceEvents' and subsequently 'checkInStatus'.`);
     } catch (submissionError) {
         console.error(">>> KAROBHR TRACE: Error submitting attendance via addAttendanceEvent:", submissionError);
         setError((submissionError as Error).message || "Failed to record attendance.");
@@ -490,7 +492,7 @@ export default function AttendancePage() {
             </Card>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4 border-t">
             <Button
               size="lg"
               onClick={() => {
@@ -506,7 +508,7 @@ export default function AttendancePage() {
 
             <Button
               size="lg"
-              variant={tasksSubmittedForDay && checkInStatus === 'checked-in' ? "destructive" : "default" }
+              variant="default"
               onClick={() => {
                 console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current checkInStatus:", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
                 handleTaskReportAndCheckout();
@@ -525,7 +527,7 @@ export default function AttendancePage() {
                     <CardTitle className="text-lg font-semibold text-primary">Submitted Task Report Summary:</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n/g, '<br />') }} />
+                    <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: taskSummary.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br />') }} />
                 </CardContent>
             </Card>
           )}
@@ -536,6 +538,7 @@ export default function AttendancePage() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center">
                   {lastDisplayRecord.type === 'check-in' ? 'Last Check-In' : 'Last Check-Out'} Details
+                  (Recorded: {formatDistanceToNow(lastDisplayRecord.timestamp, { addSuffix: true })})
                   {lastDisplayRecord.isWithinGeofence === false && <BadgeAlert className="ml-2 h-5 w-5 text-destructive" title="Outside any valid geofence" />}
                 </CardTitle>
               </CardHeader>
@@ -555,7 +558,7 @@ export default function AttendancePage() {
                     </div>
                   )}
                   <div className={`w-full ${lastDisplayRecord.photoUrl ? 'sm:w-2/3' : ''} space-y-2`}>
-                    <div><p className="font-semibold">Time:</p><p>{lastDisplayRecord.timestamp.toLocaleString()}</p></div>
+                    <div><p className="font-semibold">Time:</p><p>{format(lastDisplayRecord.timestamp, 'PPP p')}</p></div>
                     <div>
                       <p className="font-semibold flex items-center"><MapPin className="mr-1 h-4 w-4 text-primary" />Location:</p>
                       {lastDisplayRecord.location ? (
