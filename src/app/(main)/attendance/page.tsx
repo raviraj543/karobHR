@@ -34,7 +34,6 @@ export default function AttendancePage() {
   const [isSubmittingAttendance, setIsSubmittingAttendance] = useState(false);
   const [lastDisplayRecord, setLastDisplayRecord] = useState<CheckInOutDisplayRecord | null>(null);
   const [checkInStatus, setCheckInStatus] = useState<'checked-out' | 'checked-in'>('checked-out');
-  const checkInStatusRef = useRef<'checked-out' | 'checked-in'>('checked-out'); // Ref to hold previous status for comparison
   const [error, setError] = useState<string | null>(null);
 
   const [dailyTasks, setDailyTasks] = useState<ClientTask[]>([
@@ -131,21 +130,15 @@ export default function AttendancePage() {
   }, [db, user, companyId]);
 
 
-  useEffect(() => {
-    const previousActualStatus = checkInStatusRef.current;
-
-    const currentDerivedStatus = (() => {
-        if (user && myTodaysAttendanceEvents.length > 0) {
-            const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
-            console.log(">>> KAROBHR TRACE: Deriving status. Latest event:", {type: latestEvent.type, time: latestEvent.timestamp, id: latestEvent.id});
-            return latestEvent.type === 'check-in' ? 'checked-in' : 'checked-out';
-        }
-        console.log(">>> KAROBHR TRACE: Deriving status. No user or no events today. Defaulting to 'checked-out'. User:", !!user);
-        return 'checked-out'; // Default if no user or no events
-    })();
+ useEffect(() => {
+    const previousStatus = checkInStatus; // Store current status before deriving new one
+    let newDerivedStatus: 'checked-in' | 'checked-out' = 'checked-out';
 
     if (user && myTodaysAttendanceEvents.length > 0) {
         const latestEvent = myTodaysAttendanceEvents[myTodaysAttendanceEvents.length - 1];
+        console.log(">>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Deriving status. Latest event:", {type: latestEvent.type, time: latestEvent.timestamp, id: latestEvent.id});
+        newDerivedStatus = latestEvent.type === 'check-in' ? 'checked-in' : 'checked-out';
+
         setLastDisplayRecord({
             type: latestEvent.type,
             photoUrl: latestEvent.photoUrl || null,
@@ -155,28 +148,25 @@ export default function AttendancePage() {
             matchedGeofenceType: latestEvent.matchedGeofenceType,
         });
     } else {
+        console.log(">>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Deriving status. No user or no events today. Defaulting to 'checked-out'. User:", !!user);
         setLastDisplayRecord(null);
     }
 
-    if (checkInStatus !== currentDerivedStatus) {
-        console.log(`>>> KAROBHR TRACE: Setting checkInStatus from '${checkInStatus}' to '${currentDerivedStatus}'. Based on ${myTodaysAttendanceEvents.length} events.`);
-        setCheckInStatus(currentDerivedStatus);
+    if (checkInStatus !== newDerivedStatus) {
+        console.log(`>>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Setting checkInStatus from '${checkInStatus}' to '${newDerivedStatus}'. Based on ${myTodaysAttendanceEvents.length} events.`);
+        setCheckInStatus(newDerivedStatus);
     }
 
     // Task reset logic:
-    // Check if the status recorded in the ref (from previous render) was 'checked-in'
+    // If the previous status (before this effect ran) was 'checked-in'
     // AND the newly derived status for the current render is 'checked-out'.
-    if (previousActualStatus === 'checked-in' && currentDerivedStatus === 'checked-out') {
-        console.log(">>> KAROBHR TRACE: Transition detected (ref prev: checked-in, currentDerived: checked-out). Resetting tasks.");
+    if (previousStatus === 'checked-in' && newDerivedStatus === 'checked-out') {
+        console.log(">>> KAROBHR TRACE: (useEffect[myTodaysAttendanceEvents]) Transition detected (previous: checked-in, newDerived: checked-out). Resetting tasks.");
         setTasksSubmittedForDay(false);
         setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
         setTaskSummary(null);
     }
-    
-    checkInStatusRef.current = currentDerivedStatus; // Update ref to current derived status for next cycle
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, myTodaysAttendanceEvents]); // checkInStatus itself is not a dependency here as it's set by this effect.
+  }, [user, myTodaysAttendanceEvents, checkInStatus]); // Added checkInStatus to dependencies for previousStatus comparison.
 
 
   const capturePhoto = (): string | null => {
@@ -257,7 +247,7 @@ export default function AttendancePage() {
       }
     } else { // type === 'check-out'
       console.log(">>> KAROBHR TRACE: handleActualCheckInOrOut - Processing CHECK-OUT. No photo will be taken.");
-      photoDataUrlString = null; 
+      photoDataUrlString = null;
     }
 
     const location = await getGeolocation();
@@ -266,12 +256,12 @@ export default function AttendancePage() {
         console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - Calling addAttendanceEvent with type: "${type}", photo: ${photoDataUrlString ? 'yes' : 'no'}`);
         await addAttendanceEvent({
             type,
-            photoDataUrl: photoDataUrlString,
+            photoDataUrl: photoDataUrlString, // This will be null for check-outs
             location,
         });
         // Toast is now primarily handled by addAttendanceEvent's success/failure or context listeners.
         // The local Firestore listener (myTodaysAttendanceEvents) will update UI status.
-        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - addAttendanceEvent call for type "${type}" completed.`);
+        console.log(`>>> KAROBHR TRACE: handleActualCheckInOrOut - addAttendanceEvent call for type "${type}" completed. Firestore listener should update 'myTodaysAttendanceEvents' and subsequently 'checkInStatus'.`);
     } catch (submissionError) {
         console.error(">>> KAROBHR TRACE: Error submitting attendance via addAttendanceEvent:", submissionError);
         setError((submissionError as Error).message || "Failed to record attendance.");
@@ -304,7 +294,7 @@ export default function AttendancePage() {
     }
      if (tasksSubmittedForDay) {
       console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Tasks already submitted for this session, proceeding to direct checkout.");
-      await handleActualCheckInOrOut('check-out');
+      await handleActualCheckInOrOut('check-out'); // Call with 'check-out'
       return;
     }
 
@@ -322,9 +312,9 @@ export default function AttendancePage() {
             description: "No tasks were entered. Proceeding to checkout without a report.",
             variant: "default",
         });
-        setTasksSubmittedForDay(true); 
+        setTasksSubmittedForDay(true);
         console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - No tasks entered. tasksSubmittedForDay set to true. Proceeding to checkout.");
-        await handleActualCheckInOrOut('check-out');
+        await handleActualCheckInOrOut('check-out'); // Call with 'check-out'
         setIsSubmittingTasks(false);
         console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - isSubmittingTasks set to false (no tasks path).");
         return;
@@ -360,7 +350,7 @@ export default function AttendancePage() {
         });
       }
       console.log(">>> KAROBHR TRACE: handleTaskReportAndCheckout - Task report successful. Now calling handleActualCheckInOrOut('check-out').");
-      await handleActualCheckInOrOut('check-out');
+      await handleActualCheckInOrOut('check-out'); // Explicitly call with 'check-out'
     } catch (error) {
       console.error('>>> KAROBHR TRACE: Error summarizing tasks:', error);
       toast({
@@ -376,7 +366,7 @@ export default function AttendancePage() {
 
   const officeRadiusDisplay = companySettings?.officeLocation?.radius || "N/A";
   const pageTitle = `My Attendance & Daily Report (Status: ${checkInStatus === 'checked-in' ? 'Checked In' : 'Checked Out'})`;
-  
+
   useEffect(() => {
     document.title = `${user?.name ? user.name + ' - ' : ''}${pageTitle} - KarobHR`;
   }, [pageTitle, user?.name]);
@@ -504,24 +494,24 @@ export default function AttendancePage() {
             <Button
               size="lg"
               onClick={() => {
-                console.log(">>> KAROBHR TRACE: Check In button clicked.");
+                console.log(">>> KAROBHR TRACE: Check In button clicked. Current checkInStatus:", checkInStatus);
                 handleActualCheckInOrOut('check-in');
               }}
-              disabled={checkInStatus === 'checked-in' || isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
+              disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-in' || hasCameraPermission !== true}
               className="w-full sm:w-auto"
             >
-              {isSubmittingAttendance && checkInStatus === 'checked-out' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />} 
+              {(isSubmittingAttendance && checkInStatus === 'checked-out') ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}
               Check In
             </Button>
-            
+
             <Button
               size="lg"
-              variant={checkInStatus === 'checked-in' && !tasksSubmittedForDay ? "default" : "destructive"}
+              variant={tasksSubmittedForDay ? "destructive" : "default" } // Destructive if report done, else default
               onClick={() => {
-                console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked.");
+                console.log(">>> KAROBHR TRACE: Check Out / Submit Report button clicked. Current checkInStatus:", checkInStatus, "tasksSubmittedForDay:", tasksSubmittedForDay);
                 handleTaskReportAndCheckout();
               }}
-              disabled={checkInStatus === 'checked-out' || isSubmittingAttendance || isSubmittingTasks}
+              disabled={isSubmittingAttendance || isSubmittingTasks || checkInStatus === 'checked-out'}
               className="w-full sm:w-auto"
             >
               {(isSubmittingAttendance || isSubmittingTasks) && checkInStatus === 'checked-in' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
@@ -551,7 +541,7 @@ export default function AttendancePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoUrl && ( 
+                  {lastDisplayRecord.photoUrl && (
                     <div className="w-full sm:w-1/3">
                       <p className="font-semibold mb-1">Photo:</p>
                       <Image
@@ -592,3 +582,5 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+    
