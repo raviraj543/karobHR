@@ -15,7 +15,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Camera, MapPin, CheckCircle, LogOut, Loader2, AlertTriangle, WifiOff, BadgeAlert, Wifi, FileText, PlusCircle, Trash2, LogIn } from 'lucide-react';
 import Image from 'next/image';
-import { calculateDistance } from '@/lib/locationUtils';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
 import { format, startOfToday, endOfToday, parseISO } from 'date-fns';
@@ -70,7 +69,7 @@ export default function AttendancePage() {
         toast({
           variant: 'destructive',
           title: 'Camera Access Denied',
-          description: 'Please enable camera permissions to use this feature.',
+          description: 'Please enable camera permissions for check-in.',
         });
       }
     };
@@ -133,9 +132,7 @@ export default function AttendancePage() {
         setCheckInStatus('checked-in');
       } else {
         setCheckInStatus('checked-out');
-        // Reset task-related states only if previously checked in and now checked out
-        // This ensures that if the page loads and user is already checked out, tasks aren't reset unnecessarily
-        // (though this might be redundant if tasksSubmittedForDay handles it)
+        // Reset task-related states if previously checked in and now checked out
         if (checkInStatus === 'checked-in') { // Compare with previous local state
              setTasksSubmittedForDay(false);
              setDailyTasks([{ id: Date.now().toString(), title: '', description: '', status: 'Completed' }]);
@@ -159,7 +156,7 @@ export default function AttendancePage() {
       setTaskSummary(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, myTodaysAttendanceEvents]); // checkInStatus removed from deps to avoid loop
+  }, [user, myTodaysAttendanceEvents]);
 
 
   const capturePhoto = (): string | null => {
@@ -215,14 +212,23 @@ export default function AttendancePage() {
     }
     setIsSubmittingAttendance(true);
 
-    if (hasCameraPermission !== true) {
-      setError('Camera permission is required to proceed.');
-      toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required.' });
-      setIsSubmittingAttendance(false);
-      return;
-    }
+    let photoDataUrlString: string | null = null;
 
-    const photoDataUrlString = capturePhoto();
+    if (type === 'check-in') {
+      if (hasCameraPermission !== true) {
+        setError('Camera permission is required for check-in.');
+        toast({ variant: 'destructive', title: 'Permission Denied', description: 'Camera access is required for check-in.' });
+        setIsSubmittingAttendance(false);
+        return;
+      }
+      photoDataUrlString = capturePhoto();
+      if (!photoDataUrlString) { // If photo capture failed for check-in
+        setIsSubmittingAttendance(false);
+        return;
+      }
+    }
+    // For 'check-out', photoDataUrlString remains null (no camera used)
+
     const location = await getGeolocation();
 
     let toastTitle = `Successfully ${type === 'check-in' ? 'Checked In' : 'Checked Out'}!`;
@@ -264,7 +270,7 @@ export default function AttendancePage() {
     try {
         await addAttendanceEvent({
             type,
-            photoDataUrl: photoDataUrlString,
+            photoDataUrl: photoDataUrlString, // Will be null for checkout
             location,
         });
         toast({
@@ -301,7 +307,7 @@ export default function AttendancePage() {
       return;
     }
      if (tasksSubmittedForDay) {
-      // If tasks already submitted for this check-in session, just checkout
+      // If tasks already submitted for this check-in session, just checkout (geofence only)
       await handleActualCheckInOrOut('check-out');
       return;
     }
@@ -309,15 +315,17 @@ export default function AttendancePage() {
     setIsSubmittingTasks(true);
     setTaskSummary(null);
 
-    const tasksToSummarize: AiTask[] = dailyTasks.map(({ id, ...rest }) => rest);
+    const tasksToSummarize: AiTask[] = dailyTasks.map(({ id, ...rest }) => rest)
+                                           .filter(task => task.title.trim() !== '' || task.description.trim() !== ''); // Filter out completely empty tasks
 
-    if (tasksToSummarize.every(task => task.title.trim() === '')) {
+
+    if (tasksToSummarize.length === 0) {
        toast({
             title: "No Tasks Entered",
             description: "No tasks were entered. Proceeding to checkout without a report.",
             variant: "default",
         });
-        setTasksSubmittedForDay(true); // Mark as submitted (even if empty) to allow direct checkout next time
+        setTasksSubmittedForDay(true); 
         await handleActualCheckInOrOut('check-out');
         setIsSubmittingTasks(false);
         return;
@@ -350,7 +358,7 @@ export default function AttendancePage() {
             duration: 7000,
         });
       }
-      await handleActualCheckInOrOut('check-out');
+      await handleActualCheckInOrOut('check-out'); // Proceed to geofence-only checkout
     } catch (error) {
       console.error('Error summarizing tasks:', error);
       toast({
@@ -373,7 +381,8 @@ export default function AttendancePage() {
             <Camera className="mr-2 h-6 w-6 text-primary" /> Live Attendance & Daily Report
           </CardTitle>
           <CardDescription>
-            Use your camera and location for attendance. Office Radius: {officeRadiusDisplay}m
+            Check-in requires camera & location. Check-out requires task report then location.
+            Office Radius: {officeRadiusDisplay}m
             {user?.remoteWorkLocation && `, or your remote location (Radius: ${user.remoteWorkLocation.radius}m).`}
             {checkInStatus === 'checked-in' && ' Fill your daily task report before checking out.'}
           </CardDescription>
@@ -388,7 +397,7 @@ export default function AttendancePage() {
           )}
 
           <Card>
-            <CardHeader><CardTitle className="text-lg">Camera Feed</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg">Camera Feed (for Check-In)</CardTitle></CardHeader>
             <CardContent>
               <div className="relative aspect-video w-full max-w-md mx-auto bg-muted rounded-md overflow-hidden border">
                 <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
@@ -396,7 +405,7 @@ export default function AttendancePage() {
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white p-4">
                     <AlertTriangle className="h-12 w-12 mb-2 text-destructive" />
                     <p className="text-center font-semibold">Camera permission denied.</p>
-                    <p className="text-center text-sm">Please enable camera access.</p>
+                    <p className="text-center text-sm">Please enable camera access for Check-In.</p>
                   </div>
                 )}
                  {hasCameraPermission === null && (
@@ -417,7 +426,7 @@ export default function AttendancePage() {
                 <CardDescription>List your tasks for the day. Completed tasks will be summarized when you checkout.</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleTaskReportAndCheckout} className="space-y-6">
+                <form className="space-y-6"> {/* Removed onSubmit here, handled by main checkout button */}
                   {dailyTasks.map((task) => (
                     <div key={task.id} className="space-y-3 p-4 border rounded-md shadow-sm bg-card relative hover:shadow-md transition-shadow">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -476,7 +485,6 @@ export default function AttendancePage() {
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Another Task
                     </Button>
                   </div>
-                   {/* Submit button for tasks is now merged with the main Check Out button */}
                 </form>
               </CardContent>
             </Card>
@@ -496,7 +504,7 @@ export default function AttendancePage() {
               size="lg"
               variant={checkInStatus === 'checked-in' && !tasksSubmittedForDay ? "default" : "destructive"}
               onClick={handleTaskReportAndCheckout}
-              disabled={checkInStatus === 'checked-out' || isSubmittingAttendance || isSubmittingTasks || hasCameraPermission !== true}
+              disabled={checkInStatus === 'checked-out' || isSubmittingAttendance || isSubmittingTasks}
               className="w-full sm:w-auto"
             >
               {(isSubmittingAttendance || isSubmittingTasks) && checkInStatus === 'checked-in' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
@@ -526,7 +534,7 @@ export default function AttendancePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  {lastDisplayRecord.photoUrl && (
+                  {lastDisplayRecord.photoUrl && ( // Only show photo if it exists (i.e., for check-ins)
                     <div className="w-full sm:w-1/3">
                       <p className="font-semibold mb-1">Photo:</p>
                       <Image
