@@ -36,7 +36,7 @@ export default function AttendancePage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [lastCheckInPhoto, setLastCheckInPhoto] = useState<string | null>(null);
   const [lastCheckInTime, setLastCheckInTime] = useState<string | null>(null);
-  const [initializationError, setInitializationError] = useState<string | null>(null); // Page-level initialization error
+  const [initializationError, setInitializationError] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -53,39 +53,42 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (authLoading) {
-      setAttendanceStatus('unknown'); 
+      setAttendanceStatus('unknown');
       return;
     }
 
-    // If page-level init error is already set, don't proceed with listener setup
-    if (initializationError) { 
-        setAttendanceStatus('error');
-        return;
-    }
-    
-    if (!dbFs || !user?.id || !user?.companyId) {
-      if (!initializationError) { // Avoid overwriting a more specific DB init error
-        console.error(">>> KAROBHR TRACE: AttendancePage - Listener prerequisites missing AFTER authLoading. DB:", !!dbFs, "UserID:", user?.id, "User Name:", user?.name, "CompanyID:", user?.companyId);
-        setInitializationError("Required user or company data is missing for attendance. Please re-login or contact support. Check console for user details.");
-      }
+    if (initializationError) {
       setAttendanceStatus('error');
+      return;
+    }
+
+    // CRITICAL CHECK: Ensure user, user.id, and user.companyId are available before proceeding
+    if (!dbFs || !user || !user.id || !user.companyId) {
+      if (!initializationError) {
+        console.error(`>>> KAROBHR TRACE: AttendancePage - Firestore listener prerequisites missing. DB: ${!!dbFs}, UserID: ${user?.id}, UserName: ${user?.name}, CompanyID: ${user?.companyId}. Waiting for these to be available.`);
+        // Don't set initializationError here if authLoading is false, as AuthContext might still be setting up user data.
+        // The 'unknown' status will keep showing the loading indicator.
+        // If user/companyId never arrive, the page will remain in "Loading attendance status..."
+        // If authLoading becomes true again, this hook will re-evaluate.
+      }
+      setAttendanceStatus('unknown'); // Ensure loading state if critical info is missing
       return;
     }
     
     // If we reached here, prerequisites are met, clear any previous general init error.
-    if (initializationError && initializationError.startsWith("Required user or company data")) {
+    // Only clear the specific "Required user or company data" error if we now have that data.
+    if (initializationError && initializationError.startsWith("Required user or company data is missing")) {
         setInitializationError(null);
     }
+
 
     console.log(`>>> KAROBHR TRACE: AttendancePage - Setting up Firestore listener for user ${user.id}, company ${user.companyId}`);
 
     const todayStart = startOfDay(new Date());
     const todayEnd = endOfDay(new Date());
     
-    // Convert to Firestore Timestamps for the query
     const todayStartTimestamp = Timestamp.fromDate(todayStart);
     const todayEndTimestamp = Timestamp.fromDate(todayEnd);
-
 
     const q = query(
       collection(dbFs, `companies/${user.companyId}/attendanceLog`),
@@ -105,24 +108,39 @@ export default function AttendancePage() {
         setLastCheckInTime(null);
       } else {
         const latestDoc = snapshot.docs[0];
-        const data = latestDoc.data() as AttendanceEvent;
+        const data = latestDoc.data() as AttendanceEvent; // Assuming AttendanceEvent type matches Firestore structure
         setCurrentDayDocId(latestDoc.id);
-        setAttendanceStatus(data.status === 'Checked In' ? 'checked-in' : 'checked-out');
+        
+        // Determine status based on the 'status' field from Firestore first
+        if (data.status === 'Checked In') {
+            setAttendanceStatus('checked-in');
+        } else if (data.status === 'Checked Out') {
+            setAttendanceStatus('checked-out');
+        } else {
+            // Fallback if status field is missing or unexpected, infer from type
+            setAttendanceStatus(data.type === 'check-in' ? 'checked-in' : 'checked-out');
+            console.warn(`>>> KAROBHR TRACE: AttendancePage - Unexpected or missing 'status' field in Firestore doc ${latestDoc.id}. Inferred status from 'type'. Data:`, data);
+        }
+
         setLastCheckInPhoto(data.photoUrl || null);
         
-        const checkInTimestamp = data.checkInTime || data.timestamp; // data.timestamp is fallback
-        if (checkInTimestamp) {
+        // Use checkInTime if available, otherwise fallback to timestamp (main event time)
+        const checkInTimestampField = data.checkInTime || data.timestamp;
+        if (checkInTimestampField) {
              try {
-                const dateObj = typeof (checkInTimestamp as any)?.toDate === 'function' ? (checkInTimestamp as Timestamp).toDate() : parseISO(checkInTimestamp as string);
+                const dateObj = typeof (checkInTimestampField as any)?.toDate === 'function' 
+                                ? (checkInTimestampField as Timestamp).toDate() 
+                                : parseISO(checkInTimestampField as string);
                 setLastCheckInTime(dateObj.toISOString());
             } catch (e) {
-                console.warn(">>> KAROBHR TRACE: AttendancePage - Error parsing checkInTime from Firestore:", checkInTimestamp, e);
+                console.warn(">>> KAROBHR TRACE: AttendancePage - Error parsing checkInTime/timestamp from Firestore:", checkInTimestampField, e);
                 setLastCheckInTime(null);
             }
         } else {
+            console.warn(">>> KAROBHR TRACE: AttendancePage - Missing checkInTime and timestamp from Firestore doc:", latestDoc.id);
             setLastCheckInTime(null);
         }
-        console.log(`>>> KAROBHR TRACE: AttendancePage - Status set to ${data.status}. Doc ID: ${latestDoc.id}`);
+        console.log(`>>> KAROBHR TRACE: AttendancePage - Status set based on Firestore. Doc ID: ${latestDoc.id}. Firestore Status: ${data.status}, Type: ${data.type}`);
       }
       // Clear DB-specific initialization error if snapshot is successful
       if (initializationError && initializationError.startsWith("Attendance Database Error")) {
@@ -134,14 +152,14 @@ export default function AttendancePage() {
       console.error(">>> KAROBHR TRACE: Firebase error message:", errorObject.message);
       console.error(">>> KAROBHR TRACE: Full Firestore error object:", JSON.stringify(errorObject, Object.getOwnPropertyNames(errorObject)));
       setAttendanceStatus('error');
-      setInitializationError(`Attendance Database Error: ${errorObject.message}. Check browser console for details, Firestore indexes (userId ASC/DESC, checkInTime DESC on 'attendanceLog' collection group), and security rules.`);
+      setInitializationError(`Attendance Database Error: ${errorObject.message}. Check browser console for details (especially for a link to create missing indexes) and verify Firestore security rules and composite indexes (userId ASC/DESC, checkInTime DESC on 'attendanceLog' collection group).`);
     });
 
     return () => {
       console.log(">>> KAROBHR TRACE: AttendancePage - Unsubscribing from Firestore listener.");
       unsubscribe();
     };
-  }, [dbFs, user?.id, user?.companyId, authLoading, initializationError]); // Added user?.companyId dependency
+  }, [dbFs, user?.id, user?.companyId, authLoading, initializationError]);
 
 
  useEffect(() => {
@@ -168,7 +186,6 @@ export default function AttendancePage() {
       }
     };
 
-    // Only request camera if checked-out, not loading, and no init errors
     if (attendanceStatus === 'checked-out' && !authLoading && !initializationError) {
       getCameraPermission();
     } else {
@@ -209,7 +226,7 @@ export default function AttendancePage() {
   const handleCheckIn = async () => {
     if (!user || !user.id || !user.companyId) {
       toast({ title: "User Data Missing", description: "Cannot check in: User or company information is not fully loaded. Please try again or re-login.", variant: "destructive" });
-      console.error(">>> KAROBHR TRACE: handleCheckIn - User or companyId missing from context. User:", user);
+      console.error(">>> KAROBHR TRACE: handleCheckIn - User, user.id, or user.companyId missing from context. User:", user);
       return;
     }
     if (attendanceStatus === 'checked-in') {
@@ -239,23 +256,23 @@ export default function AttendancePage() {
       const newDocId = await addAttendanceEvent({ type: 'check-in', location, photoDataUrl });
       if (newDocId) {
         toast({ title: "Check-In Successful!", description: "Your check-in has been recorded." });
-        // Firestore listener will update attendanceStatus to 'checked-in'
+        // Firestore listener will update attendanceStatus to 'checked-in' and currentDayDocId
       }
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Check-in error:", error);
       toast({ title: "Check-In Failed", description: error.message || "Could not record check-in.", variant: "destructive" });
-      setAttendanceStatus('checked-out'); // Revert to checked-out on failure
+      setAttendanceStatus('checked-out');
     }
   };
   
   const handleCheckOut = async () => {
     if (!user || !user.id || !user.companyId) {
       toast({ title: "User Data Missing", description: "Cannot check out: User or company information is not fully loaded. Please try again or re-login.", variant: "destructive" });
-      console.error(">>> KAROBHR TRACE: handleCheckOut - User or companyId missing from context. User:", user);
+      console.error(">>> KAROBHR TRACE: handleCheckOut - User, user.id or user.companyId missing from context. User:", user);
       return;
     }
     if (attendanceStatus === 'checked-out' || !currentDayDocId) {
-      toast({ title: "Not Checked In", description: "You must check in before you can check out." });
+      toast({ title: "Not Checked In", description: "You must check in before you can check out for today." });
       return;
     }
      if (!companySettings?.officeLocation && !user?.remoteWorkLocation) {
@@ -266,7 +283,7 @@ export default function AttendancePage() {
   };
 
   const submitReportAndCheckout = async () => {
-    if (!user || !user.id || !user.companyId) { // Repeated check for safety
+    if (!user || !user.id || !user.companyId) {
         toast({ title: "Session Error", description: "User data became unavailable. Please re-login.", variant: "destructive" });
         setIsReportModalOpen(false);
         return;
@@ -292,7 +309,7 @@ export default function AttendancePage() {
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Check-out error:", error);
       toast({ title: "Check-Out Failed", description: error.message || "Could not record check-out.", variant: "destructive" });
-      setAttendanceStatus('checked-in'); // Revert to checked-in on failure
+      setAttendanceStatus('checked-in');
     }
   };
 
@@ -313,8 +330,8 @@ export default function AttendancePage() {
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-xl font-semibold mb-2">Attendance System Error</h2>
         <p className="text-muted-foreground max-w-md">{initializationError}</p>
-        <p className="text-xs text-muted-foreground mt-2">Please try refreshing the page. If the problem persists, contact support.</p>
-         {initializationError.includes("Database error") && (
+        <p className="text-xs text-muted-foreground mt-2">Please try refreshing the page. If the problem persists, contact support. Check your browser's developer console for more specific error messages from Firebase, especially any links to create missing Firestore indexes.</p>
+         {initializationError.includes("Database Error") && (
             <div className="mt-3 p-3 bg-muted/50 border border-dashed rounded-md text-xs text-left max-w-xl w-full">
                 <p className="font-semibold">Admin Instructions (If Database Error):</p>
                 <ol className="list-decimal list-inside space-y-1 mt-1">
@@ -464,4 +481,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
