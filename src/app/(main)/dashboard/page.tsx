@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckSquare, DollarSign, UserCircle, Megaphone, FileText, LogOut } from 'lucide-react';
+import { CheckSquare, DollarSign, UserCircle, Megaphone } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth'; // Import useAuth
@@ -59,29 +59,6 @@ export default function EmployeeDashboardPage() {
       </div>
 
       <Separator />
-
-      <Card className="w-full shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold flex items-center">
-            <FileText className="mr-3 h-6 w-6 text-primary" />
-            Daily Task Report & Checkout
-          </CardTitle>
-          <CardDescription>
-            To complete your workday, please go to the "My Attendance" page. There, you can submit your daily task report and then perform your geofenced checkout.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground mb-4">
-            The "My Attendance" page is your one-stop shop for managing your daily check-ins, task reporting, and checkouts.
-          </p>
-          <Button asChild size="lg">
-            <Link href="/attendance">
-              <LogOut className="mr-2 h-5 w-5" /> Go to My Attendance (Report & Checkout)
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
          <Card className="shadow-sm">
