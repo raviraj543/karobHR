@@ -16,7 +16,7 @@ import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, query, where, onSnapshot, Timestamp, GeoPoint, orderBy, limit, doc, updateDoc, addDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 
-type AttendanceStatus = 'checked-out' | 'checked-in' | 'processing-check-in' | 'processing-check-out' | 'submitting-report' | 'unknown';
+type AttendanceStatus = 'checked-out' | 'checked-in' | 'processing-check-in' | 'processing-check-out' | 'submitting-report' | 'unknown' | 'error';
 
 export default function AttendancePage() {
   const { user, companySettings, addAttendanceEvent, completeCheckout, loading: authLoading } = useAuth();
@@ -36,23 +36,41 @@ export default function AttendancePage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [lastCheckInPhoto, setLastCheckInPhoto] = useState<string | null>(null);
   const [lastCheckInTime, setLastCheckInTime] = useState<string | null>(null);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
 
 
   useEffect(() => {
     document.title = 'My Attendance - BizFlow';
-    const { db: firebaseDbInstance } = getFirebaseInstances();
-    setDbFs(firebaseDbInstance);
+    try {
+      const { db: firebaseDbInstance } = getFirebaseInstances();
+      setDbFs(firebaseDbInstance);
+    } catch (e) {
+      console.error(">>> KAROBHR TRACE: AttendancePage - Failed to get Firebase instances:", e);
+      setInitializationError("Failed to connect to database services.");
+      setAttendanceStatus('error');
+    }
   }, []);
 
-  // Listener for today's attendance records for the current user
   useEffect(() => {
-    if (!dbFs || !user || !user.id || !user.companyId) {
-      setAttendanceStatus('unknown');
+    if (authLoading) {
+      setAttendanceStatus('unknown'); // Reset while auth is loading
+      return;
+    }
+    if (!dbFs || !user?.id || !user?.companyId) {
+      if (!authLoading) { // Only set error if auth isn't also loading
+        console.error(">>> KAROBHR TRACE: AttendancePage - Cannot setup listener. Missing dbFs, user.id, or user.companyId.");
+        setInitializationError("Required data for attendance is missing. Ensure you are logged in and company data is available.");
+        setAttendanceStatus('error');
+      } else {
+         setAttendanceStatus('unknown');
+      }
       setCurrentDayDocId(null);
       setLastCheckInPhoto(null);
       setLastCheckInTime(null);
       return;
     }
+    setInitializationError(null); // Clear any previous init error
+
     console.log(`>>> KAROBHR TRACE: AttendancePage - Setting up Firestore listener for user ${user.id}, company ${user.companyId}`);
 
     const todayStart = Timestamp.fromDate(startOfDay(new Date()));
@@ -61,7 +79,7 @@ export default function AttendancePage() {
     const q = query(
       collection(dbFs, `companies/${user.companyId}/attendanceLog`),
       where('userId', '==', user.id),
-      where('checkInTime', '>=', todayStart), // Assuming checkInTime is always a Timestamp
+      where('checkInTime', '>=', todayStart),
       where('checkInTime', '<=', todayEnd),
       orderBy('checkInTime', 'desc'),
       limit(1)
@@ -76,19 +94,18 @@ export default function AttendancePage() {
         setLastCheckInTime(null);
       } else {
         const latestDoc = snapshot.docs[0];
-        const data = latestDoc.data() as AttendanceEvent; // Type assertion
+        const data = latestDoc.data() as AttendanceEvent;
         setCurrentDayDocId(latestDoc.id);
         setAttendanceStatus(data.status === 'Checked In' ? 'checked-in' : 'checked-out');
         setLastCheckInPhoto(data.photoUrl || null);
         if (data.checkInTime) {
-          // Check if checkInTime is a Firestore Timestamp and convert, otherwise assume it's an ISO string
-          const checkInTimestamp = data.checkInTime as unknown; // Cast to unknown first
+          const checkInTimestamp = data.checkInTime as unknown;
           if (checkInTimestamp && typeof (checkInTimestamp as Timestamp).toDate === 'function') {
             setLastCheckInTime((checkInTimestamp as Timestamp).toDate().toISOString());
           } else if (typeof checkInTimestamp === 'string') {
             setLastCheckInTime(checkInTimestamp);
           } else {
-            setLastCheckInTime(null); // Fallback if format is unexpected
+            setLastCheckInTime(null);
           }
         } else {
             setLastCheckInTime(null);
@@ -96,19 +113,18 @@ export default function AttendancePage() {
         console.log(`>>> KAROBHR TRACE: AttendancePage - Status set to ${data.status === 'Checked In' ? 'checked-in' : 'checked-out'}. Doc ID: ${latestDoc.id}`);
       }
     }, (error) => {
-      console.error(">>> KAROBHR TRACE: AttendancePage - Error fetching today's attendance:", error);
-      toast({ title: "Error", description: "Could not load attendance status.", variant: "destructive" });
-      setAttendanceStatus('unknown');
+      console.error(">>> KAROBHR TRACE: AttendancePage - Error fetching today's attendance from Firestore:", error);
+      toast({ title: "Error", description: "Could not load attendance status from database.", variant: "destructive" });
+      setAttendanceStatus('error');
     });
 
     return () => {
       console.log(">>> KAROBHR TRACE: AttendancePage - Unsubscribing from Firestore listener.");
       unsubscribe();
     };
-  }, [dbFs, user?.id, user?.companyId, toast]); // OPTIMIZED DEPENDENCIES
+  }, [dbFs, user?.id, user?.companyId, toast, authLoading]);
 
 
-  // Camera Permission and Stream Management
   useEffect(() => {
     const getCameraPermission = async () => {
       if (typeof navigator !== "undefined" && navigator.mediaDevices) {
@@ -119,37 +135,31 @@ export default function AttendancePage() {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
-          console.log(">>> KAROBHR TRACE: Camera permission granted and stream set.");
         } catch (error) {
           console.error('>>> KAROBHR TRACE: Error accessing camera:', error);
           setHasCameraPermission(false);
         }
       } else {
         setHasCameraPermission(false);
-        console.log(">>> KAROBHR TRACE: Camera API not available.");
       }
     };
 
-    if (attendanceStatus === 'checked-out' || attendanceStatus === 'unknown' && !authLoading) {
-      console.log(">>> KAROBHR TRACE: Requesting camera permission as status is checked-out or unknown (and not authLoading).");
+    if (attendanceStatus === 'checked-out' && !authLoading && !initializationError) {
       getCameraPermission();
     } else {
-      console.log(">>> KAROBHR TRACE: Stopping camera stream as status is not checked-out/unknown or auth is loading.");
       stopCameraStream();
     }
     
     return () => {
-      console.log(">>> KAROBHR TRACE: Cleaning up camera stream effect.");
       stopCameraStream();
     };
-  }, [attendanceStatus, authLoading]); // authLoading added as camera should not be requested if user context is still loading
+  }, [attendanceStatus, authLoading, initializationError]);
 
   const stopCameraStream = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
-      console.log(">>> KAROBHR TRACE: Camera stream stopped.");
     }
   };
 
@@ -177,7 +187,7 @@ export default function AttendancePage() {
       return;
     }
     if (!hasCameraPermission || !videoRef.current?.srcObject || !canvasRef.current) {
-      toast({ title: "Camera Error", description: "Camera not ready or permission denied.", variant: "destructive" });
+      toast({ title: "Camera Error", description: "Camera not ready or permission denied. Please ensure camera access is allowed.", variant: "destructive" });
       return;
     }
     if (!companySettings?.officeLocation && !user?.remoteWorkLocation) {
@@ -199,12 +209,11 @@ export default function AttendancePage() {
       const newDocId = await addAttendanceEvent({ type: 'check-in', location, photoDataUrl });
       if (newDocId) {
         toast({ title: "Check-In Successful!", description: "Your check-in has been recorded." });
-        // Listener will update attendanceStatus and currentDayDocId
       }
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Check-in error:", error);
       toast({ title: "Check-In Failed", description: error.message || "Could not record check-in.", variant: "destructive" });
-      setAttendanceStatus('checked-out'); // Revert status on failure
+      setAttendanceStatus('checked-out');
     }
   };
   
@@ -242,14 +251,45 @@ export default function AttendancePage() {
 
   const isProcessing = attendanceStatus === 'processing-check-in' || attendanceStatus === 'processing-check-out' || attendanceStatus === 'submitting-report';
 
-  if (authLoading || attendanceStatus === 'unknown') {
+  if (authLoading) {
     return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">Authenticating...</p>
+      </div>
+    );
+  }
+
+  if (initializationError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
+        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <h2 className="text-xl font-semibold mb-2">Attendance Initialization Error</h2>
+        <p className="text-muted-foreground">{initializationError}</p>
+      </div>
+    );
+  }
+  
+  if (attendanceStatus === 'unknown') {
+     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">Loading attendance status...</p>
       </div>
     );
   }
+
+  if (attendanceStatus === 'error' && !initializationError) { // Show specific DB error if not an init error
+     return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
+        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <h2 className="text-xl font-semibold mb-2">Attendance Database Error</h2>
+        <p className="text-muted-foreground">Could not load attendance status from the database. This might be due to a network issue, incorrect permissions, or a missing database index. Please check your internet connection and try again. If the problem persists, contact support.</p>
+        <p className="text-xs text-muted-foreground mt-2">Admins: Ensure Firestore security rules allow reads and the necessary composite index exists for (userId, checkInTime desc) on the 'attendanceLog' collection.</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-3xl mx-auto">
@@ -260,7 +300,7 @@ export default function AttendancePage() {
           </CardTitle>
           <CardDescription>
             Use the buttons below to manage your daily attendance. Geofencing is active.
-            Current Status: <span className={`font-semibold ${attendanceStatus === 'checked-in' ? 'text-green-600' : 'text-orange-600'}`}>{attendanceStatus.replace('-', ' ').toUpperCase()}</span>
+            Current Status: <span className={`font-semibold ${attendanceStatus === 'checked-in' ? 'text-green-600' : attendanceStatus === 'checked-out' ? 'text-orange-600' : 'text-muted-foreground'}`}>{attendanceStatus.replace('-', ' ').toUpperCase()}</span>
           </CardDescription>
         </CardHeader>
       </Card>
@@ -284,6 +324,15 @@ export default function AttendancePage() {
                   Camera access is denied or unavailable. Please enable permissions in your browser settings and refresh.
                 </AlertDescription>
               </Alert>
+            )}
+             {hasCameraPermission === null && (
+                <Alert variant="default">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertTitle>Camera Check</AlertTitle>
+                    <AlertDescription>
+                    Checking camera permissions...
+                    </AlertDescription>
+                </Alert>
             )}
           </CardContent>
         </Card>
@@ -309,7 +358,7 @@ export default function AttendancePage() {
             size="lg"
             className="w-full py-6 text-lg"
             onClick={handleCheckIn}
-            disabled={isProcessing || attendanceStatus === 'checked-in' || hasCameraPermission !== true}
+            disabled={isProcessing || attendanceStatus === 'checked-in' || attendanceStatus === 'error' || hasCameraPermission !== true}
           >
             {attendanceStatus === 'processing-check-in' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogIn className="mr-2 h-5 w-5" /> Check In
@@ -319,7 +368,7 @@ export default function AttendancePage() {
             variant="outline"
             className="w-full py-6 text-lg"
             onClick={handleCheckOut}
-            disabled={isProcessing || attendanceStatus === 'checked-out'}
+            disabled={isProcessing || attendanceStatus === 'checked-out' || attendanceStatus === 'error'}
           >
             {attendanceStatus === 'processing-check-out' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogOut className="mr-2 h-5 w-5" /> Check Out
@@ -348,7 +397,7 @@ export default function AttendancePage() {
             <DialogClose asChild>
               <Button type="button" variant="outline" onClick={() => {
                 setIsReportModalOpen(false); 
-                if (attendanceStatus === 'processing-check-out') setAttendanceStatus('checked-in'); // Revert if cancelled during processing
+                if (attendanceStatus === 'processing-check-out' || attendanceStatus === 'submitting-report') setAttendanceStatus('checked-in');
               }}>Cancel</Button>
             </DialogClose>
             <Button onClick={submitReportAndCheckout} disabled={attendanceStatus === 'submitting-report' || attendanceStatus === 'processing-check-out' || !workReport.trim()}>
@@ -362,3 +411,4 @@ export default function AttendancePage() {
     </div>
   );
 }
+
