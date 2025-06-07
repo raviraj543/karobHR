@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
-import { ShieldPlus, ArrowLeft } from 'lucide-react';
+import { ShieldPlus, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,6 +19,7 @@ import type { UserRole } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
+import { Alert, AlertDescription as AlertDescriptionComponent, AlertTitle as AlertTitleComponent } from '@/components/ui/alert';
 
 
 const adminSignupSchema = z.object({
@@ -40,40 +41,53 @@ export default function AdminSignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { addNewEmployee, loading: authContextLoading } = useAuth();
-  const [adminAccountExists, setAdminAccountExists] = useState<boolean | null>(null); 
+  const { user, addNewEmployee, loading: authContextLoading } = useAuth();
+  const [checkingAdminStatus, setCheckingAdminStatus] = useState<boolean>(true);
+  const [showAdminExistsWarning, setShowAdminExistsWarning] = useState<boolean>(false);
 
 
   useEffect(() => {
     document.title = 'Create Admin Account - KarobHR';
+
     const checkAdminExistence = async () => {
-        if (authContextLoading) return;
-        const { db } = getFirebaseInstances();
-        try {
-            const q = query(collection(db, "userDirectory"), where("role", "==", "admin"));
-            const adminSnapshot = await getDocs(q);
-            if (!adminSnapshot.empty) {
-                
-                console.warn(">>> KAROBHR TRACE: Admin account(s) exist, but admin-signup page is temporarily allowing new signups for debugging.");
-                toast({
-                    title: "Admin Account(s) Exist (Debug Mode)",
-                    description: "Admin-signup is temporarily enabled even if admins exist. Use with caution or delete old admin data in Firebase for a clean setup.",
-                    variant: "default",
-                    duration: 9000,
-                });
-                
-                setAdminAccountExists(false); 
-            } else {
-                setAdminAccountExists(false);
-            }
-        } catch (error) {
-            console.error("Error checking for existing admins:", error);
-            toast({ title: "Error", description: "Could not verify admin status. Please try again.", variant: "destructive"});
-            setAdminAccountExists(null);
+      setCheckingAdminStatus(true);
+      if (authContextLoading) {
+        // Wait for auth context to potentially load a user
+        return;
+      }
+
+      if (user) {
+        toast({
+            title: "Already Logged In",
+            description: `You are logged in as ${user.name}. To create a new company & admin, please log out first.`,
+            variant: "default",
+            duration: 7000,
+        });
+        router.replace(user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+        return; // Stop further execution in this effect
+      }
+
+      const { db } = getFirebaseInstances();
+      try {
+        const q = query(collection(db, "userDirectory"), where("role", "==", "admin"));
+        const adminSnapshot = await getDocs(q);
+        if (!adminSnapshot.empty) {
+          setShowAdminExistsWarning(true);
+          console.warn(">>> KAROBHR TRACE: Admin account(s) exist in the system. Admin signup page still allows new company/admin creation.");
+          // Toast is optional here, the UI warning is more persistent
+        } else {
+          setShowAdminExistsWarning(false);
         }
+      } catch (error) {
+        console.error("Error checking for existing admins:", error);
+        toast({ title: "System Error", description: "Could not verify system admin status. Please proceed with caution or try again later.", variant: "destructive"});
+      } finally {
+        setCheckingAdminStatus(false);
+      }
     };
+
     checkAdminExistence();
-  }, [authContextLoading, router, toast]);
+  }, [authContextLoading, router, toast, user]);
 
 
   const onSubmit = async (data: AdminSignupFormValues) => {
@@ -88,13 +102,12 @@ export default function AdminSignupPage() {
       department: 'Administration',
       role: 'admin' as UserRole,
       companyId: newCompanyId,
-      companyName: data.companyName, // Pass companyName here
+      companyName: data.companyName,
       joiningDate: new Date().toISOString().split('T')[0],
-      baseSalary: 0, // Admin salary can be set later if needed
+      baseSalary: 0, 
     };
 
     try {
-      
       await addNewEmployee(adminDataForContext, data.password);
       toast({
         title: "Admin Account & Company Registered!",
@@ -106,7 +119,7 @@ export default function AdminSignupPage() {
     } catch (error) {
         toast({
             title: "Error Creating Admin Account",
-            description: (error as Error).message || "Could not create admin account. The Employee ID or Email might already be in use.",
+            description: (error as Error).message || "Could not create admin account. The Admin Login ID or Email might already be in use with another company, or another error occurred.",
             variant: "destructive",
             duration: 7000,
         });
@@ -127,8 +140,13 @@ export default function AdminSignupPage() {
     },
   });
 
-  if (authContextLoading || adminAccountExists === null) { 
-    return <div className="flex items-center justify-center min-h-screen">Loading setup information...</div>;
+  if (authContextLoading || checkingAdminStatus) { 
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">{authContextLoading ? 'Loading user session...' : 'Checking system status...'}</p>
+      </div>
+    );
   }
 
 
@@ -139,7 +157,7 @@ export default function AdminSignupPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center">
               <ShieldPlus className="mr-2 h-8 w-8 text-primary" />
-              <CardTitle className="text-2xl font-bold">Setup Company & Admin Account</CardTitle>
+              <CardTitle className="text-2xl font-bold">Setup New Company & Admin</CardTitle>
             </div>
              <Button variant="outline" size="sm" asChild>
                <Link href="/login">
@@ -148,9 +166,17 @@ export default function AdminSignupPage() {
              </Button>
           </div>
           <CardDescription>
-            Register your company and create the first administrator account for KarobHR.
-            {adminAccountExists === true && <span className="block text-destructive font-semibold mt-1">Warning: Admin account(s) detected. New signup temporarily enabled for debugging.</span>}
+            Register a new company and create its first administrator account for KarobHR.
           </CardDescription>
+          {showAdminExistsWarning && (
+            <Alert variant="default" className="mt-3 bg-yellow-50 border-yellow-300 text-yellow-700">
+              <AlertTriangle className="h-4 w-4 !text-yellow-600" />
+              <AlertTitleComponent>Existing Admin Accounts Detected</AlertTitleComponent>
+              <AlertDescriptionComponent>
+                One or more admin accounts already exist in the system. This page allows you to create a new, independent company and its administrator.
+              </AlertDescriptionComponent>
+            </Alert>
+          )}
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -160,9 +186,9 @@ export default function AdminSignupPage() {
                 name="companyName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Company Name</FormLabel>
+                    <FormLabel>New Company Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Acme Innovations Ltd." {...field} />
+                      <Input placeholder="e.g., Stark Industries, Wayne Enterprises" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -175,7 +201,7 @@ export default function AdminSignupPage() {
                   <FormItem>
                     <FormLabel>Your Full Name (Administrator)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Jane Doe" {...field} />
+                      <Input placeholder="e.g., Tony Stark, Bruce Wayne" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -189,7 +215,7 @@ export default function AdminSignupPage() {
                     <FormItem>
                       <FormLabel>Admin Login ID</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., jane.admin" {...field} />
+                        <Input placeholder="e.g., tony.admin" {...field} />
                       </FormControl>
                        <FormDescription>Unique ID for login.</FormDescription>
                       <FormMessage />
@@ -205,7 +231,7 @@ export default function AdminSignupPage() {
                       <FormControl>
                         <Input type="email" placeholder="e.g., admin@company.com" {...field} />
                       </FormControl>
-                      <FormDescription>If blank, one will be auto-generated.</FormDescription>
+                      <FormDescription>If blank, one may be auto-generated.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -241,10 +267,9 @@ export default function AdminSignupPage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authContextLoading}>
-                {isLoading ? 'Creating Account...' : 'Create Company & Admin Account'}
+              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authContextLoading || checkingAdminStatus}>
+                {(isLoading || authContextLoading || checkingAdminStatus) ? 'Please wait...' : 'Create Company & Admin Account'}
               </Button>
-               
             </form>
           </Form>
         </CardContent>
@@ -252,3 +277,4 @@ export default function AdminSignupPage() {
     </div>
   );
 }
+
