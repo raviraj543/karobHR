@@ -17,7 +17,7 @@ import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "fir
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkingDaysInMonth, isSunday, formatDuration } from '@/lib/dateUtils';
 import { calculateDistance } from '@/lib/locationUtils'; // Import new utility
-import { differenceInMilliseconds, parseISO, isToday, getMonth, getYear, format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { differenceInMilliseconds, parseISO, isToday, getMonth, getYear, format, startOfMonth, endOfMonth, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 
 
 console.log(">>> KAROBHR TRACE: Attempting to load src/lib/authContext.tsx module...");
@@ -346,7 +346,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
-    if (!dbInstance || !companyId ) { // All roles can see their own attendance
+    if (!dbInstance || !companyId ) { 
         setAttendanceLog([]);
         return;
     }
@@ -355,7 +355,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let attendanceQuery;
     if (role === 'admin' || role === 'manager') {
         attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`));
-    } else if (user) { // Employee: fetch only their own
+    } else if (user) { 
         attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`), where('userId', '==', user.id));
     } else {
         setAttendanceLog([]);
@@ -365,44 +365,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     unsub = onSnapshot(attendanceQuery, (snapshot) => {
         const logList = snapshot.docs.map(docSnapshot => {
             const data = docSnapshot.data();
-            const eventTimestamp = data.timestamp || data.checkInTime; // Prioritize timestamp, fallback to checkInTime
-            let isoTimestamp: string;
-            if (eventTimestamp && typeof (eventTimestamp as any).toDate === 'function') {
-                isoTimestamp = (eventTimestamp as any).toDate().toISOString();
-            } else if (typeof eventTimestamp === 'string') {
-                isoTimestamp = eventTimestamp;
-            } else {
-                console.warn(`>>> KAROBHR TRACE: Attendance event ${docSnapshot.id} has invalid or missing timestamp:`, eventTimestamp);
-                isoTimestamp = new Date(0).toISOString();
-            }
-
-            const checkOutTimestamp = data.checkOutTime;
-            let isoCheckOutTimestamp: string | null = null;
-             if (checkOutTimestamp && typeof (checkOutTimestamp as any).toDate === 'function') {
-                isoCheckOutTimestamp = (checkOutTimestamp as any).toDate().toISOString();
-            } else if (typeof checkOutTimestamp === 'string') {
-                isoCheckOutTimestamp = checkOutTimestamp;
-            }
-
+            
+            const parseTimestampToISO = (ts: any): string => {
+              if (!ts) return new Date(0).toISOString();
+              if (typeof ts.toDate === 'function') return ts.toDate().toISOString();
+              if (typeof ts === 'string') return ts;
+              if (ts._seconds && ts._nanoseconds) return new Timestamp(ts._seconds, ts._nanoseconds).toDate().toISOString();
+              return new Date(0).toISOString();
+            };
 
             return {
                 id: docSnapshot.id,
                 employeeId: data.employeeId,
                 userId: data.userId,
                 userName: data.userName,
-                type: data.type, // 'check-in' or 'check-out' - may become redundant if using 'status'
-                timestamp: isoTimestamp, // Represents check-in time
-                checkInTime: data.checkInTime ? (typeof data.checkInTime.toDate === 'function' ? data.checkInTime.toDate().toISOString() : data.checkInTime) : isoTimestamp,
-                checkOutTime: isoCheckOutTimestamp,
-                photoUrl: data.photoUrl || data.checkInPhotoUrl || null,
-                location: data.location || data.checkInLocation || null, // Keep for backward compatibility if 'location' was used
-                checkInLocation: data.checkInLocation || data.location || null,
-                checkOutLocation: data.checkOutLocation || null,
-                isWithinGeofence: data.isWithinGeofence === undefined ? null : data.isWithinGeofence, // for check-in
-                isWithinGeofenceCheckout: data.isWithinGeofenceCheckout === undefined ? null : data.isWithinGeofenceCheckout, // for check-out
-                matchedGeofenceType: data.matchedGeofenceType || null, // for check-in
-                matchedGeofenceTypeCheckout: data.matchedGeofenceTypeCheckout || null, // for check-out
-                status: data.status || (data.type === 'check-in' ? 'Checked In' : 'Checked Out'), // derive status if not present
+                type: data.type,
+                timestamp: parseTimestampToISO(data.timestamp || data.checkInTime), // Main event time, defaults to checkInTime
+                checkInTime: parseTimestampToISO(data.checkInTime || data.timestamp),
+                checkOutTime: data.checkOutTime ? parseTimestampToISO(data.checkOutTime) : null,
+                photoUrl: data.photoUrl || null,
+                checkInLocation: data.checkInLocation ? { latitude: data.checkInLocation.latitude, longitude: data.checkInLocation.longitude, accuracy: data.checkInLocation.accuracy } : null,
+                checkOutLocation: data.checkOutLocation ? { latitude: data.checkOutLocation.latitude, longitude: data.checkOutLocation.longitude, accuracy: data.checkOutLocation.accuracy } : null,
+                isWithinGeofence: data.isWithinGeofence === undefined ? null : data.isWithinGeofence,
+                isWithinGeofenceCheckout: data.isWithinGeofenceCheckout === undefined ? null : data.isWithinGeofenceCheckout,
+                matchedGeofenceType: data.matchedGeofenceType || null,
+                matchedGeofenceTypeCheckout: data.matchedGeofenceTypeCheckout || null,
+                status: data.status || (data.type === 'check-in' ? 'Checked In' : 'Checked Out'),
                 workReport: data.workReport || null,
             } as AttendanceEvent;
         });
@@ -890,12 +878,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let matchedType: AttendanceEvent['matchedGeofenceType'] = null;
     const geofenceCheckLocation = eventData.location;
 
+    let geofenceErrorMessage = "You are outside all defined geofence areas for check-in.";
+    let primaryGeofenceChecked = false;
+
     if (geofenceCheckLocation) {
         if (companySettings?.officeLocation?.latitude !== undefined && companySettings.officeLocation.longitude !== undefined && companySettings.officeLocation.radius > 0) {
+            primaryGeofenceChecked = true;
             const officeDist = calculateDistance(geofenceCheckLocation.latitude, geofenceCheckLocation.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
             if (officeDist <= companySettings.officeLocation.radius) {
                 isWithinAnyValidGeofence = true;
                 matchedType = 'office';
+            } else {
+                geofenceErrorMessage = `Outside office geofence (approx. ${officeDist.toFixed(0)}m away, radius is ${companySettings.officeLocation.radius}m).`;
             }
         }
         if (!isWithinAnyValidGeofence && user.remoteWorkLocation?.latitude !== undefined && user.remoteWorkLocation.longitude !== undefined && user.remoteWorkLocation.radius > 0) {
@@ -903,30 +897,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (remoteDist <= user.remoteWorkLocation.radius) {
                 isWithinAnyValidGeofence = true;
                 matchedType = 'remote';
+            } else {
+                 const remoteError = `Outside remote location geofence (approx. ${remoteDist.toFixed(0)}m away, radius is ${user.remoteWorkLocation.radius}m).`;
+                 geofenceErrorMessage = primaryGeofenceChecked ? `${geofenceErrorMessage} Also, ${remoteError}` : remoteError;
             }
         }
     }
     
     if (!isWithinAnyValidGeofence && geofenceCheckLocation) {
-        // Throw error if outside ALL defined geofences
-        throw new Error("You are outside the allowed geofence area for check-in.");
+        if (!primaryGeofenceChecked && !user.remoteWorkLocation) {
+             geofenceErrorMessage = "No geofence (office or remote) is configured for attendance. Please contact admin.";
+        }
+        throw new Error(geofenceErrorMessage);
     }
 
 
-    const newAttendanceEventData: Partial<AttendanceEvent> = {
+    const newAttendanceEventData: Omit<AttendanceEvent, 'id'> = {
         userId: user.id,
         employeeId: user.employeeId,
         userName: user.name || user.employeeId,
-        type: eventData.type,
+        type: 'check-in',
         status: 'Checked In',
-        checkInTime: serverTimestamp() as unknown as string, // serverTimestamp for checkInTime
-        checkInLocation: new GeoPoint(geofenceCheckLocation.latitude, geofenceCheckLocation.longitude),
+        timestamp: serverTimestamp() as unknown as string, // Main event time = check-in time
+        checkInTime: serverTimestamp() as unknown as string,
+        checkInLocation: { latitude: geofenceCheckLocation.latitude, longitude: geofenceCheckLocation.longitude, accuracy: geofenceCheckLocation.accuracy },
         photoUrl: photoFinalUrl,
         isWithinGeofence: isWithinAnyValidGeofence,
         matchedGeofenceType: matchedType,
-        workReport: null,
-        checkOutTime: null,
-        checkOutLocation: null,
+        workReport: null, // Explicitly null for check-in
+        checkOutTime: null, // Explicitly null for check-in
+        checkOutLocation: null, // Explicitly null for check-in
         isWithinGeofenceCheckout: null,
         matchedGeofenceTypeCheckout: null,
     };
@@ -951,12 +951,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     let isWithinAnyValidGeofenceCheckout = false;
     let matchedTypeCheckout: AttendanceEvent['matchedGeofenceTypeCheckout'] = null;
+    let geofenceErrorMessage = "You are outside all defined geofence areas for check-out.";
+    let primaryGeofenceChecked = false;
+
 
     if (companySettings?.officeLocation?.latitude !== undefined && companySettings.officeLocation.longitude !== undefined && companySettings.officeLocation.radius > 0) {
+        primaryGeofenceChecked = true;
         const officeDist = calculateDistance(checkoutLocationInfo.latitude, checkoutLocationInfo.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
         if (officeDist <= companySettings.officeLocation.radius) {
             isWithinAnyValidGeofenceCheckout = true;
             matchedTypeCheckout = 'office';
+        } else {
+            geofenceErrorMessage = `Outside office geofence (approx. ${officeDist.toFixed(0)}m away, radius is ${companySettings.officeLocation.radius}m).`;
         }
     }
     if (!isWithinAnyValidGeofenceCheckout && user.remoteWorkLocation?.latitude !== undefined && user.remoteWorkLocation.longitude !== undefined && user.remoteWorkLocation.radius > 0) {
@@ -964,19 +970,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (remoteDist <= user.remoteWorkLocation.radius) {
             isWithinAnyValidGeofenceCheckout = true;
             matchedTypeCheckout = 'remote';
+        } else {
+            const remoteError = `Outside remote location geofence (approx. ${remoteDist.toFixed(0)}m away, radius is ${user.remoteWorkLocation.radius}m).`;
+            geofenceErrorMessage = primaryGeofenceChecked ? `${geofenceErrorMessage} Also, ${remoteError}` : remoteError;
         }
     }
 
     if (!isWithinAnyValidGeofenceCheckout) {
-        throw new Error("You are outside the allowed geofence area for check-out.");
+         if (!primaryGeofenceChecked && !user.remoteWorkLocation) {
+             geofenceErrorMessage = "No geofence (office or remote) is configured for attendance. Please contact admin.";
+        }
+        throw new Error(geofenceErrorMessage);
     }
 
     const attendanceDocRef = doc(dbInstance, `companies/${companyId}/attendanceLog/${attendanceDocId}`);
     const updateData: Partial<AttendanceEvent> = {
+      type: 'check-out', // Update type to check-out
       workReport: reportText,
-      checkOutTime: serverTimestamp() as unknown as string, // serverTimestamp for checkOutTime
+      checkOutTime: serverTimestamp() as unknown as string, 
       status: 'Checked Out',
-      checkOutLocation: new GeoPoint(checkoutLocationInfo.latitude, checkoutLocationInfo.longitude),
+      checkOutLocation: { latitude: checkoutLocationInfo.latitude, longitude: checkoutLocationInfo.longitude, accuracy: checkoutLocationInfo.accuracy },
       isWithinGeofenceCheckout: isWithinAnyValidGeofenceCheckout,
       matchedGeofenceTypeCheckout: matchedTypeCheckout,
     };
@@ -1078,11 +1091,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     employeeAttendanceEvents.forEach(event => {
         try {
-            const eventDate = parseISO(event.checkInTime || event.timestamp); // Use checkInTime primarily
+            const eventDate = parseISO(event.checkInTime || event.timestamp); 
             if (!isWithinInterval(eventDate, { start: monthStartDate, end: monthEndDate })) {
                 return;
             }
-            if(event.status !== 'Checked Out' || !event.checkOutTime) return; // Only consider completed work sessions
+            if(event.status !== 'Checked Out' || !event.checkOutTime) return; 
 
             const dateStr = format(eventDate, 'yyyy-MM-dd');
             

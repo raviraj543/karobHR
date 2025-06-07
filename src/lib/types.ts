@@ -36,14 +36,13 @@ export interface AttendanceEvent {
   employeeId: string; // KarobHR employee ID
   userId: string; // Firebase Auth UID of the employee
   userName: string;
-  type: 'check-in' | 'check-out'; // This might be simplified if status covers it
-  timestamp: string; // ISO Date string (server timestamp preferred for Firestore) - represents check-in time
-  checkInTime?: string; // Explicit check-in time
-  checkOutTime?: string | null; // Explicit check-out time
+  type: 'check-in' | 'check-out'; // This might be less relevant if status is primary
+  timestamp: string; // Main event timestamp, typically check-in for new records
+  checkInTime?: string; // Explicit ISO Date string for check-in
+  checkOutTime?: string | null; // Explicit ISO Date string for check-out
   photoUrl?: string | null; // URL from Firebase Storage for check-in photo
-  location?: LocationInfo | null; // For check-in location
-  checkInLocation?: LocationInfo | null; // Explicit for check-in
-  checkOutLocation?: LocationInfo | null; // Explicit for check-out
+  checkInLocation?: LocationInfo | null; // Explicit GeoPoint-like structure for check-in
+  checkOutLocation?: LocationInfo | null; // Explicit GeoPoint-like structure for check-out
   isWithinGeofence: boolean | null; // For check-in
   isWithinGeofenceCheckout?: boolean | null; // For check-out
   matchedGeofenceType?: 'office' | 'remote' | null; // For check-in
@@ -136,4 +135,31 @@ export interface MonthlyPayrollReport {
   salaryAfterDeductions: number;
   totalApprovedAdvances: number;
   finalNetPayable: number;
+}
+
+export interface User {
+  id: string; // Firebase Auth UID
+  employeeId: string; // Custom Employee ID for the company
+  email: string | null;
+  name?: string;
+  role: UserRole;
+  companyId: string;
+  department?: string;
+  joiningDate?: string; // ISO date string
+  baseSalary?: number;
+  standardDailyHours?: number; // Added standard daily hours
+  contactInfo?: {
+    phone?: string;
+    address?: string;
+  };
+  profilePictureUrl?: string | null;
+  leaves?: LeaveApplication[];
+  advances?: Advance[];
+  mockAttendanceFactor?: number; // Temporary for payslip calculation
+  remoteWorkLocation?: {
+    name: string;
+    latitude: number;
+    longitude: number;
+    radius: number; // in meters
+  };
 }
