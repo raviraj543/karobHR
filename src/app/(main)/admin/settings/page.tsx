@@ -9,15 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2 } from 'lucide-react';
-import type { Metadata } from 'next';
+// import type { Metadata } from 'next'; // Cannot be used in client component
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { CompanySettings } from '@/lib/types';
-
-// export const metadata: Metadata = { // Cannot be used in client component
-//   title: 'Company Settings - Admin - KarobHR',
-//   description: 'Configure company-wide settings for KarobHR.',
-// };
 
 export default function AdminSettingsPage() {
   const { companySettings, updateCompanySettings, companyId, loading: authLoading, user } = useAuth();
@@ -31,18 +26,42 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     document.title = 'Company Settings - Admin - KarobHR';
-    if (companySettings?.officeLocation) {
-      setOfficeName(companySettings.officeLocation.name || 'Main Office');
-      setOfficeLat(String(companySettings.officeLocation.latitude));
-      setOfficeLon(String(companySettings.officeLocation.longitude));
-      setOfficeRadius(String(companySettings.officeLocation.radius));
-    } else if (!authLoading && companyId && !companySettings) {
-      // If companyId exists but no settings yet, initialize with defaults
-      // This typically happens if the company doc was created without officeLocation
-      setOfficeName('Main Office');
-      setOfficeLat('0'); // Default to 0, admin must update
-      setOfficeLon('0'); // Default to 0, admin must update
-      setOfficeRadius('100'); // Default radius
+    if (authLoading) {
+        console.log(">>> KAROBHR TRACE: AdminSettingsPage - Auth loading, waiting for companySettings.");
+        // Optionally, you could set form fields to a "Loading..." state or disable them.
+        return;
+    }
+
+    if (companyId) { // Only proceed if companyId is available
+        if (companySettings && companySettings.officeLocation) {
+            console.log(">>> KAROBHR TRACE: AdminSettingsPage - Populating form from companySettings.officeLocation:", companySettings.officeLocation);
+            setOfficeName(companySettings.officeLocation.name || 'Main Office');
+            setOfficeLat(String(companySettings.officeLocation.latitude));
+            setOfficeLon(String(companySettings.officeLocation.longitude));
+            setOfficeRadius(String(companySettings.officeLocation.radius));
+        } else if (companySettings && !companySettings.officeLocation) {
+            console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings loaded, but officeLocation field is missing. Initializing form with defaults.");
+            setOfficeName('Main Office');
+            setOfficeLat('0');
+            setOfficeLon('0');
+            setOfficeRadius('100');
+        } else if (companySettings === null) { // Company document explicitly does not exist or failed to load
+            console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings document is null (e.g., not found or error loading). Initializing form with defaults.");
+            setOfficeName('Main Office');
+            setOfficeLat('0');
+            setOfficeLon('0');
+            setOfficeRadius('100');
+        } else if (companySettings === undefined) {
+            console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings is undefined, authNotLoading. This might mean it's the initial state before the first fetch. Setting defaults.");
+             setOfficeName('Main Office');
+            setOfficeLat('0');
+            setOfficeLon('0');
+            setOfficeRadius('100');
+        }
+    } else if (!authLoading && !companyId) {
+        console.warn(">>> KAROBHR TRACE: AdminSettingsPage - No companyId available, cannot load or set geofence settings.");
+        // Keep fields empty or show an error message on the page.
+        setOfficeName(''); setOfficeLat(''); setOfficeLon(''); setOfficeRadius('');
     }
   }, [companySettings, authLoading, companyId]);
 
@@ -67,16 +86,19 @@ export default function AdminSettingsPage() {
 
     setIsSavingGeofence(true);
     try {
-      await updateCompanySettings({
+      const settingsToSave = {
         name: officeName.trim() || "Main Office",
         latitude: lat,
         longitude: lon,
         radius: radius,
-      });
+      };
+      console.log(">>> KAROBHR TRACE: AdminSettingsPage - Attempting to save geofence settings:", settingsToSave);
+      await updateCompanySettings(settingsToSave);
       toast({ title: "Geofence Settings Saved", description: "Office location and radius have been updated." });
-    } catch (error) {
+      console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings from context AFTER updateCompanySettings call:", companySettings);
+    } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Error in handleSaveGeofence on settings page:", error);
-      toast({ title: "Error Saving Geofence", description: (error as Error).message || "Could not save settings.", variant: "destructive" });
+      toast({ title: "Error Saving Geofence", description: error.message || "Could not save settings.", variant: "destructive" });
     } finally {
       setIsSavingGeofence(false);
     }
@@ -98,7 +120,7 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="companyName">Company Name</Label>
-            <Input id="companyName" value={companySettings?.companyName || "Loading company name..."} readOnly disabled />
+            <Input id="companyName" value={authLoading ? "Loading..." : companySettings?.companyName || "N/A"} readOnly disabled />
             <p className="text-xs text-muted-foreground">Company name is set during initial admin setup.</p>
           </div>
           <div className="space-y-1">
@@ -241,3 +263,5 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+
+    
