@@ -38,60 +38,60 @@ const adminSignupSchema = z.object({
 type AdminSignupFormValues = z.infer<typeof adminSignupSchema>;
 
 export default function AdminSignupPage() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed from isLoading for clarity on form submission
   const { toast } = useToast();
   const router = useRouter();
-  const { user, addNewEmployee, loading: authContextLoading } = useAuth();
+  const { user: authenticatedUser, addNewEmployee, loading: authContextLoading } = useAuth(); // Renamed user to authenticatedUser
   const [checkingAdminStatus, setCheckingAdminStatus] = useState<boolean>(true);
-  const [showAdminExistsWarning, setShowAdminExistsWarning] = useState<boolean>(false);
+  const [adminAccountsExist, setAdminAccountsExist] = useState<boolean>(false);
 
 
   useEffect(() => {
     document.title = 'Create Admin Account - KarobHR';
 
-    const checkAdminExistence = async () => {
+    const performInitialChecks = async () => {
       setCheckingAdminStatus(true);
+
       if (authContextLoading) {
-        // Wait for auth context to potentially load a user
+        // Wait for auth context to finish loading
         return;
       }
 
-      if (user) {
+      if (authenticatedUser) {
         toast({
             title: "Already Logged In",
-            description: `You are logged in as ${user.name}. To create a new company & admin, please log out first.`,
+            description: `You are logged in as ${authenticatedUser.name || authenticatedUser.employeeId}. To create a new company & admin, please log out first.`,
             variant: "default",
             duration: 7000,
         });
-        router.replace(user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
-        return; // Stop further execution in this effect
+        router.replace(authenticatedUser.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+        setCheckingAdminStatus(false);
+        return; 
       }
 
+      // If not logged in and auth context is done loading, check for existing admins
       const { db } = getFirebaseInstances();
       try {
         const q = query(collection(db, "userDirectory"), where("role", "==", "admin"));
         const adminSnapshot = await getDocs(q);
+        setAdminAccountsExist(!adminSnapshot.empty);
         if (!adminSnapshot.empty) {
-          setShowAdminExistsWarning(true);
-          console.warn(">>> KAROBHR TRACE: Admin account(s) exist in the system. Admin signup page still allows new company/admin creation.");
-          // Toast is optional here, the UI warning is more persistent
-        } else {
-          setShowAdminExistsWarning(false);
+          console.warn(">>> KAROBHR TRACE: Admin account(s) exist in the system. Admin signup page allows new, separate company/admin creation.");
         }
       } catch (error) {
         console.error("Error checking for existing admins:", error);
-        toast({ title: "System Error", description: "Could not verify system admin status. Please proceed with caution or try again later.", variant: "destructive"});
+        toast({ title: "System Check Error", description: "Could not verify system admin status. Please proceed with caution or try again later.", variant: "destructive"});
       } finally {
         setCheckingAdminStatus(false);
       }
     };
 
-    checkAdminExistence();
-  }, [authContextLoading, router, toast, user]);
+    performInitialChecks();
+  }, [authContextLoading, authenticatedUser, router, toast]);
 
 
   const onSubmit = async (data: AdminSignupFormValues) => {
-    setIsLoading(true);
+    setIsSubmitting(true);
     
     const newCompanyId = uuidv4();
 
@@ -102,7 +102,7 @@ export default function AdminSignupPage() {
       department: 'Administration',
       role: 'admin' as UserRole,
       companyId: newCompanyId,
-      companyName: data.companyName,
+      companyName: data.companyName, 
       joiningDate: new Date().toISOString().split('T')[0],
       baseSalary: 0, 
     };
@@ -124,7 +124,7 @@ export default function AdminSignupPage() {
             duration: 7000,
         });
     } finally {
-        setIsLoading(false);
+        setIsSubmitting(false);
     }
   };
 
@@ -140,13 +140,22 @@ export default function AdminSignupPage() {
     },
   });
 
-  if (authContextLoading || checkingAdminStatus) { 
+  const isPageLoading = authContextLoading || checkingAdminStatus;
+
+  if (isPageLoading && !authenticatedUser) { // Show loader only if not redirecting
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">{authContextLoading ? 'Loading user session...' : 'Checking system status...'}</p>
       </div>
     );
+  }
+  
+  // If authenticatedUser becomes available while page was loading, the redirect will handle it.
+  // If it's still loading and user is not yet known, the loader above shows.
+  // If loading is done, and user is still null, then we show the form.
+  if (authenticatedUser) {
+    return null; // Or a minimal loader while redirect happens
   }
 
 
@@ -168,12 +177,13 @@ export default function AdminSignupPage() {
           <CardDescription>
             Register a new company and create its first administrator account for KarobHR.
           </CardDescription>
-          {showAdminExistsWarning && (
-            <Alert variant="default" className="mt-3 bg-yellow-50 border-yellow-300 text-yellow-700">
-              <AlertTriangle className="h-4 w-4 !text-yellow-600" />
-              <AlertTitleComponent>Existing Admin Accounts Detected</AlertTitleComponent>
+          {adminAccountsExist && (
+            <Alert variant="default" className="mt-3 bg-blue-50 border-blue-300 text-blue-700">
+              <AlertTriangle className="h-4 w-4 !text-blue-600" />
+              <AlertTitleComponent>Information: Existing Admin Accounts</AlertTitleComponent>
               <AlertDescriptionComponent>
-                One or more admin accounts already exist in the system. This page allows you to create a new, independent company and its administrator.
+                Other admin accounts already exist in the KarobHR system.
+                You can use this page to create a new, independent company and its administrator.
               </AlertDescriptionComponent>
             </Alert>
           )}
@@ -267,8 +277,9 @@ export default function AdminSignupPage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full md:w-auto" disabled={isLoading || authContextLoading || checkingAdminStatus}>
-                {(isLoading || authContextLoading || checkingAdminStatus) ? 'Please wait...' : 'Create Company & Admin Account'}
+              <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting || isPageLoading}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {(isSubmitting || isPageLoading) ? 'Please wait...' : 'Create Company & Admin Account'}
               </Button>
             </form>
           </Form>
