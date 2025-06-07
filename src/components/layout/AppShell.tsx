@@ -25,10 +25,10 @@ import {
   CalendarOff,
   ListChecks,
   Users,
-  Settings as SettingsIcon, // Renamed to avoid conflict
+  Settings as SettingsIcon, 
   CalendarDays,
   LogOut,
-  LogIn, // Added LogIn
+  Fingerprint, // Added for My Attendance
   Briefcase,
   ShieldCheck,
   IndianRupee,
@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck, allowedRoles: ['admin'] },
   { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'manager', 'employee'] },
-  // Removed Check In and Check Out / Report
+  { href: '/attendance', label: 'My Attendance', icon: Fingerprint, allowedRoles: ['employee', 'manager'] },
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] },
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
@@ -74,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const renderNavItems = (items: NavItem[]) => {
     return items.map((item) => (
-      <SidebarMenuItem key={item.label + item.href}> {/* Added href to key for more uniqueness if labels are similar */}
+      <SidebarMenuItem key={item.label + item.href}> 
         <Link href={item.href} passHref legacyBehavior>
           <SidebarMenuButton
             isActive={pathname === item.href}

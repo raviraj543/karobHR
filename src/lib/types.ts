@@ -36,38 +36,20 @@ export interface AttendanceEvent {
   employeeId: string; // KarobHR employee ID
   userId: string; // Firebase Auth UID of the employee
   userName: string;
-  type: 'check-in' | 'check-out';
-  timestamp: string; // ISO Date string (server timestamp preferred for Firestore)
-  photoUrl?: string | null; // URL from Firebase Storage
-  location: LocationInfo | null;
-  isWithinGeofence: boolean | null; // True if within ANY valid geofence
-  matchedGeofenceType?: 'office' | 'remote' | null; // Which type of geofence was matched
-}
-
-export interface User {
-  id: string; // Firebase Auth UID
-  employeeId: string;
-  email?: string | null;
-  name?: string | null;
-  role: UserRole;
-  companyId: string; // Crucial for multi-tenancy
-  profilePictureUrl?: string | null;
-  department?: string | null;
-  joiningDate?: string | null;
-  contactInfo?: {
-    phone?: string | null;
-  };
-  baseSalary?: number;
-  standardDailyHours?: number;
-  mockAttendanceFactor?: number;
-  advances?: Advance[];
-  leaves?: LeaveApplication[];
-  remoteWorkLocation?: { // For employee's specific remote/home location
-    name?: string; // e.g., "Home Office"
-    latitude: number;
-    longitude: number;
-    radius: number; // in meters
-  };
+  type: 'check-in' | 'check-out'; // This might be simplified if status covers it
+  timestamp: string; // ISO Date string (server timestamp preferred for Firestore) - represents check-in time
+  checkInTime?: string; // Explicit check-in time
+  checkOutTime?: string | null; // Explicit check-out time
+  photoUrl?: string | null; // URL from Firebase Storage for check-in photo
+  location?: LocationInfo | null; // For check-in location
+  checkInLocation?: LocationInfo | null; // Explicit for check-in
+  checkOutLocation?: LocationInfo | null; // Explicit for check-out
+  isWithinGeofence: boolean | null; // For check-in
+  isWithinGeofenceCheckout?: boolean | null; // For check-out
+  matchedGeofenceType?: 'office' | 'remote' | null; // For check-in
+  matchedGeofenceTypeCheckout?: 'office' | 'remote' | null; // For check-out
+  status: 'Checked In' | 'Checked Out';
+  workReport?: string | null;
 }
 
 // For the top-level user directory lookup

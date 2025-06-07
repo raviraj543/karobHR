@@ -10,7 +10,7 @@ import {
   signInWithEmailAndPassword,
   type User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, Timestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, Timestamp, arrayUnion, arrayRemove, GeoPoint } from 'firebase/firestore';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import type { User, UserRole, Task, LeaveApplication, Announcement, UserDirectoryEntry, Advance, AttendanceEvent, LocationInfo, MonthlyPayrollReport, Holiday, CompanySettings } from '@/lib/types';
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
@@ -60,7 +60,8 @@ export interface AuthContextType {
   updateUserInContext: (updatedUser: User) => Promise<void>;
   updateCompanySettings: (settingsUpdate: Partial<CompanySettings['officeLocation']>) => Promise<void>;
   attendanceLog: AttendanceEvent[];
-  addAttendanceEvent: (eventData: Omit<AttendanceEvent, 'id' | 'userId' | 'employeeId' | 'userName' | 'timestamp' | 'isWithinGeofence' | 'matchedGeofenceType'> & { photoDataUrl?: string | null }) => Promise<void>;
+  addAttendanceEvent: (eventData: { type: 'check-in', location: LocationInfo, photoDataUrl: string }) => Promise<string | null>;
+  completeCheckout: (attendanceDocId: string, reportText: string, checkoutLocationInfo: LocationInfo) => Promise<void>;
   requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
   processAdvance: (employeeFirebaseUID: string, advanceId: string, status: 'approved' | 'rejected') => Promise<void>;
   calculateMonthlyPayrollDetails: (
@@ -160,18 +161,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(completeUserData);
         setRole(completeUserData.role);
         setCompanyId(completeUserData.companyId);
-        // companySettings will be fetched by its own listener now that companyId is set.
-        // No need to setCompanySettings(undefined) here if companyId is valid, as listener will take over.
         if (!completeUserData.companyId) {
-            setCompanySettings(undefined); // No company context for settings
+            setCompanySettings(undefined); 
         }
         return completeUserData;
       } else {
         console.warn(`>>> KAROBHR TRACE: fetchUserData - WARNING - No user document found in Firestore 'users/${uidToFetch}'. Auth UID: ${uidToFetch}.`);
-        // If expectedCompanyId was passed (e.g. from login), set it so companySettings listener might run if it's an admin setup case
         if (expectedCompanyId) setCompanyId(expectedCompanyId);
         else setCompanyId(null);
-        setUser(null); setRole(null); setCompanySettings(undefined); // Ensure companySettings is reset
+        setUser(null); setRole(null); setCompanySettings(undefined);
         return null;
       }
     } catch (error) {
@@ -182,7 +180,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [firebaseError, authInstance]);
 
 
-  // Main auth state listener
   useEffect(() => {
     console.log(">>> KAROBHR TRACE: AuthProvider useEffect for onAuthStateChanged running. Auth instance available:", !!authInstance);
     if (!authInstance) {
@@ -206,12 +203,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (currentFirebaseUser) {
         const fetchedUser = await fetchUserData(currentFirebaseUser, dbInstance);
-        if (!fetchedUser || !fetchedUser.companyId) { // Check for companyId here
+        if (!fetchedUser || !fetchedUser.companyId) { 
           setUser(null); setRole(null); setCompanyId(null); setCompanySettings(undefined);
-          setLoading(false); // Set loading false if user profile or companyId is missing
+          setLoading(false); 
           console.warn(`>>> KAROBHR TRACE: onAuthStateChanged - User ${currentFirebaseUser.uid} authenticated, but profile/companyId not loaded. Setting loading false.`);
         }
-        // If fetchedUser and companyId are valid, loading remains true until companySettings is resolved by its own listener
       } else {
         setUser(null); setRole(null); setCompanyId(null); setCompanySettings(undefined);
         setAllUsers([]); setTasks([]); setAnnouncements([]); setAttendanceLog([]);
@@ -228,12 +224,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [authInstance, dbInstance, fetchUserData, firebaseError]);
 
 
-  // Listener for company settings if companyId is known
   useEffect(() => {
     let unsub: (() => void) | undefined;
     if (!dbInstance || !companyId) {
       console.log(">>> KAROBHR TRACE: Company settings listener - No DB or companyId. Setting companySettings to undefined.");
-      setCompanySettings(undefined); // This ensures 'finalize loading' knows settings aren't ready or applicable
+      setCompanySettings(undefined); 
       return;
     }
     console.log(">>> KAROBHR TRACE: Subscribing to companySettings for company:", companyId);
@@ -244,18 +239,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCompanySettings(settingsData);
         console.log(">>> KAROBHR TRACE: Company settings updated/loaded:", settingsData);
       } else {
-        setCompanySettings(null); // Explicitly null if doc doesn't exist (meaning it was attempted)
+        setCompanySettings(null); 
         console.warn(">>> KAROBHR TRACE: Company settings document does not exist for company:", companyId);
       }
     }, (error) => {
       console.error(">>> KAROBHR TRACE: Error fetching company settings:", error);
-      setCompanySettings(null); // Explicitly null on error
+      setCompanySettings(null); 
     });
     return () => unsub && unsub();
   }, [dbInstance, companyId]);
 
 
-  // Effect to finalize loading state based on user and companySettings resolution
   useEffect(() => {
     if (firebaseError || !authInstance) {
       if (loading) {
@@ -266,17 +260,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     if (user) {
-      // Only set loading to false if user exists, companyId is known, AND companySettings is no longer 'undefined'
-      // 'undefined' means the fetch hasn't completed. 'null' means fetch completed but no data.
       if (companyId && companySettings !== undefined) {
         if (loading) {
           setLoading(false);
           console.log(`>>> KAROBHR TRACE: Final loading (false): User ${user.employeeId}, CompanySettings resolved (value: ${companySettings === null ? 'null' : 'exists'}).`);
         }
-      } // else: still loading because companySettings is 'undefined' (not yet fetched or no companyId)
+      } 
     } else {
-      // If there's no user, loading should have been set to false by onAuthStateChanged
-      if (loading) { // This is a safeguard
+      if (loading) { 
         setLoading(false);
         console.log(">>> KAROBHR TRACE: Final loading (false) due to no user (safeguard).");
       }
@@ -313,7 +304,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let tasksQuery;
     if (role === 'admin' || role === 'manager') {
       tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`));
-    } else { // employee
+    } else { 
       tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`), where('assigneeId', '==', user.employeeId));
     }
     unsub = onSnapshot(tasksQuery, (snapshot) => {
@@ -355,16 +346,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
-    if (!dbInstance || !companyId || (role !== 'admin' && role !== 'manager')) {
+    if (!dbInstance || !companyId ) { // All roles can see their own attendance
         setAttendanceLog([]);
         return;
     }
-    console.log(`>>> KAROBHR TRACE: Role ${role} detected, subscribing to attendanceLog for company: ${companyId}`);
-    const attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`));
+    console.log(`>>> KAROBHR TRACE: Role ${role} detected, subscribing to relevant attendanceLog for company: ${companyId}`);
+    
+    let attendanceQuery;
+    if (role === 'admin' || role === 'manager') {
+        attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`));
+    } else if (user) { // Employee: fetch only their own
+        attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`), where('userId', '==', user.id));
+    } else {
+        setAttendanceLog([]);
+        return;
+    }
+
     unsub = onSnapshot(attendanceQuery, (snapshot) => {
         const logList = snapshot.docs.map(docSnapshot => {
             const data = docSnapshot.data();
-            const eventTimestamp = data.timestamp;
+            const eventTimestamp = data.timestamp || data.checkInTime; // Prioritize timestamp, fallback to checkInTime
             let isoTimestamp: string;
             if (eventTimestamp && typeof (eventTimestamp as any).toDate === 'function') {
                 isoTimestamp = (eventTimestamp as any).toDate().toISOString();
@@ -374,17 +375,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 console.warn(`>>> KAROBHR TRACE: Attendance event ${docSnapshot.id} has invalid or missing timestamp:`, eventTimestamp);
                 isoTimestamp = new Date(0).toISOString();
             }
+
+            const checkOutTimestamp = data.checkOutTime;
+            let isoCheckOutTimestamp: string | null = null;
+             if (checkOutTimestamp && typeof (checkOutTimestamp as any).toDate === 'function') {
+                isoCheckOutTimestamp = (checkOutTimestamp as any).toDate().toISOString();
+            } else if (typeof checkOutTimestamp === 'string') {
+                isoCheckOutTimestamp = checkOutTimestamp;
+            }
+
+
             return {
                 id: docSnapshot.id,
                 employeeId: data.employeeId,
                 userId: data.userId,
                 userName: data.userName,
-                type: data.type,
-                timestamp: isoTimestamp,
-                photoUrl: data.photoUrl || null,
-                location: data.location || null,
-                isWithinGeofence: data.isWithinGeofence === undefined ? null : data.isWithinGeofence,
-                matchedGeofenceType: data.matchedGeofenceType || null,
+                type: data.type, // 'check-in' or 'check-out' - may become redundant if using 'status'
+                timestamp: isoTimestamp, // Represents check-in time
+                checkInTime: data.checkInTime ? (typeof data.checkInTime.toDate === 'function' ? data.checkInTime.toDate().toISOString() : data.checkInTime) : isoTimestamp,
+                checkOutTime: isoCheckOutTimestamp,
+                photoUrl: data.photoUrl || data.checkInPhotoUrl || null,
+                location: data.location || data.checkInLocation || null, // Keep for backward compatibility if 'location' was used
+                checkInLocation: data.checkInLocation || data.location || null,
+                checkOutLocation: data.checkOutLocation || null,
+                isWithinGeofence: data.isWithinGeofence === undefined ? null : data.isWithinGeofence, // for check-in
+                isWithinGeofenceCheckout: data.isWithinGeofenceCheckout === undefined ? null : data.isWithinGeofenceCheckout, // for check-out
+                matchedGeofenceType: data.matchedGeofenceType || null, // for check-in
+                matchedGeofenceTypeCheckout: data.matchedGeofenceTypeCheckout || null, // for check-out
+                status: data.status || (data.type === 'check-in' ? 'Checked In' : 'Checked Out'), // derive status if not present
+                workReport: data.workReport || null,
             } as AttendanceEvent;
         });
         setAttendanceLog(logList);
@@ -573,29 +592,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const companyDocRef = doc(dbInstance, `companies/${employeeData.companyId}`);
             const initialCompanySettings: CompanySettings = {
                 companyId: employeeData.companyId,
-                companyName: employeeData.companyName, // Use companyName from employeeData
+                companyName: employeeData.companyName, 
                 adminUid: newFirebaseUser.uid,
-                createdAt: serverTimestamp() as unknown as string, // Use serverTimestamp
-                 officeLocation: { // Default office location
+                createdAt: serverTimestamp() as unknown as string, 
+                 officeLocation: { 
                     name: "Main Office",
-                    latitude: 0, // Default value, admin should update
-                    longitude: 0, // Default value, admin should update
-                    radius: 100, // Default radius
+                    latitude: 0, 
+                    longitude: 0, 
+                    radius: 100, 
                 }
             };
             batch.set(companyDocRef, initialCompanySettings);
             console.log(`>>> KAROBHR TRACE: addNewEmployee - Added set(companyDocRef) to batch for new company: ${employeeData.companyId} with initial settings including default officeLocation.`);
-            // Do not setCompanySettings here directly, let the listener pick it up
         }
 
         await batch.commit();
         console.log(`>>> KAROBHR TRACE: addNewEmployee - SUCCESS - Batch commit successful. User profile and directory entry created for ${newUserDocument.employeeId} (UID: ${newFirebaseUser.uid}).`);
         
-        // If this was the first admin setup and the current logged-in context doesn't have a companyId yet,
-        // trigger a reload of user data or set companyId to ensure settings listener runs.
         if (isFirstAdminSetup && (!companyId || companyId !== employeeData.companyId)) {
             console.log(`>>> KAROBHR TRACE: addNewEmployee - First admin setup for new company ${employeeData.companyId}. Setting AuthContext companyId.`);
-            setCompanyId(employeeData.companyId); // This is important!
+            setCompanyId(employeeData.companyId); 
         }
 
         return newFirebaseUser;
@@ -734,7 +750,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error(">>> KAROBHR TRACE: AuthContext - addAnnouncement - Pre-condition failed. DB:", !!dbInstance, "User:", !!user, "IsAdmin:", user?.role === 'admin', "CompanyID:", companyId);
       throw new Error("Operation not allowed or company context missing.");
     }
-    const currentUserName = user.name || user.employeeId || 'System Admin'; // More robust fallback
+    const currentUserName = user.name || user.employeeId || 'System Admin'; 
     console.log(`>>> KAROBHR TRACE: AuthContext - addAnnouncement - Admin ${user.employeeId} (UID: ${user.id}, Name: ${currentUserName}) posting announcement in company ${companyId}: "${title}"`);
 
     const newAnnouncementData: Omit<Announcement, 'id' | 'postedAt'> = {
@@ -804,11 +820,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [user, dbInstance]);
 
   const updateCompanySettings = useCallback(async (settingsUpdate: Partial<CompanySettings['officeLocation']>) => {
-    if (!dbInstance || !user || user.role !== 'admin') { // Removed companyId check from here as it's checked below
+    if (!dbInstance || !user || user.role !== 'admin') { 
         console.error(">>> KAROBHR TRACE: updateCompanySettings - Pre-condition failed (DB, User, or Admin Role). DB:", !!dbInstance, "User:", !!user, "IsAdmin:", user?.role);
         throw new Error("Operation not allowed or necessary context missing.");
     }
-    if (!companyId) { // Explicit check for companyId
+    if (!companyId) { 
         console.error(">>> KAROBHR TRACE: updateCompanySettings - CRITICAL - companyId is NULL or UNDEFINED in AuthContext. Cannot update settings. Current companyId state:", companyId);
         throw new Error("Company context is missing. Cannot save company settings.");
     }
@@ -845,7 +861,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [dbInstance, companyId, user, companySettings]);
 
-  const addAttendanceEvent = useCallback(async (eventData: Omit<AttendanceEvent, 'id' | 'userId' | 'employeeId' | 'userName' | 'timestamp' | 'isWithinGeofence' | 'matchedGeofenceType'> & { photoDataUrl?: string | null }) => {
+  const addAttendanceEvent = useCallback(async (eventData: { type: 'check-in', location: LocationInfo, photoDataUrl: string }): Promise<string | null> => {
     if (!dbInstance || !user || !companyId || !storageInstance) {
         console.error(">>> KAROBHR TRACE: Missing context for addAttendanceEvent (db, user, companyId, or storage).");
         throw new Error("Cannot record attendance: missing user, company, or storage context.");
@@ -853,9 +869,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     console.log(`>>> KAROBHR TRACE: User ${user.employeeId} performing ${eventData.type} in company ${companyId}`);
 
     let photoFinalUrl: string | null = null;
-    if (eventData.photoDataUrl) {
-        console.log(">>> KAROBHR TRACE: Photo data URL provided, attempting to upload to storage...");
-        const photoFileName = `${user.employeeId}-${new Date().getTime()}-${uuidv4()}.jpg`;
+    if (eventData.type === 'check-in' && eventData.photoDataUrl) {
+        console.log(">>> KAROBHR TRACE: Photo data URL provided for check-in, attempting to upload to storage...");
+        const photoFileName = `${user.employeeId}-checkin-${new Date().getTime()}-${uuidv4()}.jpg`;
         const photoRefStorage = ref(storageInstance, `companies/${companyId}/attendancePhotos/${user.id}/${photoFileName}`);
         try {
             const base64String = eventData.photoDataUrl.includes(',') ? eventData.photoDataUrl.split(',')[1] : eventData.photoDataUrl;
@@ -866,60 +882,114 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.log(">>> KAROBHR TRACE: Photo uploaded successfully:", photoFinalUrl);
         } catch (uploadError) {
             console.error(">>> KAROBHR TRACE: Error uploading attendance photo:", uploadError);
+            throw new Error("Failed to upload attendance photo.");
         }
     }
 
     let isWithinAnyValidGeofence = false;
     let matchedType: AttendanceEvent['matchedGeofenceType'] = null;
+    const geofenceCheckLocation = eventData.location;
 
-    if (eventData.location) {
+    if (geofenceCheckLocation) {
         if (companySettings?.officeLocation?.latitude !== undefined && companySettings.officeLocation.longitude !== undefined && companySettings.officeLocation.radius > 0) {
-            const officeDist = calculateDistance(eventData.location.latitude, eventData.location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
+            const officeDist = calculateDistance(geofenceCheckLocation.latitude, geofenceCheckLocation.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
             if (officeDist <= companySettings.officeLocation.radius) {
                 isWithinAnyValidGeofence = true;
                 matchedType = 'office';
-                console.log(`>>> KAROBHR TRACE: Matched OFFICE geofence. Distance: ${officeDist.toFixed(0)}m`);
             }
         }
-
         if (!isWithinAnyValidGeofence && user.remoteWorkLocation?.latitude !== undefined && user.remoteWorkLocation.longitude !== undefined && user.remoteWorkLocation.radius > 0) {
-            const remoteDist = calculateDistance(eventData.location.latitude, eventData.location.longitude, user.remoteWorkLocation.latitude, user.remoteWorkLocation.longitude);
+            const remoteDist = calculateDistance(geofenceCheckLocation.latitude, geofenceCheckLocation.longitude, user.remoteWorkLocation.latitude, user.remoteWorkLocation.longitude);
             if (remoteDist <= user.remoteWorkLocation.radius) {
                 isWithinAnyValidGeofence = true;
                 matchedType = 'remote';
-                console.log(`>>> KAROBHR TRACE: Matched REMOTE geofence. Distance: ${remoteDist.toFixed(0)}m`);
             }
         }
-        if (!isWithinAnyValidGeofence) {
-            console.log(`>>> KAROBHR TRACE: No valid geofence matched. Office settings:`, companySettings?.officeLocation, `User remote:`, user.remoteWorkLocation);
-        }
-    } else {
-        console.log(">>> KAROBHR TRACE: No location data provided for attendance event, cannot check geofence.");
+    }
+    
+    if (!isWithinAnyValidGeofence && geofenceCheckLocation) {
+        // Throw error if outside ALL defined geofences
+        throw new Error("You are outside the allowed geofence area for check-in.");
     }
 
 
-    const newAttendanceEventData: Omit<AttendanceEvent, 'id' | 'timestamp'> = {
+    const newAttendanceEventData: Partial<AttendanceEvent> = {
         userId: user.id,
         employeeId: user.employeeId,
         userName: user.name || user.employeeId,
         type: eventData.type,
+        status: 'Checked In',
+        checkInTime: serverTimestamp() as unknown as string, // serverTimestamp for checkInTime
+        checkInLocation: new GeoPoint(geofenceCheckLocation.latitude, geofenceCheckLocation.longitude),
         photoUrl: photoFinalUrl,
-        location: eventData.location,
         isWithinGeofence: isWithinAnyValidGeofence,
         matchedGeofenceType: matchedType,
+        workReport: null,
+        checkOutTime: null,
+        checkOutLocation: null,
+        isWithinGeofenceCheckout: null,
+        matchedGeofenceTypeCheckout: null,
     };
 
     try {
-        const eventRef = await addDoc(collection(dbInstance, `companies/${companyId}/attendanceLog`), {
-            ...newAttendanceEventData,
-            timestamp: serverTimestamp()
-        });
+        const eventRef = await addDoc(collection(dbInstance, `companies/${companyId}/attendanceLog`), newAttendanceEventData);
         console.log(">>> KAROBHR TRACE: Attendance event recorded successfully with ID:", eventRef.id, "Data:", newAttendanceEventData);
+        return eventRef.id;
     } catch (error) {
         console.error(">>> KAROBHR TRACE: Error recording attendance event to Firestore:", error);
         throw new Error("Failed to record attendance event.");
     }
   }, [dbInstance, user, companyId, storageInstance, companySettings]);
+
+
+  const completeCheckout = useCallback(async (attendanceDocId: string, reportText: string, checkoutLocationInfo: LocationInfo) => {
+    if (!dbInstance || !user || !companyId) {
+      console.error(">>> KAROBHR TRACE: Missing context for completeCheckout.");
+      throw new Error("Cannot complete checkout: missing user, company, or DB context.");
+    }
+    console.log(`>>> KAROBHR TRACE: User ${user.employeeId} completing checkout for doc ${attendanceDocId} in company ${companyId}`);
+
+    let isWithinAnyValidGeofenceCheckout = false;
+    let matchedTypeCheckout: AttendanceEvent['matchedGeofenceTypeCheckout'] = null;
+
+    if (companySettings?.officeLocation?.latitude !== undefined && companySettings.officeLocation.longitude !== undefined && companySettings.officeLocation.radius > 0) {
+        const officeDist = calculateDistance(checkoutLocationInfo.latitude, checkoutLocationInfo.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
+        if (officeDist <= companySettings.officeLocation.radius) {
+            isWithinAnyValidGeofenceCheckout = true;
+            matchedTypeCheckout = 'office';
+        }
+    }
+    if (!isWithinAnyValidGeofenceCheckout && user.remoteWorkLocation?.latitude !== undefined && user.remoteWorkLocation.longitude !== undefined && user.remoteWorkLocation.radius > 0) {
+        const remoteDist = calculateDistance(checkoutLocationInfo.latitude, checkoutLocationInfo.longitude, user.remoteWorkLocation.latitude, user.remoteWorkLocation.longitude);
+        if (remoteDist <= user.remoteWorkLocation.radius) {
+            isWithinAnyValidGeofenceCheckout = true;
+            matchedTypeCheckout = 'remote';
+        }
+    }
+
+    if (!isWithinAnyValidGeofenceCheckout) {
+        throw new Error("You are outside the allowed geofence area for check-out.");
+    }
+
+    const attendanceDocRef = doc(dbInstance, `companies/${companyId}/attendanceLog/${attendanceDocId}`);
+    const updateData: Partial<AttendanceEvent> = {
+      workReport: reportText,
+      checkOutTime: serverTimestamp() as unknown as string, // serverTimestamp for checkOutTime
+      status: 'Checked Out',
+      checkOutLocation: new GeoPoint(checkoutLocationInfo.latitude, checkoutLocationInfo.longitude),
+      isWithinGeofenceCheckout: isWithinAnyValidGeofenceCheckout,
+      matchedGeofenceTypeCheckout: matchedTypeCheckout,
+    };
+
+    try {
+      await updateDoc(attendanceDocRef, updateData);
+      console.log(`>>> KAROBHR TRACE: Checkout completed for doc ${attendanceDocId}.`);
+    } catch (error) {
+      console.error(">>> KAROBHR TRACE: Error completing checkout:", error);
+      throw new Error("Failed to complete checkout.");
+    }
+  }, [dbInstance, user, companyId, companySettings]);
+
 
   const requestAdvance = useCallback(async (employeeId: string, amount: number, reason: string) => {
     if (!dbInstance || !user ) {
@@ -1008,60 +1078,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     employeeAttendanceEvents.forEach(event => {
         try {
-            const eventDate = parseISO(event.timestamp);
+            const eventDate = parseISO(event.checkInTime || event.timestamp); // Use checkInTime primarily
             if (!isWithinInterval(eventDate, { start: monthStartDate, end: monthEndDate })) {
                 return;
             }
+            if(event.status !== 'Checked Out' || !event.checkOutTime) return; // Only consider completed work sessions
+
             const dateStr = format(eventDate, 'yyyy-MM-dd');
-            if (!dailyWorkMsMap.has(dateStr)) {
-                dailyWorkMsMap.set(dateStr, 0);
+            
+            const checkInDateTime = parseISO(event.checkInTime || event.timestamp);
+            const checkOutDateTime = parseISO(event.checkOutTime);
+            
+            const workMs = differenceInMilliseconds(checkOutDateTime, checkInDateTime);
+            if (workMs > 0) {
+                 dailyWorkMsMap.set(dateStr, (dailyWorkMsMap.get(dateStr) || 0) + workMs);
             }
+
         } catch (e) {
             console.warn("calculateMonthlyPayrollDetails: Invalid timestamp in attendance event", event.timestamp, e);
         }
     });
-
-    const eventsByDate: Record<string, AttendanceEvent[]> = {};
-    employeeAttendanceEvents.forEach(event => {
-      try {
-        const eventDate = parseISO(event.timestamp);
-        if (!isWithinInterval(eventDate, { start: monthStartDate, end: monthEndDate })) {
-            return;
-        }
-        const dateStr = format(eventDate, 'yyyy-MM-dd');
-        if (!eventsByDate[dateStr]) {
-          eventsByDate[dateStr] = [];
-        }
-        eventsByDate[dateStr].push(event);
-      } catch (e) {
-        console.warn("calculateMonthlyPayrollDetails: Invalid timestamp in attendance event for grouping", event.timestamp, e);
-      }
-    });
-
-    for (const dateStr in eventsByDate) {
-      if (isSunday(dateStr) || actualHolidaysForMonthDates.some(hDay => format(hDay, 'yyyy-MM-dd') === dateStr)) {
-          continue;
-      }
-
-      const dailyEvents = eventsByDate[dateStr].sort((a,b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
-      let dailyWorkMs = 0;
-      let lastCheckInTime: Date | null = null;
-
-      for (const event of dailyEvents) {
-        try {
-            const eventTime = parseISO(event.timestamp);
-            if (event.type === 'check-in') {
-              lastCheckInTime = eventTime;
-            } else if (event.type === 'check-out' && lastCheckInTime) {
-              dailyWorkMs += differenceInMilliseconds(eventTime, lastCheckInTime);
-              lastCheckInTime = null;
-            }
-        } catch (e) {
-            console.warn("calculateMonthlyPayrollDetails: Error processing daily event", event, e);
-        }
-      }
-      dailyWorkMsMap.set(dateStr, (dailyWorkMsMap.get(dateStr) || 0) + dailyWorkMs);
-    }
 
     dailyWorkMsMap.forEach(ms => totalActualHoursWorkedMs += ms);
     const totalActualHoursWorked = totalActualHoursWorkedMs / (1000 * 60 * 60);
@@ -1120,6 +1156,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     updateCompanySettings,
     attendanceLog,
     addAttendanceEvent,
+    completeCheckout,
     requestAdvance,
     processAdvance,
     calculateMonthlyPayrollDetails,
@@ -1127,7 +1164,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     user, role, loading, companyId, companySettings, firebaseError, login, logout, addNewEmployee,
     allUsers, tasks, addTask, updateTask,
     addLeaveApplication, processLeaveApplication,
-    announcements, addAnnouncement, updateUserInContext, updateCompanySettings, attendanceLog, addAttendanceEvent,
+    announcements, addAnnouncement, updateUserInContext, updateCompanySettings, attendanceLog, addAttendanceEvent, completeCheckout,
     requestAdvance, processAdvance, calculateMonthlyPayrollDetails
   ]);
 
@@ -1140,4 +1177,3 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export default AuthProvider;
-
