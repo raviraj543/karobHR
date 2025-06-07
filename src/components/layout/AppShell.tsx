@@ -28,7 +28,7 @@ import {
   Settings as SettingsIcon, 
   CalendarDays,
   LogOut,
-  Fingerprint, // Added for My Attendance
+  Fingerprint, 
   Briefcase,
   ShieldCheck,
   IndianRupee,
@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck, allowedRoles: ['admin'] },
   { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'manager', 'employee'] },
-  { href: '/attendance', label: 'My Attendance', icon: Fingerprint, allowedRoles: ['employee', 'manager'] },
+  { href: '/attendance', label: 'My Attendance', icon: Fingerprint, allowedRoles: ['employee', 'manager', 'admin'] },
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] },
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
