@@ -11,9 +11,9 @@ import { Camera as CameraIcon, LogIn, LogOut, FileText, Loader2, AlertCircle, Ma
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { format, parseISO, isToday, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
-import { collection, query, where, onSnapshot, Timestamp, GeoPoint, orderBy, limit, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, GeoPoint, orderBy, limit, doc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 
 type AttendanceStatus = 'checked-out' | 'checked-in' | 'processing-check-in' | 'processing-check-out' | 'submitting-report' | 'unknown' | 'error';
@@ -46,30 +46,28 @@ export default function AttendancePage() {
       setDbFs(firebaseDbInstance);
     } catch (e) {
       console.error(">>> KAROBHR TRACE: AttendancePage - Failed to get Firebase instances:", e);
-      setInitializationError("Failed to connect to database services.");
+      setInitializationError("Failed to connect to database services. Attendance system will not function.");
       setAttendanceStatus('error');
     }
   }, []);
 
   useEffect(() => {
     if (authLoading) {
-      setAttendanceStatus('unknown'); // Reset while auth is loading
+      setAttendanceStatus('unknown'); 
       return;
     }
     if (!dbFs || !user?.id || !user?.companyId) {
-      if (!authLoading) { // Only set error if auth isn't also loading
-        console.error(">>> KAROBHR TRACE: AttendancePage - Cannot setup listener. Missing dbFs, user.id, or user.companyId.");
-        setInitializationError("Required data for attendance is missing. Ensure you are logged in and company data is available.");
+      if (!authLoading && !initializationError) { 
+        console.error(">>> KAROBHR TRACE: AttendancePage - Cannot setup listener. Missing dbFs, user.id, or user.companyId. User logged in:", !!user);
+        setInitializationError("Required data for attendance is missing. Ensure you are logged in and company data is available for your profile.");
         setAttendanceStatus('error');
-      } else {
-         setAttendanceStatus('unknown');
       }
       setCurrentDayDocId(null);
       setLastCheckInPhoto(null);
       setLastCheckInTime(null);
       return;
     }
-    setInitializationError(null); // Clear any previous init error
+    setInitializationError(null); 
 
     console.log(`>>> KAROBHR TRACE: AttendancePage - Setting up Firestore listener for user ${user.id}, company ${user.companyId}`);
 
@@ -98,6 +96,7 @@ export default function AttendancePage() {
         setCurrentDayDocId(latestDoc.id);
         setAttendanceStatus(data.status === 'Checked In' ? 'checked-in' : 'checked-out');
         setLastCheckInPhoto(data.photoUrl || null);
+        
         if (data.checkInTime) {
           const checkInTimestamp = data.checkInTime as unknown;
           if (checkInTimestamp && typeof (checkInTimestamp as Timestamp).toDate === 'function') {
@@ -105,6 +104,7 @@ export default function AttendancePage() {
           } else if (typeof checkInTimestamp === 'string') {
             setLastCheckInTime(checkInTimestamp);
           } else {
+            console.warn(">>> KAROBHR TRACE: AttendancePage - checkInTime from Firestore is not a valid Timestamp or string:", checkInTimestamp);
             setLastCheckInTime(null);
           }
         } else {
@@ -112,8 +112,8 @@ export default function AttendancePage() {
         }
         console.log(`>>> KAROBHR TRACE: AttendancePage - Status set to ${data.status === 'Checked In' ? 'checked-in' : 'checked-out'}. Doc ID: ${latestDoc.id}`);
       }
-    }, (error) => {
-      console.error(">>> KAROBHR TRACE: AttendancePage - Error fetching today's attendance from Firestore:", error);
+    }, (error) => { 
+      console.error(">>> KAROBHR TRACE: AttendancePage - Error fetching today's attendance from Firestore (onSnapshot failed):", error);
       toast({ title: "Error", description: "Could not load attendance status from database.", variant: "destructive" });
       setAttendanceStatus('error');
     });
@@ -122,7 +122,7 @@ export default function AttendancePage() {
       console.log(">>> KAROBHR TRACE: AttendancePage - Unsubscribing from Firestore listener.");
       unsubscribe();
     };
-  }, [dbFs, user?.id, user?.companyId, toast, authLoading]);
+  }, [dbFs, user?.id, user?.companyId, toast, authLoading, initializationError]);
 
 
   useEffect(() => {
@@ -213,7 +213,7 @@ export default function AttendancePage() {
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Check-in error:", error);
       toast({ title: "Check-In Failed", description: error.message || "Could not record check-in.", variant: "destructive" });
-      setAttendanceStatus('checked-out');
+      setAttendanceStatus('checked-out'); 
     }
   };
   
@@ -279,13 +279,19 @@ export default function AttendancePage() {
     );
   }
 
-  if (attendanceStatus === 'error' && !initializationError) { // Show specific DB error if not an init error
+  if (attendanceStatus === 'error' && !initializationError) { 
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-xl font-semibold mb-2">Attendance Database Error</h2>
         <p className="text-muted-foreground">Could not load attendance status from the database. This might be due to a network issue, incorrect permissions, or a missing database index. Please check your internet connection and try again. If the problem persists, contact support.</p>
-        <p className="text-xs text-muted-foreground mt-2">Admins: Ensure Firestore security rules allow reads and the necessary composite index exists for (userId, checkInTime desc) on the 'attendanceLog' collection.</p>
+        <p className="text-xs text-muted-foreground mt-2">
+            Admins: Ensure Firestore security rules allow reads and the necessary composite index exists. For the collection 
+            <code className="mx-1 px-1 py-0.5 bg-muted rounded text-xs font-mono">companies/&#123;companyId&#125;/attendanceLog</code>, 
+            an index on <code className="mx-1 px-1 py-0.5 bg-muted rounded text-xs font-mono">userId</code> (ASC or DESC) 
+            AND <code className="mx-1 px-1 py-0.5 bg-muted rounded text-xs font-mono">checkInTime</code> (DESC) is likely required for the current query.
+            Check the browser's developer console for a direct link from Firestore to create the missing index if this is the cause.
+        </p>
       </div>
     );
   }
@@ -411,4 +417,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
