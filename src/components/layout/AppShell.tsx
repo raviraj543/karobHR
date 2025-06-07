@@ -49,9 +49,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['employee', 'manager'] },
   { href: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck, allowedRoles: ['admin'] },
   { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'manager', 'employee'] },
-  // Replaced 'My Attendance' with 'Check In' and 'Check Out / Report'
-  { href: '/attendance', label: 'Check In', icon: LogIn, allowedRoles: ['employee', 'manager'] },
-  { href: '/attendance', label: 'Check Out / Report', icon: LogOut, allowedRoles: ['employee', 'manager'] },
+  // Removed Check In and Check Out / Report
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] },
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
@@ -79,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SidebarMenuItem key={item.label + item.href}> {/* Added href to key for more uniqueness if labels are similar */}
         <Link href={item.href} passHref legacyBehavior>
           <SidebarMenuButton
-            isActive={pathname === item.href && (item.label !== 'Check Out / Report' && item.label !== 'Check In')} /* Avoid making both active if on /attendance */
+            isActive={pathname === item.href}
             className="w-full justify-start"
             tooltip={{ children: item.label, side: 'right', className: 'bg-card text-card-foreground border-border' }}
           >
@@ -112,7 +110,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarMenu>
               {renderNavItems(bottomNavItems)}
               <SidebarMenuItem>
-                {/* Original Logout button was also using LogOut icon. Changed Check Out / Report to use LogOut from menu, actual logout can keep it too or another one */}
                 <SidebarMenuButton onClick={logout} className="w-full justify-start" tooltip={{ children: "Logout", side: 'right', className: 'bg-card text-card-foreground border-border' }}>
                   <LogOut className="h-5 w-5" /> 
                    <span className="truncate group-data-[collapsible=icon]:hidden">Logout</span>
