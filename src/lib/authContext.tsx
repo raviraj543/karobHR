@@ -558,7 +558,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             advances: [],
             leaves: [],
             mockAttendanceFactor: 1.0,
-            remoteWorkLocation: employeeData.remoteWorkLocation || undefined,
+...((employeeData.remoteWorkLocation !== null && employeeData.remoteWorkLocation !== undefined && Object.keys(employeeData.remoteWorkLocation).length > 0) && { remoteWorkLocation: employeeData.remoteWorkLocation }),
         };
 
         const userDocRef = doc(dbInstance, `users/${newFirebaseUser.uid}`);

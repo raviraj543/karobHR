@@ -105,11 +105,6 @@ export default function AdminSignupPage() {
       companyName: data.companyName, 
       joiningDate: new Date().toISOString().split('T')[0],
       baseSalary: 0,
-      remoteWorkLocation: {
-        latitude: 0,
-        longitude: 0,
-        radius: 0,
-      },
     };
 
     try {

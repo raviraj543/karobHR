@@ -1,4 +1,3 @@
-
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export interface CompanySettings {
@@ -36,17 +35,17 @@ export interface AttendanceEvent {
   employeeId: string; // KarobHR employee ID
   userId: string; // Firebase Auth UID of the employee
   userName: string;
-  type: 'check-in' | 'check-out'; // This might be less relevant if status is primary
+  type: 'check-in' | 'check-out';
   timestamp: string; // Main event timestamp, typically check-in for new records
   checkInTime?: string; // Explicit ISO Date string for check-in
   checkOutTime?: string | null; // Explicit ISO Date string for check-out
   photoUrl?: string | null; // URL from Firebase Storage for check-in photo
-  checkInLocation?: LocationInfo | null; // Explicit GeoPoint-like structure for check-in
-  checkOutLocation?: LocationInfo | null; // Explicit GeoPoint-like structure for check-out
+  checkInLocation?: LocationInfo | null;
+  checkOutLocation?: LocationInfo | null;
   isWithinGeofence: boolean | null; // For check-in
   isWithinGeofenceCheckout?: boolean | null; // For check-out
-  matchedGeofenceType?: 'office' | 'remote' | null; // For check-in
-  matchedGeofenceTypeCheckout?: 'office' | 'remote' | null; // For check-out
+  matchedGeofenceType?: 'office' | null; // For check-in
+  matchedGeofenceTypeCheckout?: 'office' | null; // For check-out
   status: 'Checked In' | 'Checked Out';
   workReport?: string | null;
 }
@@ -156,10 +155,4 @@ export interface User {
   leaves?: LeaveApplication[];
   advances?: Advance[];
   mockAttendanceFactor?: number; // Temporary for payslip calculation
-  remoteWorkLocation?: {
-    name: string;
-    latitude: number;
-    longitude: number;
-    radius: number; // in meters
-  };
 }

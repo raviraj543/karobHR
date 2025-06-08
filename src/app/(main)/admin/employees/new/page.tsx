@@ -27,7 +27,7 @@ const newEmployeeSchema = z.object({
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   department: z.string().min(2, { message: 'Department is required.' }),
-  role: z.enum(['employee', 'admin', 'manager']).default('employee'),
+  role: z.enum(['employee', 'manager']).default('employee'),
   joiningDate: z.string().optional(),
   baseSalary: z.preprocess(
     (val) => (val === "" ? undefined : Number(val)),
@@ -47,7 +47,7 @@ type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
 export default function AddNewEmployeePage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { addNewEmployee, companyId: adminCompanyId, loading: authLoading } = useAuth();
+  const { addNewEmployee, companyId: adminCompanyId, loading: authLoading, companySettings } = useAuth();
 
   const form = useForm<NewEmployeeFormValues>({
     resolver: zodResolver(newEmployeeSchema),
@@ -78,6 +78,16 @@ export default function AddNewEmployeePage() {
       return;
     }
 
+    if (!companySettings) {
+        toast({
+            title: "Error: Company Settings Missing",
+            description: "Could not load company settings, which are required to add an employee.",
+            variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+    }
+
     const employeeDataForContext: NewEmployeeData = {
       name: data.name,
       employeeId: data.employeeId,
@@ -85,6 +95,7 @@ export default function AddNewEmployeePage() {
       department: data.department,
       role: data.role as UserRole,
       companyId: adminCompanyId,
+      companyName: companySettings.companyName,
       joiningDate: data.joiningDate,
       baseSalary: data.baseSalary,
       standardDailyHours: data.standardDailyHours,

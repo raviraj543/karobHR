@@ -220,8 +220,8 @@ export default function AttendancePage() {
       toast({ title: "Camera Error", description: "Camera not ready or permission denied. Please ensure camera access is allowed.", variant: "destructive" });
       return;
     }
-    if (!companySettings?.officeLocation && !user?.remoteWorkLocation) {
-        toast({title: "Configuration Error", description: "No geofence location (office or remote) is configured for attendance. Contact admin.", variant: "destructive"});
+    if (!companySettings?.officeLocation) {
+        toast({title: "Configuration Error", description: "No office location is configured for attendance. Contact admin.", variant: "destructive"});
         return;
     }
 
@@ -253,8 +253,8 @@ export default function AttendancePage() {
       console.error(">>> KAROBHR TRACE: handleCheckOut - User, user.id or user.companyId missing from context. User:", user);
       return;
     }
-     if (!companySettings?.officeLocation && !user?.remoteWorkLocation) {
-        toast({title: "Configuration Error", description: "No geofence location (office or remote) is configured for check-out. Contact admin.", variant: "destructive"});
+     if (!companySettings?.officeLocation) {
+        toast({title: "Configuration Error", description: "No office location is configured for check-out. Contact admin.", variant: "destructive"});
         return;
     }
     setIsReportModalOpen(true);
@@ -387,7 +387,7 @@ export default function AttendancePage() {
             size="lg"
             className="w-full py-6 text-lg"
             onClick={handleCheckIn}
-            disabled={isProcessing || hasCameraPermission !== true}
+
           >
             {attendanceStatus === 'processing-check-in' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogIn className="mr-2 h-5 w-5" /> Check In
@@ -397,7 +397,7 @@ export default function AttendancePage() {
             variant="outline"
             className="w-full py-6 text-lg"
             onClick={handleCheckOut}
-            disabled={isProcessing}
+
           >
             {attendanceStatus === 'processing-check-out' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogOut className="mr-2 h-5 w-5" /> Check Out
