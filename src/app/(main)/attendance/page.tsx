@@ -62,21 +62,14 @@ export default function AttendancePage() {
       return;
     }
 
-    // CRITICAL CHECK: Ensure user, user.id, and user.companyId are available before proceeding
     if (!dbFs || !user || !user.id || !user.companyId) {
       if (!initializationError) {
         console.error(`>>> KAROBHR TRACE: AttendancePage - Firestore listener prerequisites missing. DB: ${!!dbFs}, UserID: ${user?.id}, UserName: ${user?.name}, CompanyID: ${user?.companyId}. Waiting for these to be available.`);
-        // Don't set initializationError here if authLoading is false, as AuthContext might still be setting up user data.
-        // The 'unknown' status will keep showing the loading indicator.
-        // If user/companyId never arrive, the page will remain in "Loading attendance status..."
-        // If authLoading becomes true again, this hook will re-evaluate.
       }
-      setAttendanceStatus('unknown'); // Ensure loading state if critical info is missing
+      setAttendanceStatus('unknown'); 
       return;
     }
     
-    // If we reached here, prerequisites are met, clear any previous general init error.
-    // Only clear the specific "Required user or company data" error if we now have that data.
     if (initializationError && initializationError.startsWith("Required user or company data is missing")) {
         setInitializationError(null);
     }
@@ -93,8 +86,6 @@ export default function AttendancePage() {
     const q = query(
       collection(dbFs, `companies/${user.companyId}/attendanceLog`),
       where('userId', '==', user.id),
-      where('checkInTime', '>=', todayStartTimestamp),
-      where('checkInTime', '<=', todayEndTimestamp),
       orderBy('checkInTime', 'desc'),
       limit(1)
     );
@@ -108,23 +99,20 @@ export default function AttendancePage() {
         setLastCheckInTime(null);
       } else {
         const latestDoc = snapshot.docs[0];
-        const data = latestDoc.data() as AttendanceEvent; // Assuming AttendanceEvent type matches Firestore structure
+        const data = latestDoc.data() as AttendanceEvent; 
         setCurrentDayDocId(latestDoc.id);
         
-        // Determine status based on the 'status' field from Firestore first
         if (data.status === 'Checked In') {
             setAttendanceStatus('checked-in');
         } else if (data.status === 'Checked Out') {
             setAttendanceStatus('checked-out');
         } else {
-            // Fallback if status field is missing or unexpected, infer from type
             setAttendanceStatus(data.type === 'check-in' ? 'checked-in' : 'checked-out');
             console.warn(`>>> KAROBHR TRACE: AttendancePage - Unexpected or missing 'status' field in Firestore doc ${latestDoc.id}. Inferred status from 'type'. Data:`, data);
         }
 
         setLastCheckInPhoto(data.photoUrl || null);
         
-        // Use checkInTime if available, otherwise fallback to timestamp (main event time)
         const checkInTimestampField = data.checkInTime || data.timestamp;
         if (checkInTimestampField) {
              try {
@@ -142,7 +130,6 @@ export default function AttendancePage() {
         }
         console.log(`>>> KAROBHR TRACE: AttendancePage - Status set based on Firestore. Doc ID: ${latestDoc.id}. Firestore Status: ${data.status}, Type: ${data.type}`);
       }
-      // Clear DB-specific initialization error if snapshot is successful
       if (initializationError && initializationError.startsWith("Attendance Database Error")) {
         setInitializationError(null);
       }
@@ -229,10 +216,6 @@ export default function AttendancePage() {
       console.error(">>> KAROBHR TRACE: handleCheckIn - User, user.id, or user.companyId missing from context. User:", user);
       return;
     }
-    if (attendanceStatus === 'checked-in') {
-      toast({ title: "Already Checked In", description: "You have already checked in today." });
-      return;
-    }
     if (!hasCameraPermission || !videoRef.current?.srcObject || !canvasRef.current) {
       toast({ title: "Camera Error", description: "Camera not ready or permission denied. Please ensure camera access is allowed.", variant: "destructive" });
       return;
@@ -256,7 +239,6 @@ export default function AttendancePage() {
       const newDocId = await addAttendanceEvent({ type: 'check-in', location, photoDataUrl });
       if (newDocId) {
         toast({ title: "Check-In Successful!", description: "Your check-in has been recorded." });
-        // Firestore listener will update attendanceStatus to 'checked-in' and currentDayDocId
       }
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Check-in error:", error);
@@ -269,10 +251,6 @@ export default function AttendancePage() {
     if (!user || !user.id || !user.companyId) {
       toast({ title: "User Data Missing", description: "Cannot check out: User or company information is not fully loaded. Please try again or re-login.", variant: "destructive" });
       console.error(">>> KAROBHR TRACE: handleCheckOut - User, user.id or user.companyId missing from context. User:", user);
-      return;
-    }
-    if (attendanceStatus === 'checked-out' || !currentDayDocId) {
-      toast({ title: "Not Checked In", description: "You must check in before you can check out for today." });
       return;
     }
      if (!companySettings?.officeLocation && !user?.remoteWorkLocation) {
@@ -305,7 +283,6 @@ export default function AttendancePage() {
       await completeCheckout(currentDayDocId, workReport, location);
       toast({ title: "Check-Out Successful!", description: "Your work report and check-out have been recorded." });
       setWorkReport('');
-      // Firestore listener will update attendanceStatus to 'checked-out'
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Check-out error:", error);
       toast({ title: "Check-Out Failed", description: error.message || "Could not record check-out.", variant: "destructive" });
@@ -370,65 +347,47 @@ export default function AttendancePage() {
           </CardTitle>
           <CardDescription>
             Use the buttons below to manage your daily attendance. Geofencing is active.
-            Current Status: <span className={`font-semibold ${attendanceStatus === 'checked-in' ? 'text-green-600' : attendanceStatus === 'checked-out' ? 'text-orange-600' : 'text-muted-foreground'}`}>{attendanceStatus.replace('-', ' ').toUpperCase()}</span>
           </CardDescription>
         </CardHeader>
       </Card>
 
-      {attendanceStatus === 'checked-out' && (
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center"><CameraIcon className="mr-2 h-5 w-5 text-primary"/>Live Photo Capture</CardTitle>
-            <CardDescription>Align your face for check-in. Geofence will be verified.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="aspect-video w-full max-w-md mx-auto bg-muted rounded-lg overflow-hidden border shadow-inner">
-              <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted data-ai-hint="camera feed person"/>
-              <canvas ref={canvasRef} className="hidden"></canvas>
-            </div>
-             { hasCameraPermission === false && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Camera Permission Needed</AlertTitle>
-                  <AlertDescription>
-                    Camera access is denied or unavailable. Please enable permissions in your browser settings and refresh. Check-in is disabled.
-                  </AlertDescription>
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center"><CameraIcon className="mr-2 h-5 w-5 text-primary"/>Live Photo Capture</CardTitle>
+          <CardDescription>Align your face for check-in. Geofence will be verified.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="aspect-video w-full max-w-md mx-auto bg-muted rounded-lg overflow-hidden border shadow-inner">
+            <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted data-ai-hint="camera feed person"/>
+            <canvas ref={canvasRef} className="hidden"></canvas>
+          </div>
+           { hasCameraPermission === false && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Camera Permission Needed</AlertTitle>
+                <AlertDescription>
+                  Camera access is denied or unavailable. Please enable permissions in your browser settings and refresh. Check-in is disabled.
+                </AlertDescription>
+              </Alert>
+            )}
+             { hasCameraPermission === null && !isProcessing && (
+                <Alert variant="default">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertTitle>Camera Check</AlertTitle>
+                    <AlertDescription>
+                    Checking camera permissions...
+                    </AlertDescription>
                 </Alert>
-              )}
-               { hasCameraPermission === null && !isProcessing && (
-                  <Alert variant="default">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <AlertTitle>Camera Check</AlertTitle>
-                      <AlertDescription>
-                      Checking camera permissions...
-                      </AlertDescription>
-                  </Alert>
-              )}
-          </CardContent>
-        </Card>
-      )}
-
-      {attendanceStatus === 'checked-in' && lastCheckInPhoto && lastCheckInTime && (
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center"><FileText className="mr-2 h-5 w-5 text-primary"/>Current Check-In Details</CardTitle>
-             <CardDescription>
-                You are currently checked in since {format(parseISO(lastCheckInTime), 'p, MMM d')}.
-             </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
-            <img src={lastCheckInPhoto} alt="Check-in" className="rounded-md border shadow-md h-40 w-auto object-cover" data-ai-hint="face scan"/>
-          </CardContent>
-        </Card>
-      )}
-
+            )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
           <Button
             size="lg"
             className="w-full py-6 text-lg"
             onClick={handleCheckIn}
-            disabled={isProcessing || attendanceStatus === 'checked-in' || attendanceStatus === 'error' || hasCameraPermission !== true}
+            disabled={isProcessing || hasCameraPermission !== true}
           >
             {attendanceStatus === 'processing-check-in' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogIn className="mr-2 h-5 w-5" /> Check In
@@ -438,7 +397,7 @@ export default function AttendancePage() {
             variant="outline"
             className="w-full py-6 text-lg"
             onClick={handleCheckOut}
-            disabled={isProcessing || attendanceStatus === 'checked-out' || attendanceStatus === 'error'}
+            disabled={isProcessing}
           >
             {attendanceStatus === 'processing-check-out' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogOut className="mr-2 h-5 w-5" /> Check Out

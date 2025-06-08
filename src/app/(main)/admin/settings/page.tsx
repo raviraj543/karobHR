@@ -23,47 +23,57 @@ export default function AdminSettingsPage() {
   const [officeLon, setOfficeLon] = useState('');
   const [officeRadius, setOfficeRadius] = useState('');
   const [isSavingGeofence, setIsSavingGeofence] = useState(false);
+  const [formInitialized, setFormInitialized] = useState(false);
 
   useEffect(() => {
     document.title = 'Company Settings - Admin - KarobHR';
+  }, []);
+
+  useEffect(() => {
+    console.log(">>> KAROBHR TRACE: AdminSettingsPage - useEffect for form population triggered. AuthLoading:", authLoading, "CompanySettings:", companySettings, "CompanyId:", companyId);
+
     if (authLoading) {
-        console.log(">>> KAROBHR TRACE: AdminSettingsPage - Auth loading, waiting for companySettings.");
-        // Optionally, you could set form fields to a "Loading..." state or disable them.
-        return;
+      console.log(">>> KAROBHR TRACE: AdminSettingsPage - Auth loading, waiting for companySettings. Form not initialized.");
+      setFormInitialized(false); // Mark as not initialized if auth is still loading
+      return;
     }
 
-    if (companyId) { // Only proceed if companyId is available
-        if (companySettings && companySettings.officeLocation) {
-            console.log(">>> KAROBHR TRACE: AdminSettingsPage - Populating form from companySettings.officeLocation:", companySettings.officeLocation);
-            setOfficeName(companySettings.officeLocation.name || 'Main Office');
-            setOfficeLat(String(companySettings.officeLocation.latitude));
-            setOfficeLon(String(companySettings.officeLocation.longitude));
-            setOfficeRadius(String(companySettings.officeLocation.radius));
-        } else if (companySettings && !companySettings.officeLocation) {
-            console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings loaded, but officeLocation field is missing. Initializing form with defaults.");
-            setOfficeName('Main Office');
-            setOfficeLat('0');
-            setOfficeLon('0');
-            setOfficeRadius('100');
-        } else if (companySettings === null) { // Company document explicitly does not exist or failed to load
-            console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings document is null (e.g., not found or error loading). Initializing form with defaults.");
-            setOfficeName('Main Office');
-            setOfficeLat('0');
-            setOfficeLon('0');
-            setOfficeRadius('100');
-        } else if (companySettings === undefined) {
-            console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings is undefined, authNotLoading. This might mean it's the initial state before the first fetch. Setting defaults.");
-             setOfficeName('Main Office');
-            setOfficeLat('0');
-            setOfficeLon('0');
-            setOfficeRadius('100');
-        }
-    } else if (!authLoading && !companyId) {
-        console.warn(">>> KAROBHR TRACE: AdminSettingsPage - No companyId available, cannot load or set geofence settings.");
-        // Keep fields empty or show an error message on the page.
-        setOfficeName(''); setOfficeLat(''); setOfficeLon(''); setOfficeRadius('');
+    if (companySettings === undefined) {
+      console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings is undefined (still loading from context). Form not initialized.");
+      setFormInitialized(false); // Mark as not initialized if settings are undefined
+      return;
     }
+
+    if (companyId) {
+      if (companySettings === null) { // Company document explicitly does not exist
+        console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings document is null. Initializing form with defaults as company likely doesn't exist.");
+        setOfficeName('Main Office');
+        setOfficeLat('0');
+        setOfficeLon('0');
+        setOfficeRadius('100');
+      } else if (companySettings && companySettings.officeLocation) { // Settings loaded and officeLocation exists
+        console.log(">>> KAROBHR TRACE: AdminSettingsPage - Populating form from companySettings.officeLocation:", companySettings.officeLocation);
+        setOfficeName(companySettings.officeLocation.name || 'Main Office');
+        setOfficeLat(String(companySettings.officeLocation.latitude));
+        setOfficeLon(String(companySettings.officeLocation.longitude));
+        setOfficeRadius(String(companySettings.officeLocation.radius));
+      } else { // companySettings exists but officeLocation is missing or null
+        console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings loaded, but officeLocation field is missing/null. Initializing form with defaults.");
+        setOfficeName('Main Office');
+        setOfficeLat('0'); // Default to string '0' for consistency
+        setOfficeLon('0'); // Default to string '0'
+        setOfficeRadius('100'); // Default to string '100'
+      }
+    } else { // No companyId, and not authLoading
+      console.warn(">>> KAROBHR TRACE: AdminSettingsPage - No companyId available, cannot load or set geofence settings. Clearing form.");
+      setOfficeName('');
+      setOfficeLat('');
+      setOfficeLon('');
+      setOfficeRadius('');
+    }
+    setFormInitialized(true); // Mark form as initialized after attempting to set values
   }, [companySettings, authLoading, companyId]);
+
 
   const handleSaveGeofence = async () => {
     const lat = parseFloat(officeLat);
@@ -95,7 +105,9 @@ export default function AdminSettingsPage() {
       console.log(">>> KAROBHR TRACE: AdminSettingsPage - Attempting to save geofence settings:", settingsToSave);
       await updateCompanySettings(settingsToSave);
       toast({ title: "Geofence Settings Saved", description: "Office location and radius have been updated." });
-      console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings from context AFTER updateCompanySettings call:", companySettings);
+      // The useEffect depending on companySettings should re-populate the form
+      console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings from context AFTER updateCompanySettings call (this log is illustrative, actual value will be in useEffect):", companySettings);
+
     } catch (error: any) {
       console.error(">>> KAROBHR TRACE: Error in handleSaveGeofence on settings page:", error);
       toast({ title: "Error Saving Geofence", description: error.message || "Could not save settings.", variant: "destructive" });
@@ -120,7 +132,7 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="companyName">Company Name</Label>
-            <Input id="companyName" value={authLoading ? "Loading..." : companySettings?.companyName || "N/A"} readOnly disabled />
+            <Input id="companyName" value={authLoading || companySettings === undefined ? "Loading..." : companySettings?.companyName || "N/A"} readOnly disabled />
             <p className="text-xs text-muted-foreground">Company name is set during initial admin setup.</p>
           </div>
           <div className="space-y-1">
@@ -143,23 +155,29 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
            <div className="space-y-1">
             <Label htmlFor="officeName">Office Location Name</Label>
-            <Input id="officeName" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="e.g., Headquarters, Downtown Branch"/>
+            <Input id="officeName" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="e.g., Headquarters, Downtown Branch" disabled={!formInitialized || isSavingGeofence}/>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label htmlFor="officeLat">Office Latitude</Label>
-              <Input id="officeLat" type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)} placeholder="e.g., 37.7749"/>
+              <Input id="officeLat" type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)} placeholder="e.g., 37.7749" disabled={!formInitialized || isSavingGeofence}/>
             </div>
             <div className="space-y-1">
               <Label htmlFor="officeLon">Office Longitude</Label>
-              <Input id="officeLon" type="number" value={officeLon} onChange={(e) => setOfficeLon(e.target.value)} placeholder="e.g., -122.4194"/>
+              <Input id="officeLon" type="number" value={officeLon} onChange={(e) => setOfficeLon(e.target.value)} placeholder="e.g., -122.4194" disabled={!formInitialized || isSavingGeofence}/>
             </div>
           </div>
           <div className="space-y-1">
             <Label htmlFor="geofenceRadius">Geofence Radius (meters)</Label>
-            <Input id="geofenceRadius" type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)} placeholder="e.g., 100"/>
+            <Input id="geofenceRadius" type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)} placeholder="e.g., 100" disabled={!formInitialized || isSavingGeofence}/>
           </div>
-          <Button onClick={handleSaveGeofence} disabled={isSavingGeofence || authLoading || !companyId || !user || user.role !== 'admin'}>
+          {!formInitialized && !authLoading && (
+            <div className="flex items-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Loading current geofence settings...</span>
+            </div>
+          )}
+          <Button onClick={handleSaveGeofence} disabled={!formInitialized || isSavingGeofence || authLoading || !companyId || !user || user.role !== 'admin'}>
             {isSavingGeofence && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Office Geofence
           </Button>
@@ -263,5 +281,6 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+    
 
     
