@@ -4,17 +4,8 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  Sidebar,
-  SidebarProvider,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarTrigger,
-} from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppLogo } from './AppLogo';
 import { UserNav } from './UserNav';
@@ -25,23 +16,24 @@ import {
   CalendarOff,
   ListChecks,
   Users,
-  Settings as SettingsIcon, 
+  Settings as SettingsIcon,
   CalendarDays,
   LogOut,
-  Fingerprint, 
+  Fingerprint,
   Briefcase,
   ShieldCheck,
   IndianRupee,
   CreditCard,
-  Clock
+  Clock,
+  Menu,
 } from 'lucide-react';
+import { useMobile } from '@/hooks/use-mobile'; // Import the new hook
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
   allowedRoles: ('admin' | 'manager' | 'employee')[];
-  subItems?: NavItem[];
   isBottom?: boolean;
 }
 
@@ -59,12 +51,11 @@ const navItems: NavItem[] = [
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
   { href: '/admin/live-attendance', label: 'Live Attendance', icon: Clock, allowedRoles: ['admin'] },
   { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] },
-  { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin'] }, // Admin only for managing holidays
+  { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin'] },
   { href: '/admin/settings', label: 'Company Settings', icon: SettingsIcon, allowedRoles: ['admin'], isBottom: true },
 ];
 
-
-export function AppShell({ children }: { children: ReactNode }) {
+const SidebarContent = ({ onLinkClick }: { onLinkClick?: () => void }) => {
   const { role, logout } = useAuth();
   const pathname = usePathname();
 
@@ -74,68 +65,94 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const renderNavItems = (items: NavItem[]) => {
     return items.map((item) => (
-      <SidebarMenuItem key={item.label + item.href}> 
-        <Link href={item.href} passHref legacyBehavior>
-          <SidebarMenuButton
-            isActive={pathname === item.href}
-            className="w-full justify-start"
-            tooltip={{ children: item.label, side: 'right', className: 'bg-card text-card-foreground border-border' }}
-          >
-            <item.icon className="h-5 w-5" />
-            <span className="truncate group-data-[collapsible=icon]:hidden">{item.label}</span>
-          </SidebarMenuButton>
-        </Link>
-      </SidebarMenuItem>
+      <Link
+        key={item.label + item.href}
+        href={item.href}
+        onClick={onLinkClick}
+        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+          pathname === item.href ? 'bg-muted text-primary' : ''
+        }`}
+      >
+        <item.icon className="h-4 w-4" />
+        {item.label}
+      </Link>
     ));
   };
-  
-  return (
-    <SidebarProvider defaultOpen>
-      <div className="flex h-screen bg-background">
-        <Sidebar side="left" variant="sidebar" collapsible="icon" className="border-r bg-sidebar text-sidebar-foreground">
-          <SidebarHeader className="p-2 h-16 flex items-center justify-between">
-             <AppLogo />
-             <div className="md:hidden group-data-[collapsible=icon]:hidden"> 
-               <SidebarTrigger />
-             </div>
-          </SidebarHeader>
-          <SidebarContent className="flex-1 p-2">
-            <ScrollArea className="h-full">
-              <SidebarMenu>
-                {renderNavItems(topNavItems)}
-              </SidebarMenu>
-            </ScrollArea>
-          </SidebarContent>
-          <SidebarFooter className="p-2">
-            <SidebarMenu>
-              {renderNavItems(bottomNavItems)}
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={logout} className="w-full justify-start" tooltip={{ children: "Logout", side: 'right', className: 'bg-card text-card-foreground border-border' }}>
-                  <LogOut className="h-5 w-5" /> 
-                   <span className="truncate group-data-[collapsible=icon]:hidden">Logout</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 md:px-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="hidden md:block">
-                <SidebarTrigger/>
-              </div>
-              <div className="md:hidden group-data-[collapsible=icon]:block">
-                 <SidebarTrigger />
-              </div>
-            </div>
-            <UserNav />
-          </header>
-          <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-            {children}
-          </main>
-        </div>
+  return (
+    <div className="flex h-full max-h-screen flex-col gap-2">
+      <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+        <Link href="/" className="flex items-center gap-2 font-semibold" onClick={onLinkClick}>
+          <AppLogo />
+          <span className="">BizFlow</span>
+        </Link>
       </div>
-    </SidebarProvider>
+      <div className="flex-1">
+        <ScrollArea className="h-[calc(100vh-160px)]">
+          <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+            {renderNavItems(topNavItems)}
+          </nav>
+        </ScrollArea>
+      </div>
+      <div className="mt-auto p-4 border-t">
+        <nav className="grid items-start text-sm font-medium">
+          {renderNavItems(bottomNavItems)}
+          <button
+            onClick={() => {
+              if (onLinkClick) onLinkClick();
+              logout();
+            }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </button>
+        </nav>
+      </div>
+    </div>
+  );
+};
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const isMobile = useMobile();
+  const [isSheetOpen, setIsSheetOpen] = React.useState(false);
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setIsSheetOpen(false);
+    }
+  };
+
+  return (
+    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
+      <div className="hidden border-r bg-muted/40 md:block">
+        <SidebarContent />
+      </div>
+      <div className="flex flex-col">
+        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 md:hidden"
+                onClick={() => setIsSheetOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle navigation menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="flex flex-col p-0">
+              <SidebarContent onLinkClick={handleLinkClick} />
+            </SheetContent>
+          </Sheet>
+          <div className="w-full flex-1" />
+          <UserNav />
+        </header>
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }
