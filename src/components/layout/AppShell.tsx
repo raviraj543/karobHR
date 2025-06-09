@@ -1,6 +1,7 @@
 
 'use client';
 
+import * as React from 'react'; // Added React import
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -27,7 +28,7 @@ import {
   Clock,
   Menu,
 } from 'lucide-react';
-import { useMobile } from '@/hooks/use-mobile'; // Import the new hook
+import { useMobile } from '@/hooks/use-mobile';
 
 interface NavItem {
   href: string;

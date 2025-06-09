@@ -1,23 +1,11 @@
 
-import type {NextConfig} from 'next';
-import withPWAInit from 'next-pwa';
-
-const isDev = process.env.NODE_ENV !== 'production';
-
-const withPWA = withPWAInit({
-  dest: 'public',
-  disable: isDev,
-  register: true,
-  skipWaiting: true,
-  // You can add more PWA options here if needed
-  // fallbacks: {
-  //   document: '/offline', // example for offline page
-  // },
-});
-
-const nextConfig: NextConfig = {
-  output: 'export',
-  /* config options here */
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+  compiler: {
+    // ssr and displayName are configured by default
+    styledComponents: true,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -36,4 +24,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+module.exports = nextConfig;
