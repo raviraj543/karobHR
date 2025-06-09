@@ -1,18 +1,18 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2 } from 'lucide-react';
-// import type { Metadata } from 'next'; // Cannot be used in client component
+import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2, LocateFixed, Wallet } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import type { CompanySettings } from '@/lib/types';
+import type { CompanySettings, LocationInfo } from '@/lib/types';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function AdminSettingsPage() {
   const { companySettings, updateCompanySettings, companyId, loading: authLoading, user } = useAuth();
@@ -22,7 +22,10 @@ export default function AdminSettingsPage() {
   const [officeLat, setOfficeLat] = useState('');
   const [officeLon, setOfficeLon] = useState('');
   const [officeRadius, setOfficeRadius] = useState('');
-  const [isSavingGeofence, setIsSavingGeofence] = useState(false);
+  const [salaryCalcMethod, setSalaryCalcMethod] = useState<CompanySettings['salaryCalculationMethod']>('standard_hours');
+  
+  const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [formInitialized, setFormInitialized] = useState(false);
 
   useEffect(() => {
@@ -30,257 +33,167 @@ export default function AdminSettingsPage() {
   }, []);
 
   useEffect(() => {
-    console.log(">>> KAROBHR TRACE: AdminSettingsPage - useEffect for form population triggered. AuthLoading:", authLoading, "CompanySettings:", companySettings, "CompanyId:", companyId);
-
-    if (authLoading) {
-      console.log(">>> KAROBHR TRACE: AdminSettingsPage - Auth loading, waiting for companySettings. Form not initialized.");
-      setFormInitialized(false); // Mark as not initialized if auth is still loading
-      return;
-    }
-
-    if (companySettings === undefined) {
-      console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings is undefined (still loading from context). Form not initialized.");
-      setFormInitialized(false); // Mark as not initialized if settings are undefined
+    if (authLoading || companySettings === undefined) {
+      setFormInitialized(false);
       return;
     }
 
     if (companyId) {
-      if (companySettings === null) { // Company document explicitly does not exist
-        console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings document is null. Initializing form with defaults as company likely doesn't exist.");
+      if (companySettings) {
+        const { officeLocation, salaryCalculationMethod } = companySettings;
+        if (officeLocation) {
+          setOfficeName(officeLocation.name || 'Main Office');
+          setOfficeLat(String(officeLocation.latitude));
+          setOfficeLon(String(officeLocation.longitude));
+          setOfficeRadius(String(officeLocation.radius));
+        } else {
+          setOfficeName('Main Office');
+          setOfficeLat('0');
+          setOfficeLon('0');
+          setOfficeRadius('100');
+        }
+        setSalaryCalcMethod(salaryCalculationMethod || 'standard_hours');
+      } else {
         setOfficeName('Main Office');
         setOfficeLat('0');
         setOfficeLon('0');
         setOfficeRadius('100');
-      } else if (companySettings && companySettings.officeLocation) { // Settings loaded and officeLocation exists
-        console.log(">>> KAROBHR TRACE: AdminSettingsPage - Populating form from companySettings.officeLocation:", companySettings.officeLocation);
-        setOfficeName(companySettings.officeLocation.name || 'Main Office');
-        setOfficeLat(String(companySettings.officeLocation.latitude));
-        setOfficeLon(String(companySettings.officeLocation.longitude));
-        setOfficeRadius(String(companySettings.officeLocation.radius));
-      } else { // companySettings exists but officeLocation is missing or null
-        console.warn(">>> KAROBHR TRACE: AdminSettingsPage - Company settings loaded, but officeLocation field is missing/null. Initializing form with defaults.");
-        setOfficeName('Main Office');
-        setOfficeLat('0'); // Default to string '0' for consistency
-        setOfficeLon('0'); // Default to string '0'
-        setOfficeRadius('100'); // Default to string '100'
+        setSalaryCalcMethod('standard_hours');
       }
-    } else { // No companyId, and not authLoading
-      console.warn(">>> KAROBHR TRACE: AdminSettingsPage - No companyId available, cannot load or set geofence settings. Clearing form.");
-      setOfficeName('');
-      setOfficeLat('');
-      setOfficeLon('');
-      setOfficeRadius('');
     }
-    setFormInitialized(true); // Mark form as initialized after attempting to set values
+    setFormInitialized(true);
   }, [companySettings, authLoading, companyId]);
 
+  const getCurrentLocationForGeofence = useCallback(async (): Promise<LocationInfo> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) reject(new Error("Geolocation is not supported."));
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }),
+        (error) => reject(new Error(`Geolocation error: ${error.message}`)),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    });
+  }, []);
 
-  const handleSaveGeofence = async () => {
+  const handleFetchAndSetLocation = async () => {
+    setIsFetchingLocation(true);
+    toast({ title: "Fetching Your Location..." });
+    try {
+      const location = await getCurrentLocationForGeofence();
+      setOfficeLat(String(location.latitude));
+      setOfficeLon(String(location.longitude));
+      toast({ title: "Location Set!", description: "Latitude and longitude have been updated. Please save." });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: "Failed to Fetch Location", description: error.message });
+    } finally {
+      setIsFetchingLocation(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
     const lat = parseFloat(officeLat);
     const lon = parseFloat(officeLon);
     const radius = parseInt(officeRadius, 10);
 
     if (isNaN(lat) || isNaN(lon) || isNaN(radius) || radius <= 0) {
-      toast({ title: "Invalid Input", description: "Please enter valid numbers for latitude, longitude, and a positive radius.", variant: "destructive" });
+      toast({ title: "Invalid Input", description: "Please enter valid numbers for geofence.", variant: "destructive" });
       return;
     }
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-        toast({ title: "Invalid Coordinates", description: "Latitude must be between -90 and 90. Longitude must be between -180 and 180.", variant: "destructive"});
-        return;
-    }
-    
     if (!companyId) {
-      toast({ title: "Error Saving Geofence", description: "Company context is missing. Please try logging out and back in.", variant: "destructive" });
+      toast({ title: "Error Saving", description: "Company context is missing.", variant: "destructive" });
       return;
     }
 
-    setIsSavingGeofence(true);
+    setIsSaving(true);
     try {
-      const settingsToSave = {
-        name: officeName.trim() || "Main Office",
-        latitude: lat,
-        longitude: lon,
-        radius: radius,
+      const settingsToSave: Partial<CompanySettings> = {
+        officeLocation: {
+          name: officeName.trim() || "Main Office",
+          latitude: Number(lat),
+          longitude: Number(lon),
+          radius: Number(radius),
+        },
+        salaryCalculationMethod: salaryCalcMethod,
       };
-      console.log(">>> KAROBHR TRACE: AdminSettingsPage - Attempting to save geofence settings:", settingsToSave);
       await updateCompanySettings(settingsToSave);
-      toast({ title: "Geofence Settings Saved", description: "Office location and radius have been updated." });
-      // The useEffect depending on companySettings should re-populate the form
-      console.log(">>> KAROBHR TRACE: AdminSettingsPage - companySettings from context AFTER updateCompanySettings call (this log is illustrative, actual value will be in useEffect):", companySettings);
-
+      toast({ title: "Settings Saved", description: "Your company settings have been updated successfully." });
     } catch (error: any) {
-      console.error(">>> KAROBHR TRACE: Error in handleSaveGeofence on settings page:", error);
-      toast({ title: "Error Saving Geofence", description: error.message || "Could not save settings.", variant: "destructive" });
+      toast({ title: "Error Saving Settings", description: error.message, variant: "destructive" });
     } finally {
-      setIsSavingGeofence(false);
+      setIsSaving(false);
     }
   };
 
+  const isActionDisabled = !formInitialized || isSaving || authLoading || !companyId || !user || user.role !== 'admin';
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-8 max-w-3xl mx-auto">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Company Settings</h1>
         <p className="text-muted-foreground">Manage general settings for your organization.</p>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center"><Building2 className="mr-2 h-5 w-5 text-primary" />Organization Details</CardTitle>
-          <CardDescription>Basic information about your company.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="companyName">Company Name</Label>
-            <Input id="companyName" value={authLoading || companySettings === undefined ? "Loading..." : companySettings?.companyName || "N/A"} readOnly disabled />
-            <p className="text-xs text-muted-foreground">Company name is set during initial admin setup.</p>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="companyAddress">Company Address (Mock)</Label>
-            <Input id="companyAddress" defaultValue="123 Biz Street, Flowville, CA 90210" />
-          </div>
-          <Button disabled>Save Organization Details (Mock)</Button>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      <Card className="shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5 text-primary" /> Primary Office Geofence</CardTitle>
-          <CardDescription>
-            Define the main office location and attendance radius. This will be used for geofenced attendance.
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
            <div className="space-y-1">
             <Label htmlFor="officeName">Office Location Name</Label>
-            <Input id="officeName" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="e.g., Headquarters, Downtown Branch" disabled={!formInitialized || isSavingGeofence}/>
+            <Input id="officeName" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="e.g., Headquarters" disabled={isActionDisabled}/>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+            <div>
               <Label htmlFor="officeLat">Office Latitude</Label>
-              <Input id="officeLat" type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)} placeholder="e.g., 37.7749" disabled={!formInitialized || isSavingGeofence}/>
+              <Input id="officeLat" type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)} placeholder="e.g., 37.7749" disabled={isActionDisabled}/>
             </div>
-            <div className="space-y-1">
+            <div>
               <Label htmlFor="officeLon">Office Longitude</Label>
-              <Input id="officeLon" type="number" value={officeLon} onChange={(e) => setOfficeLon(e.target.value)} placeholder="e.g., -122.4194" disabled={!formInitialized || isSavingGeofence}/>
+              <Input id="officeLon" type="number" value={officeLon} onChange={(e) => setOfficeLon(e.target.value)} placeholder="e.g., -122.4194" disabled={isActionDisabled}/>
             </div>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={handleFetchAndSetLocation} disabled={isActionDisabled || isFetchingLocation}>
+                {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+                Use My Current Location
+            </Button>
           </div>
           <div className="space-y-1">
             <Label htmlFor="geofenceRadius">Geofence Radius (meters)</Label>
-            <Input id="geofenceRadius" type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)} placeholder="e.g., 100" disabled={!formInitialized || isSavingGeofence}/>
+            <Input id="geofenceRadius" type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)} placeholder="e.g., 100" disabled={isActionDisabled}/>
           </div>
-          {!formInitialized && !authLoading && (
-            <div className="flex items-center text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              <span>Loading current geofence settings...</span>
-            </div>
-          )}
-          <Button onClick={handleSaveGeofence} disabled={!formInitialized || isSavingGeofence || authLoading || !companyId || !user || user.role !== 'admin'}>
-            {isSavingGeofence && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Office Geofence
-          </Button>
-           <p className="text-xs text-muted-foreground">
-            Employees attempting to check in/out outside this radius (and not within a valid remote location, if set) will have their attendance flagged.
-          </p>
         </CardContent>
       </Card>
-
-      <Separator />
-
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center"><Clock className="mr-2 h-5 w-5 text-primary" />Working Hours & Timezone (Mock)</CardTitle>
-          <CardDescription>Define standard working hours and company timezone.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="workStartTime">Default Work Start Time</Label>
-              <Input id="workStartTime" type="time" defaultValue="09:00" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="workEndTime">Default Work End Time</Label>
-              <Input id="workEndTime" type="time" defaultValue="17:00" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="timezone">Timezone</Label>
-            <Input id="timezone" defaultValue="America/Los_Angeles (PST)" />
-          </div>
-          <Button disabled>Save Work Schedule (Mock)</Button>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center"><CalendarCheck2 className="mr-2 h-5 w-5 text-primary" />Leave Policy Settings (Mock)</CardTitle>
-          <CardDescription>
-            Define default leave allowances for employees.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="monthlyLeave">Default Monthly Leave Allowance (days)</Label>
-              <Input id="monthlyLeave" type="number" defaultValue="4" />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="yearlyLeave">Default Yearly Leave Allowance (days)</Label>
-              <Input id="yearlyLeave" type="number" defaultValue="48" />
-            </div>
-          </div>
-          <Button disabled>Save Leave Policy (Mock)</Button>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" />Branding & Appearance (Mock)</CardTitle>
-          <CardDescription>Customize the look and feel of the application.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="logoUpload">Company Logo</Label>
-            <Input id="logoUpload" type="file" />
-            <p className="text-xs text-muted-foreground">Upload a PNG or JPG file (max 2MB).</p>
-          </div>
-           <div className="flex items-center space-x-2">
-            <Switch id="darkModeToggleAdmin" />
-            <Label htmlFor="darkModeToggleAdmin">Enable Dark Mode by default for new users</Label>
-          </div>
-          <Button disabled>Save Appearance Settings (Mock)</Button>
-        </CardContent>
-      </Card>
-
-      <Separator />
       
-      <Card className="shadow-sm">
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><BellDot className="mr-2 h-5 w-5 text-primary" />Notification Settings (Mock)</CardTitle>
-          <CardDescription>Configure system-wide notification preferences.</CardDescription>
+          <CardTitle className="flex items-center"><Wallet className="mr-2 h-5 w-5 text-primary" /> Salary Calculation Method</CardTitle>
+          <CardDescription>Choose how employee payroll is calculated based on attendance.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
-            <Label htmlFor="leaveNotifications">Email notifications for leave requests</Label>
-            <Switch id="leaveNotifications" defaultChecked />
-          </div>
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
-            <Label htmlFor="taskNotifications">Email notifications for new task assignments</Label>
-            <Switch id="taskNotifications" defaultChecked/>
-          </div>
-          <Button disabled>Save Notification Settings (Mock)</Button>
+        <CardContent>
+          <RadioGroup value={salaryCalcMethod} onValueChange={(value) => setSalaryCalcMethod(value as CompanySettings['salaryCalculationMethod'])} disabled={isActionDisabled}>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="standard_hours" id="standard_hours" />
+              <Label htmlFor="standard_hours" className="font-normal">
+                <span className="font-semibold">Standard Daily Hours</span>
+                <p className="text-xs text-muted-foreground">Calculate deductions for missed hours based on the employee's standard daily work hours (e.g., 8 hours). Full salary is paid if total hours meet or exceed the monthly standard.</p>
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="exact_checkin_checkout" id="exact_checkin_checkout" />
+              <Label htmlFor="exact_checkin_checkout" className="font-normal">
+                <span className="font-semibold">Exact Check-in/Check-out Time</span>
+                 <p className="text-xs text-muted-foreground">Calculate salary based on the exact duration between check-in and check-out, down to the minute. This provides a more precise, usage-based payroll.</p>
+              </Label>
+            </div>
+          </RadioGroup>
         </CardContent>
       </Card>
 
+      <div className="flex justify-end">
+        <Button onClick={handleSaveSettings} disabled={isActionDisabled}>
+          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save All Settings
+        </Button>
+      </div>
     </div>
   );
 }
-    
-
-    
