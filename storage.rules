@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow users to read and write their own attendance photos.
+    // The {userId} in the path must match the UID of the authenticated user.
+    match /companies/{companyId}/attendancePhotos/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
