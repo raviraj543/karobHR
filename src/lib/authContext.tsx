@@ -143,14 +143,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`), where('userId', '==', user.id));
     }
     subscriptions.push(onSnapshot(attendanceQuery, (snapshot) => {
-        const logList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, timestamp: (doc.data().timestamp as Timestamp).toDate().toISOString() } as AttendanceEvent));
-        setAttendanceLog(logList);
+      const logList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const timestamp = data.timestamp;
+        return { ...data, id: doc.id, timestamp: timestamp ? (timestamp as Timestamp).toDate().toISOString() : new Date().toISOString() } as AttendanceEvent;
+      });
+      setAttendanceLog(logList);
     }));
 
     // Announcements Subscription
     const announcementsQuery = query(collection(dbInstance, `companies/${companyId}/announcements`));
     subscriptions.push(onSnapshot(announcementsQuery, (snapshot) => {
-      const announcementsList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, postedAt: (doc.data().postedAt as Timestamp).toDate().toISOString() } as Announcement));
+      const announcementsList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const postedAt = data.postedAt;
+        return { ...data, id: doc.id, postedAt: postedAt ? (postedAt as Timestamp).toDate().toISOString() : new Date().toISOString() } as Announcement
+      });
       setAnnouncements(announcementsList);
     }));
     
