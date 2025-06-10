@@ -86,7 +86,7 @@ export default function AdminLiveAttendancePage() {
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.checkInLocation;
         if (status === 'Checked In') {
-          liveCheckInTime = latestEvent.checkInTime;
+            liveCheckInTime = latestEvent.timestamp;
         }
       }
 

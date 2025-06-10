@@ -15,14 +15,40 @@ import { Separator } from '@/components/ui/separator';
 import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin } from 'lucide-react';
 import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow } from 'date-fns';
 import { Label } from '@/components/ui/label';
+import { Timestamp } from 'firebase/firestore';
+
+
+const safeParseISO = (dateString: string | Date | Timestamp | undefined | null): Date | null => {
+  if (!dateString) return null;
+  if (dateString instanceof Timestamp) {
+    return dateString.toDate();
+  }
+  if (dateString instanceof Date) {
+    return dateString;
+  }
+  try {
+    const date = parseISO(dateString);
+    // Check if the date is valid
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    return date;
+  } catch (error) {
+    console.warn("Could not parse date string:", dateString, error);
+    return null;
+  }
+};
+
 
 // Helper to calculate total work duration for a set of events
 const calculateTotalWorkMinutes = (events: AttendanceEvent[]) => {
   return events.reduce((acc, event) => {
     if (event.status === 'Checked Out' && event.checkInTime && event.checkOutTime) {
-      const checkIn = parseISO(event.checkInTime);
-      const checkOut = parseISO(event.checkOutTime);
-      return acc + differenceInMinutes(checkOut, checkIn);
+      const checkIn = safeParseISO(event.checkInTime);
+      const checkOut = safeParseISO(event.checkOutTime);
+      if (checkIn && checkOut) {
+        return acc + differenceInMinutes(checkOut, checkIn);
+      }
     }
     return acc;
   }, 0);
@@ -77,8 +103,8 @@ export default function EmployeeDetailPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (liveAttendanceEvent?.checkInTime) {
-      const checkInTime = parseISO(liveAttendanceEvent.checkInTime);
+    const checkInTime = safeParseISO(liveAttendanceEvent?.checkInTime);
+    if (checkInTime) {
       interval = setInterval(() => {
         setLiveDuration(differenceInSeconds(new Date(), checkInTime));
       }, 1000);
@@ -142,8 +168,14 @@ export default function EmployeeDetailPage() {
   };
 
   const today = new Date();
-  const todaysEvents = employeeAttendance.filter(e => e.checkInTime && format(parseISO(e.checkInTime), 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
+  const todaysEvents = employeeAttendance.filter(e => {
+    const checkInDate = safeParseISO(e.checkInTime);
+    return checkInDate && format(checkInDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+  });
   const todayWorkMinutes = calculateTotalWorkMinutes(todaysEvents);
+  
+  const liveCheckInTime = safeParseISO(liveAttendanceEvent?.checkInTime);
+
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
@@ -170,11 +202,11 @@ export default function EmployeeDetailPage() {
                     <CardTitle className="flex items-center"><Clock className="mr-2"/>Live Status & Today's Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {liveAttendanceEvent ? (
+                    {liveCheckInTime ? (
                         <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg text-center">
                             <p className="text-lg font-semibold text-green-800 dark:text-green-300">Currently Checked In</p>
                             <p className="text-3xl font-mono tracking-wider">{formatDurationFromSeconds(liveDuration)}</p>
-                            <p className="text-xs text-muted-foreground">Checked in {formatDistanceToNow(parseISO(liveAttendanceEvent.checkInTime!), { addSuffix: true })}</p>
+                            <p className="text-xs text-muted-foreground">Checked in {formatDistanceToNow(liveCheckInTime, { addSuffix: true })}</p>
                         </div>
                     ) : (
                         <div className="p-4 bg-gray-100 dark:bg-gray-800/50 rounded-lg text-center">
@@ -185,8 +217,8 @@ export default function EmployeeDetailPage() {
                      <div>
                         <Label>Total Work Hours Today ({format(today, 'MMM do')})</Label>
                         <p className="text-2xl font-bold">{Math.floor(todayWorkMinutes / 60)}h {todayWorkMinutes % 60}m</p>
-                        <Progress value={(todayWorkMinutes / (employee.standardDailyHours * 60)) * 100} className="mt-2 h-2"/>
-                        <p className="text-xs text-muted-foreground text-right">Goal: {employee.standardDailyHours} hours</p>
+                        <Progress value={(todayWorkMinutes / ((employee.standardDailyHours || 8) * 60)) * 100} className="mt-2 h-2"/>
+                        <p className="text-xs text-muted-foreground text-right">Goal: {employee.standardDailyHours || 8} hours</p>
                      </div>
                 </CardContent>
             </Card>

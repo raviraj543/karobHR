@@ -176,7 +176,8 @@ export default function AttendancePage() {
   };
 
   const isProcessing = ['processing-check-in', 'processing-check-out', 'submitting-report'].includes(attendanceStatus);
-
+  const isCheckedIn = attendanceStatus === 'checked-in';
+  
   const renderLocationStatus = () => {
     switch(locationStatus) {
         case 'fetching':
@@ -241,11 +242,11 @@ export default function AttendancePage() {
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-          <Button size="lg" className="w-full py-6 text-lg" onClick={handleCheckIn} disabled={isProcessing || locationStatus !== 'success' || attendanceStatus === 'checked-in'}>
+          <Button size="lg" className="w-full py-6 text-lg" onClick={handleCheckIn} disabled={isProcessing || locationStatus !== 'success' || isCheckedIn}>
             {attendanceStatus === 'processing-check-in' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogIn className="mr-2 h-5 w-5" /> Check In
           </Button>
-          <Button size="lg" variant="outline" className="w-full py-6 text-lg" onClick={handleCheckOut} disabled={isProcessing || locationStatus !== 'success' || attendanceStatus === 'checked-out'}>
+          <Button size="lg" variant="outline" className="w-full py-6 text-lg" onClick={handleCheckOut} disabled={isProcessing || locationStatus !== 'success' || !isCheckedIn}>
             {attendanceStatus === 'processing-check-out' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
             <LogOut className="mr-2 h-5 w-5" /> Check Out
           </Button>

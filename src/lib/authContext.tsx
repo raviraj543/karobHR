@@ -18,6 +18,27 @@ import { calculateDistance } from '@/lib/locationUtils';
 import { differenceInMilliseconds, parseISO, getYear, getMonth, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
+
+const safeParseISO = (dateString: string | Date | Timestamp | undefined | null): Date | null => {
+    if (!dateString) return null;
+    if (dateString instanceof Timestamp) {
+      return dateString.toDate();
+    }
+    if (dateString instanceof Date) {
+      return dateString;
+    }
+    try {
+      const date = parseISO(dateString);
+      if (isNaN(date.getTime())) {
+        return null;
+      }
+      return date;
+    } catch (error) {
+      console.warn("Could not parse date string:", dateString, error);
+      return null;
+    }
+  };
+
 // Define the shape of the context data
 export interface AuthContextType {
   user: User | null;
@@ -148,7 +169,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const timestamp = data.timestamp;
         // Ensure timestamp is converted to an ISO string
         const isoTimestamp = timestamp instanceof Timestamp ? timestamp.toDate().toISOString() : (timestamp ? new Date(timestamp).toISOString() : new Date().toISOString());
-        return { ...data, id: doc.id, timestamp: isoTimestamp } as AttendanceEvent;
+        return { ...data, id: doc.id, timestamp: isoTimestamp, checkInTime: data.checkInTime ? (data.checkInTime instanceof Timestamp ? data.checkInTime.toDate().toISOString() : data.checkInTime) : undefined, checkOutTime: data.checkOutTime ? (data.checkOutTime instanceof Timestamp ? data.checkOutTime.toDate().toISOString() : data.checkOutTime): undefined } as AttendanceEvent;
       });
       setAttendanceLog(logList);
     }));
@@ -237,7 +258,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     
     // If this is the very first admin, create the company document
-    const companyDocRef = doc(dbInstance, "companies", newUserDocument..companyId);
+    const companyDocRef = doc(dbInstance, "companies", newUserDocument.companyId);
     const companyDocSnap = await getDoc(companyDocRef);
     if (!companyDocSnap.exists() && newUserDocument.role === 'admin') {
       batch.set(companyDocRef, {
@@ -253,6 +274,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await batch.commit();
     return newFirebaseUser;
   }, [authInstance, dbInstance]);
+
+  const updateCompanySettings = useCallback(async (settingsUpdate: Partial<CompanySettings>) => {
+    if (!dbInstance || !companyId) {
+      console.error("Update failed: DbInstance or CompanyId not available.");
+      throw new Error("User is not properly authenticated or company context is missing.");
+    }
+    const companyDocRef = doc(dbInstance, 'companies', companyId);
+    await updateDoc(companyDocRef, settingsUpdate);
+    // The onSnapshot listener will automatically update the state, no need to call setCompanySettings here.
+  }, [dbInstance, companyId]);
 
   const addTask = useCallback(async (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (!dbInstance || !companyId) throw new Error("User or company context not available.");
@@ -273,7 +304,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [dbInstance, companyId]);
 
   const addAttendanceEvent = useCallback(async (locationInfo: LocationInfo): Promise<string> => {
-    if (!dbInstance || !user || !companyId || !companySettings) throw new Error("Context not available");
+    if (!dbInstance || !user || !companyId || !companySettings?.officeLocation) throw new Error("Context not available");
 
     const { officeLocation } = companySettings;
     const distance = calculateDistance(
@@ -286,14 +317,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const isWithinOfficeRadius = distance <= officeLocation.radius;
 
     const newEvent: Omit<AttendanceEvent, 'id' | 'timestamp'> & { timestamp: any } = {
-      eventId: uuidv4(),
-      userId: user.id,
       employeeId: user.employeeId,
-      timestamp: serverTimestamp(), // Use serverTimestamp for accuracy
+      userId: user.id,
+      userName: user.name || '',
       type: 'check-in',
-      location: locationInfo,
-      isRemote: !isWithinOfficeRadius,
-      status: 'Checked In'
+      timestamp: serverTimestamp(), // Use serverTimestamp for accuracy
+      checkInLocation: locationInfo,
+      isWithinGeofence: isWithinOfficeRadius,
+      status: 'Checked In',
     };
     const docRef = await addDoc(collection(dbInstance, `companies/${companyId}/attendanceLog`), newEvent);
     return docRef.id;
@@ -327,7 +358,69 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [dbInstance, user, companyId]);
 
 
-  const calculateMonthlyPayrollDetails = useCallback(/* Omitted for brevity, assumed correct */);
+  const calculateMonthlyPayrollDetails = useCallback((employee: User, forYear: number, forMonth: number, employeeAttendanceEvents: AttendanceEvent[], companyHolidays: Holiday[] = []): MonthlyPayrollReport => {
+    // Basic validation
+    if (!employee || !employee.baseSalary || !employee.standardDailyHours) {
+        throw new Error("Employee data for payroll calculation is incomplete.");
+    }
+
+    const { baseSalary, standardDailyHours } = employee;
+
+    // Date and calendar calculations
+    const reportMonthDate = new Date(forYear, forMonth);
+    const workingDaysInMonth = getWorkingDaysInMonth(forYear, forMonth, companyHolidays.map(h => h.date));
+    const totalStandardHoursForMonth = workingDaysInMonth * standardDailyHours;
+
+    // Calculate total hours worked from attendance logs
+    const monthInterval = { start: startOfMonth(reportMonthDate), end: endOfMonth(reportMonthDate) };
+    const totalActualHoursWorked = employeeAttendanceEvents.reduce((acc, event) => {
+        if (event.status === 'Checked Out' && event.checkInTime && event.checkOutTime) {
+            const checkInDate = safeParseISO(event.checkInTime);
+            if (checkInDate && isWithinInterval(checkInDate, monthInterval)) {
+                // Ensure checkOutTime is valid before parsing
+                const checkOutDate = safeParseISO(event.checkOutTime);
+                if (checkOutDate) {
+                    const durationInHours = differenceInMilliseconds(checkOutDate, checkInDate) / (1000 * 60 * 60);
+                    return acc + durationInHours;
+                }
+            }
+        }
+        return acc;
+    }, 0);
+    
+    const totalHoursMissed = Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked);
+    const hourlyRate = baseSalary / totalStandardHoursForMonth;
+    const calculatedDeductions = totalHoursMissed * hourlyRate;
+    const salaryAfterDeductions = baseSalary - calculatedDeductions;
+    
+    // Sum up approved advances for the month
+    const totalApprovedAdvances = employee.advances
+        ?.filter(adv => adv.status === 'approved' && getYear(parseISO(adv.dateProcessed!)) === forYear && getMonth(parseISO(adv.dateProcessed!)) === forMonth)
+        .reduce((sum, adv) => sum + adv.amount, 0) ?? 0;
+
+    const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
+    
+    // Construct and return the report
+    const payrollReport: MonthlyPayrollReport = {
+        employeeId: employee.employeeId,
+        employeeName: employee.name || 'N/A',
+        month: forMonth,
+        year: forYear,
+        baseSalary,
+        standardDailyHours,
+        totalWorkingDaysInMonth: workingDaysInMonth,
+        totalStandardHoursForMonth,
+        totalActualHoursWorked,
+        totalHoursMissed,
+        hourlyRate,
+        calculatedDeductions,
+        salaryAfterDeductions,
+        totalApprovedAdvances,
+        finalNetPayable
+    };
+
+    return payrollReport;
+}, []);
 
   // Memoize the context value
   const contextValue = useMemo(() => ({
@@ -343,13 +436,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     logout,
     addNewEmployee,
+    updateCompanySettings,
     addTask,
     updateTask,
     addAttendanceEvent,
     completeCheckout,
+    calculateMonthlyPayrollDetails
   }), [
     user, role, loading, companyId, companySettings, allUsers, tasks, attendanceLog, announcements,
-    login, logout, addNewEmployee, addTask, updateTask, addAttendanceEvent, completeCheckout
+    login, logout, addNewEmployee, updateCompanySettings, addTask, updateTask, addAttendanceEvent, completeCheckout, calculateMonthlyPayrollDetails
   ]);
 
   return (

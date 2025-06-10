@@ -152,6 +152,11 @@ export interface User {
     address?: string;
   };
   profilePictureUrl?: string | null;
+  remoteWorkLocation?: {
+    latitude: number;
+    longitude: number;
+    radius: number;
+  } | null;
   leaves?: LeaveApplication[];
   advances?: Advance[];
   mockAttendanceFactor?: number; // Temporary for payslip calculation
