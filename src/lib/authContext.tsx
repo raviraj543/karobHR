@@ -146,7 +146,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const logList = snapshot.docs.map(doc => {
         const data = doc.data();
         const timestamp = data.timestamp;
-        return { ...data, id: doc.id, timestamp: timestamp ? (timestamp as Timestamp).toDate().toISOString() : new Date().toISOString() } as AttendanceEvent;
+        // Ensure timestamp is converted to an ISO string
+        const isoTimestamp = timestamp instanceof Timestamp ? timestamp.toDate().toISOString() : (timestamp ? new Date(timestamp).toISOString() : new Date().toISOString());
+        return { ...data, id: doc.id, timestamp: isoTimestamp } as AttendanceEvent;
       });
       setAttendanceLog(logList);
     }));
@@ -157,7 +159,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const announcementsList = snapshot.docs.map(doc => {
         const data = doc.data();
         const postedAt = data.postedAt;
-        return { ...data, id: doc.id, postedAt: postedAt ? (postedAt as Timestamp).toDate().toISOString() : new Date().toISOString() } as Announcement
+        const isoPostedAt = postedAt instanceof Timestamp ? postedAt.toDate().toISOString() : (postedAt ? new Date(postedAt).toISOString() : new Date().toISOString());
+        return { ...data, id: doc.id, postedAt: isoPostedAt } as Announcement
       });
       setAnnouncements(announcementsList);
     }));
@@ -171,7 +174,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }));
     } else {
       // If not an admin, 'allUsers' should just be the user themselves.
-      setAllUsers([user]);
+      setAllUsers(user ? [user] : []);
     }
 
 
@@ -234,7 +237,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     
     // If this is the very first admin, create the company document
-    const companyDocRef = doc(dbInstance, "companies", newUserDocument.companyId);
+    const companyDocRef = doc(dbInstance, "companies", newUserDocument..companyId);
     const companyDocSnap = await getDoc(companyDocRef);
     if (!companyDocSnap.exists() && newUserDocument.role === 'admin') {
       batch.set(companyDocRef, {
@@ -282,11 +285,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const isWithinOfficeRadius = distance <= officeLocation.radius;
 
-    const newEvent: Omit<AttendanceEvent, 'id'> = {
+    const newEvent: Omit<AttendanceEvent, 'id' | 'timestamp'> & { timestamp: any } = {
       eventId: uuidv4(),
       userId: user.id,
       employeeId: user.employeeId,
-      timestamp: serverTimestamp(),
+      timestamp: serverTimestamp(), // Use serverTimestamp for accuracy
       type: 'check-in',
       location: locationInfo,
       isRemote: !isWithinOfficeRadius,
@@ -307,12 +310,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     
     const checkinData = attendanceDocSnap.data();
-    const checkinTime = (checkinData.checkInTime as Timestamp).toDate();
+    // CRITICAL FIX: Use 'timestamp' which is a Firestore Timestamp object, not 'checkInTime'.
+    const checkinTime = (checkinData.timestamp as Timestamp).toDate(); 
     const checkoutTime = new Date();
     const totalHours = differenceInMilliseconds(checkoutTime, checkinTime) / (1000 * 60 * 60);
 
     await updateDoc(attendanceDocRef, {
       status: 'Checked Out',
+      type: 'check-out', // Ensure the event type is updated
       checkOutTime: Timestamp.fromDate(checkoutTime),
       checkOutLocation: locationInfo,
       workReport: workReport,
@@ -342,7 +347,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     updateTask,
     addAttendanceEvent,
     completeCheckout,
-    // Add other functions here
   }), [
     user, role, loading, companyId, companySettings, allUsers, tasks, attendanceLog, announcements,
     login, logout, addNewEmployee, addTask, updateTask, addAttendanceEvent, completeCheckout
