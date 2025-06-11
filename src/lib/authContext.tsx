@@ -169,7 +169,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const timestamp = data.timestamp;
         // Ensure timestamp is converted to an ISO string
         const isoTimestamp = timestamp instanceof Timestamp ? timestamp.toDate().toISOString() : (timestamp ? new Date(timestamp).toISOString() : new Date().toISOString());
-        return { ...data, id: doc.id, timestamp: isoTimestamp, checkInTime: data.checkInTime ? (data.checkInTime instanceof Timestamp ? data.checkInTime.toDate().toISOString() : data.checkInTime) : undefined, checkOutTime: data.checkOutTime ? (data.checkOutTime instanceof Timestamp ? data.checkOutTime.toDate().toISOString() : data.checkOutTime): undefined } as AttendanceEvent;
+        return { ...data, id: doc.id, timestamp: isoTimestamp, checkInTime: data.checkInTime ? (data.checkInTime instanceof Timestamp ? data.checkInTime.toDate().toISOString() : data.checkInTime) : undefined, checkOutTime: data.checkOutTime ? (data.checkOutTime instanceof Timestamp ? data.checkOutTime.toDate().toISOString() : data.checkOutTime): undefined, totalHours: data.totalHours } as AttendanceEvent;
       });
       setAttendanceLog(logList);
     }));
@@ -341,8 +341,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     
     const checkinData = attendanceDocSnap.data();
-    // CRITICAL FIX: Use 'timestamp' which is a Firestore Timestamp object, not 'checkInTime'.
-    const checkinTime = (checkinData.timestamp as Timestamp).toDate(); 
+    // Use the saved check-in timestamp, ensuring it's treated as a Date object.
+    const checkinTime = safeParseISO(checkinData.timestamp);
+
+    if (!checkinTime) {
+        throw new Error("Could not parse check-in time for duration calculation.");
+    }
+
     const checkoutTime = new Date();
     const totalHours = differenceInMilliseconds(checkoutTime, checkinTime) / (1000 * 60 * 60);
 
@@ -374,16 +379,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Calculate total hours worked from attendance logs
     const monthInterval = { start: startOfMonth(reportMonthDate), end: endOfMonth(reportMonthDate) };
     const totalActualHoursWorked = employeeAttendanceEvents.reduce((acc, event) => {
-        if (event.status === 'Checked Out' && event.checkInTime && event.checkOutTime) {
-            const checkInDate = safeParseISO(event.checkInTime);
-            if (checkInDate && isWithinInterval(checkInDate, monthInterval)) {
-                // Ensure checkOutTime is valid before parsing
-                const checkOutDate = safeParseISO(event.checkOutTime);
-                if (checkOutDate) {
-                    const durationInHours = differenceInMilliseconds(checkOutDate, checkInDate) / (1000 * 60 * 60);
-                    return acc + durationInHours;
-                }
-            }
+        // Use the saved totalHours for events that are 'Checked Out'
+        if (event.status === 'Checked Out' && event.totalHours !== undefined && event.totalHours !== null) {
+            const checkInDate = safeParseISO(event.timestamp); // Use timestamp for month interval check
+             if (checkInDate && isWithinInterval(checkInDate, monthInterval)) {
+                return acc + event.totalHours;
+             }
         }
         return acc;
     }, 0);
@@ -395,7 +396,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // Sum up approved advances for the month
     const totalApprovedAdvances = employee.advances
-        ?.filter(adv => adv.status === 'approved' && getYear(parseISO(adv.dateProcessed!)) === forYear && getMonth(parseISO(adv.dateProcessed!)) === forMonth)
+        ?.filter(adv => adv.status === 'approved' && getYear(safeParseISO(adv.dateProcessed!)) === forYear && getMonth(safeParseISO(adv.dateProcessed!)) === forMonth)
         .reduce((sum, adv) => sum + adv.amount, 0) ?? 0;
 
     const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;

@@ -71,43 +71,48 @@ export default function AdminLiveAttendancePage() {
         .sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime());
 
       const latestEvent = userEvents[0];
-      const userEventsToday = userEvents.filter(event => isToday(parseISO(event.timestamp)));
+      const userEventsToday = userEvents.filter(event => event.timestamp && isToday(parseISO(event.timestamp)));
 
       let status: EmployeeAttendanceStatus['status'] = 'Away';
       let lastActivityTime: string | undefined;
       let isWithinGeofence: boolean | null | undefined;
       let location: EmployeeAttendanceStatus['location'];
-      let workingHoursTodayMs = 0;
       let liveCheckInTime: string | undefined;
+
+      // Calculate total hours today based on stored totalHours for completed events
+      let totalHoursToday = userEventsToday.reduce((sum, event) => {
+          // Add totalHours for completed check-out events
+          if (event.status === 'Checked Out' && event.totalHours !== undefined && event.totalHours !== null) {
+              return sum + event.totalHours;
+          }
+          return sum;
+      }, 0); // Sum in hours
+
+      // Calculate duration for the current session if checked in today
+      let currentSessionDurationHours = 0;
+      const latestCheckInEventToday = userEventsToday.find(event => event.type === 'check-in' && event.status === 'Checked In');
+
+      if (latestCheckInEventToday && latestCheckInEventToday.timestamp) {
+          const checkInDate = parseISO(latestCheckInEventToday.timestamp);
+          // Check if the check-in is actually from today before calculating live duration
+          if (isToday(checkInDate)) {
+             currentSessionDurationHours = differenceInMilliseconds(todayDate, checkInDate) / (1000 * 60 * 60);
+             liveCheckInTime = latestCheckInEventToday.timestamp; // Use this for live duration display
+          }
+      }
+
+      // Total hours today is the sum of completed sessions and the current session (if any)
+      totalHoursToday += currentSessionDurationHours;
+
 
       if (latestEvent) {
         status = latestEvent.type === 'check-in' ? 'Checked In' : 'Checked Out';
         lastActivityTime = latestEvent.timestamp;
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.checkInLocation;
-        if (status === 'Checked In') {
-            liveCheckInTime = latestEvent.timestamp;
-        }
+        // Note: liveCheckInTime is already set above if they are checked in today
       }
 
-      let lastCheckInTimeForCalc: Date | null = null;
-      for (const event of [...userEventsToday].reverse()) {
-        try {
-          if (event.type === 'check-in') {
-            lastCheckInTimeForCalc = parseISO(event.timestamp);
-          } else if (event.type === 'check-out' && lastCheckInTimeForCalc) {
-            workingHoursTodayMs += differenceInMilliseconds(parseISO(event.timestamp), lastCheckInTimeForCalc);
-            lastCheckInTimeForCalc = null; 
-          }
-        } catch (e) {
-          console.warn(`Error processing timestamp for work hours calculation for event ${event.id}: ${event.timestamp}`);
-        }
-      }
-      
-      if (status === 'Checked In' && isToday(parseISO(latestEvent.timestamp)) && lastCheckInTimeForCalc) {
-        workingHoursTodayMs += differenceInMilliseconds(todayDate, lastCheckInTimeForCalc);
-      }
-      
       return {
         user,
         status,
@@ -115,10 +120,10 @@ export default function AdminLiveAttendancePage() {
         isWithinGeofence,
         location,
         liveCheckInTime,
-        workingHoursToday: formatDuration(workingHoursTodayMs),
+        workingHoursToday: formatDuration(totalHoursToday * 60 * 60 * 1000), // Convert hours back to milliseconds for formatting
       };
     }).sort((a,b) => (a.user.name || "").localeCompare(b.user.name || ""));
-  }, [allUsers, attendanceLog, authLoading, lastRefreshed]);
+  }, [allUsers, attendanceLog, authLoading, lastRefreshed]); // Add attendanceLog as dependency
 
 
   if (authLoading) {
