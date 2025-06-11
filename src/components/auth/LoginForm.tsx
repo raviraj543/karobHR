@@ -180,6 +180,13 @@ export function LoginForm() {
             </Button>
           </form>
         </Form>
+        <div className="mt-6 text-center">
+          <Link href="/admin-signup" legacyBehavior>
+            <a className="text-sm text-primary hover:underline inline-flex items-center">
+              <UserPlus className="mr-1 h-4 w-4" /> First time? Create Company & Admin Account
+            </a>
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );

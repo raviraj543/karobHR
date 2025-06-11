@@ -235,19 +235,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addNewEmployee = useCallback(async (employeeData: Omit<User, 'id'>, password?: string): Promise<FirebaseUser | null> => {
     if (!authInstance || !dbInstance) throw new Error("Firebase services not ready.");
     if (!password) throw new Error("Password is required for new accounts.");
-
+  
     const finalEmail = employeeData.email || `${employeeData.employeeId.toLowerCase().replace(/[^a-z0-9]/gi, '')}@${employeeData.companyId.split('-')[0]}.karobhr.local`;
     
+    // Check if company already exists
+    const companyDocRef = doc(dbInstance, "companies", employeeData.companyId);
+    const companyDocSnap = await getDoc(companyDocRef);
+  
+    if (companyDocSnap.exists() && employeeData.role === 'admin') {
+      // If company exists, new signups cannot be admins.
+      // You might want to adjust this logic depending on your app's rules.
+      // For now, we prevent creating a new admin for an existing company through this flow.
+      throw new Error("An admin for this company already exists. New employees must have the 'employee' or 'manager' role.");
+    }
+  
     const userCredential = await createUserWithEmailAndPassword(authInstance, finalEmail, password);
     const newFirebaseUser = userCredential.user;
-
+  
     const newUserDocument: User = {
       id: newFirebaseUser.uid,
       ...employeeData
     };
-
+  
     const batch = writeBatch(dbInstance);
+  
+    // Set user document
     batch.set(doc(dbInstance, `users/${newFirebaseUser.uid}`), newUserDocument);
+  
+    // Set user directory document
     batch.set(doc(dbInstance, `userDirectory/${newFirebaseUser.uid}`), {
       userId: newFirebaseUser.uid,
       employeeId: newUserDocument.employeeId,
@@ -257,21 +272,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       role: newUserDocument.role,
     });
     
-    // If this is the very first admin, create the company document
-    const companyDocRef = doc(dbInstance, "companies", newUserDocument.companyId);
-    const companyDocSnap = await getDoc(companyDocRef);
+    // If the company does NOT exist and the new user is an admin, create the company document
     if (!companyDocSnap.exists() && newUserDocument.role === 'admin') {
       batch.set(companyDocRef, {
         companyId: newUserDocument.companyId,
-        companyName: (employeeData as any).companyName || 'My Company', // companyName is not on User type
+        companyName: (employeeData as any).companyName || 'My Company', 
         adminUid: newFirebaseUser.uid,
         createdAt: serverTimestamp(),
         salaryCalculationMethod: 'standard_hours',
         officeLocation: { name: "Main Office", latitude: 0, longitude: 0, radius: 100 },
       });
     }
-
+  
     await batch.commit();
+  
+    // If this was the first admin, you might want to sign them in automatically
+    // or handle the UI flow to take them to the login page.
+    // For now, returning the firebase user is sufficient.
     return newFirebaseUser;
   }, [authInstance, dbInstance]);
 
