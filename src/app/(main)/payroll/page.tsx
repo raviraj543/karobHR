@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { Advance } from '@/lib/types';
+import type { Advance, MonthlyPayrollReport } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CreditCard, IndianRupee, Send, History, Loader2, Percent } from 'lucide-react';
+import { CreditCard, IndianRupee, Send, History, Loader2 } from 'lucide-react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -28,9 +28,12 @@ const advanceRequestSchema = z.object({
 type AdvanceRequestFormValues = z.infer<typeof advanceRequestSchema>;
 
 export default function EmployeePayrollPage() {
-  const { user, requestAdvance, loading: authLoading } = useAuth();
+  const { user, attendanceLog, requestAdvance, calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
   const [isSubmittingAdvance, setIsSubmittingAdvance] = useState(false);
   const { toast } = useToast();
+
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
   const form = useForm<AdvanceRequestFormValues>({
     resolver: zodResolver(advanceRequestSchema),
@@ -44,11 +47,12 @@ export default function EmployeePayrollPage() {
     document.title = 'My Payslip - KarobHR';
   }, []);
 
-  const baseSalary = user?.baseSalary || 0;
-  const attendanceFactor = user?.mockAttendanceFactor !== undefined ? user.mockAttendanceFactor : 1.0;
-  const salaryAfterAttendance = baseSalary * attendanceFactor;
-  const approvedAdvancesTotal = user?.advances?.filter(adv => adv.status === 'approved').reduce((sum, adv) => sum + adv.amount, 0) || 0;
-  const netPayable = salaryAfterAttendance - approvedAdvancesTotal;
+  const payrollReport: MonthlyPayrollReport | null = useMemo(() => {
+    if (user && attendanceLog) {
+      return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, attendanceLog);
+    }
+    return null;
+  }, [user, attendanceLog, currentYear, currentMonth, calculateMonthlyPayrollDetails]);
 
   const onSubmitAdvance: SubmitHandler<AdvanceRequestFormValues> = async (data) => {
     if (!user) return;
@@ -95,41 +99,44 @@ export default function EmployeePayrollPage() {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center"><CreditCard className="mr-2 h-5 w-5 text-primary" />Payslip Summary (Mock)</CardTitle>
+          <CardTitle className="flex items-center"><CreditCard className="mr-2 h-5 w-5 text-primary" />Payslip Summary</CardTitle>
           <CardDescription>
             Your current salary breakdown.
-            <span className="block text-xs text-muted-foreground/80 italic mt-1">
-             Note: This is a simplified mock. Salary is calculated as (Base Salary * Mock Attendance Factor) - Approved Advances.
-            </span>
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
-              <div>
-                <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
-                <p className="text-2xl font-semibold text-foreground">₹{baseSalary.toLocaleString('en-IN')}</p>
+        <CardContent>
+          {payrollReport ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
+                <div>
+                  <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
+                  <p className="text-2xl font-semibold text-foreground">₹{payrollReport.baseSalary.toLocaleString('en-IN')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">Hours Worked</Label>
+                  <p className="text-2xl font-semibold text-foreground">{payrollReport.totalActualHoursWorked.toFixed(2)} / {payrollReport.totalStandardHoursForMonth.toFixed(2)}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">Deductions for hours missed</Label>
+                  <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.calculatedDeductions.toLocaleString('en-IN')})</p>
+                </div>
               </div>
-              <div>
-                <Label className="text-sm text-muted-foreground flex items-center"><Percent className="inline-block mr-1 h-3 w-3"/> Mock Attendance Factor</Label>
-                <p className="text-2xl font-semibold text-foreground">{(attendanceFactor * 100).toFixed(0)}%</p>
-              </div>
-               <div>
-                <Label className="text-sm text-muted-foreground">Salary After Attendance (Mock)</Label>
-                <p className="text-2xl font-semibold text-foreground">₹{salaryAfterAttendance.toLocaleString('en-IN')}</p>
+              <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
+                 <div>
+                  <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
+                  <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.totalApprovedAdvances.toLocaleString('en-IN')})</p>
+                </div>
+                <div className="pt-2">
+                  <Label className="text-sm text-primary/80">Net Payable Amount</Label>
+                  <p className="text-3xl font-bold text-primary">₹{payrollReport.finalNetPayable.toLocaleString('en-IN')}</p>
+                </div>
               </div>
             </div>
-            <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
-               <div>
-                <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
-                <p className="text-2xl font-semibold text-destructive">(₹{approvedAdvancesTotal.toLocaleString('en-IN')})</p>
-              </div>
-              <div className="pt-2">
-                <Label className="text-sm text-primary/80">Net Payable Amount</Label>
-                <p className="text-3xl font-bold text-primary">₹{netPayable.toLocaleString('en-IN')}</p>
-              </div>
+          ) : (
+            <div className="text-center py-10 text-muted-foreground">
+              <p>Could not calculate your payslip. This usually happens at the beginning of the month.</p>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

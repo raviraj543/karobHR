@@ -64,29 +64,59 @@ export default function EmployeeDetailPage() {
             if (event.isWithinGeofence) acc.inside++;
             else acc.outside++;
         }
+        if (event.type === 'check-out') {
+            if (event.isWithinGeofenceCheckout) acc.inside++;
+            else acc.outside++;
+        }
         return acc;
     }, { inside: 0, outside: 0 }) || { inside: 0, outside: 0 };
   }, [employeeAttendance]);
   
   const liveAttendanceEvent = useMemo(() => 
-    employeeAttendance?.find(e => e.status === 'Checked In'),
+    employeeAttendance?.find(e => e.status === 'Checked In' && e.timestamp && isToday(safeParseISO(e.timestamp)!)),
   [employeeAttendance]);
 
   const [liveDuration, setLiveDuration] = useState<number>(0);
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    const checkInTime = safeParseISO(liveAttendanceEvent?.checkInTime);
-    if (checkInTime) {
-      setLiveDuration(differenceInSeconds(new Date(), checkInTime)); // Set initial duration
-      interval = setInterval(() => {
-        setLiveDuration(differenceInSeconds(new Date(), checkInTime));
-      }, 1000);
-    } else {
-        setLiveDuration(0); // Reset if not checked in
+    if (!liveAttendanceEvent) {
+        setLiveDuration(0);
+        return;
     }
+    const checkInTime = safeParseISO(liveAttendanceEvent.timestamp);
+    if (!checkInTime) {
+        setLiveDuration(0);
+        return;
+    }
+
+    // Set initial duration immediately
+    setLiveDuration(differenceInSeconds(new Date(), checkInTime));
+    
+    const interval = setInterval(() => {
+      setLiveDuration(differenceInSeconds(new Date(), checkInTime));
+    }, 1000);
+    
     return () => clearInterval(interval);
   }, [liveAttendanceEvent]);
 
+  const completedTodayMinutes = useMemo(() => {
+    const todaysCompletedEvents = employeeAttendance?.filter(e => {
+        const eventDate = safeParseISO(e.timestamp);
+        return eventDate && isToday(eventDate) && e.status === 'Checked Out';
+    }) || [];
+
+    return todaysCompletedEvents.reduce((total, event) => {
+        return total + (event.totalHours ? event.totalHours * 60 : 0);
+    }, 0);
+  }, [employeeAttendance]);
+
+  const todayWorkMinutes = completedTodayMinutes + Math.floor(liveDuration / 60);
+
+  const dailyEarnings = useMemo(() => {
+    if (!employee?.baseSalary || !employee.standardDailyHours) return 0;
+    const perMinuteSalary = employee.baseSalary / (30 * employee.standardDailyHours * 60);
+    return todayWorkMinutes * perMinuteSalary;
+  }, [employee, todayWorkMinutes]);
+  
   const payrollReport = useMemo(() => {
     if (employee && employeeAttendance && employeeAttendance.length > 0 && companySettings) {
       const now = new Date();
@@ -128,33 +158,6 @@ export default function EmployeeDetailPage() {
     }
   };
 
-  const todayWorkMinutes = useMemo(() => {
-      const now = new Date();
-      const todaysEvents = employeeAttendance?.filter(e => e.timestamp && isToday(safeParseISO(e.timestamp)!)) || [];
-
-      let totalMinutes = 0;
-      todaysEvents.forEach(event => {
-          if (event.status === 'Checked Out' && event.totalHours) {
-              totalMinutes += event.totalHours * 60;
-          }
-      });
-      
-      if (liveAttendanceEvent) {
-          const liveCheckInTime = safeParseISO(liveAttendanceEvent.checkInTime);
-          if(liveCheckInTime && isToday(liveCheckInTime)) {
-             totalMinutes += differenceInMinutes(now, liveCheckInTime);
-          }
-      }
-
-      return totalMinutes;
-  }, [employeeAttendance, liveAttendanceEvent]);
-
-  const dailyEarnings = useMemo(() => {
-    if (!employee?.baseSalary || !employee.standardDailyHours) return 0;
-    const perMinuteSalary = employee.baseSalary / (30 * employee.standardDailyHours * 60);
-    return todayWorkMinutes * perMinuteSalary;
-  }, [employee, todayWorkMinutes]);
-
   if (authLoading) {
     return (
       <div className="flex items-center justify-center h-full py-10">
@@ -178,10 +181,10 @@ export default function EmployeeDetailPage() {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    return `${h}h ${m}m ${s}s`;
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
   };
 
-  const liveCheckInTime = safeParseISO(liveAttendanceEvent?.checkInTime);
+  const liveCheckInTime = liveAttendanceEvent ? safeParseISO(liveAttendanceEvent.timestamp) : null;
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
@@ -208,11 +211,11 @@ export default function EmployeeDetailPage() {
                     <CardTitle className="flex items-center"><Clock className="mr-2"/>Live Status & Today's Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {liveCheckInTime && isToday(liveCheckInTime) ? (
+                    {liveAttendanceEvent ? (
                         <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg text-center">
                             <p className="text-lg font-semibold text-green-800 dark:text-green-300">Currently Checked In</p>
                             <p className="text-3xl font-mono tracking-wider">{formatDurationFromSeconds(liveDuration)}</p>
-                            <p className="text-xs text-muted-foreground">Checked in {formatDistanceToNow(liveCheckInTime, { addSuffix: true })}</p>
+                            {liveCheckInTime && <p className="text-xs text-muted-foreground">Checked in {formatDistanceToNow(liveCheckInTime, { addSuffix: true })}</p>}
                         </div>
                     ) : (
                         <div className="p-4 bg-gray-100 dark:bg-gray-800/50 rounded-lg text-center">

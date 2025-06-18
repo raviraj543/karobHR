@@ -10,7 +10,7 @@ import {
   signInWithEmailAndPassword,
   type User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, Timestamp, arrayUnion } from 'firebase/firestore';
 import type { User, UserRole, Task, LeaveApplication, Announcement, UserDirectoryEntry, Advance, AttendanceEvent, LocationInfo, MonthlyPayrollReport, Holiday, CompanySettings, SalaryCalculationMode } from '@/lib/types';
 import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { getWorkingDaysInMonth, formatDuration } from '@/lib/dateUtils';
@@ -61,7 +61,7 @@ export interface AuthContextType {
   addAttendanceEvent: (locationInfo: LocationInfo) => Promise<string>;
   completeCheckout: (docId: string, workReport: string, locationInfo: LocationInfo) => Promise<void>;
   calculateMonthlyPayrollDetails: (employee: User, forYear: number, forMonth: number, employeeAttendanceEvents: AttendanceEvent[], companyHolidays?: Holiday[]) => MonthlyPayrollReport;
-  // Add other function signatures here as needed
+  requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
 }
 
 // Create the context
@@ -363,7 +363,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [dbInstance, user, companyId, companySettings]);
 
   const completeCheckout = useCallback(async (docId: string, workReport: string, locationInfo: LocationInfo) => {
-    if (!dbInstance || !user || !companyId) throw new Error("Context not available");
+    if (!dbInstance || !user || !companyId || !companySettings?.officeLocation) throw new Error("Context not available");
 
     const attendanceDocRef = doc(dbInstance, `companies/${companyId}/attendanceLog`, docId);
     const attendanceDocSnap = await getDoc(attendanceDocRef);
@@ -383,16 +383,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const checkoutTime = new Date();
     const totalHours = differenceInMilliseconds(checkoutTime, checkinTime) / (1000 * 60 * 60);
 
+    const { officeLocation } = companySettings;
+    const distance = calculateDistance(
+      locationInfo.latitude,
+      locationInfo.longitude,
+      officeLocation.latitude,
+      officeLocation.longitude
+    );
+    const isWithinGeofenceCheckout = distance <= officeLocation.radius;
+
+
     await updateDoc(attendanceDocRef, {
       status: 'Checked Out',
       type: 'check-out', // Ensure the event type is updated
       checkOutTime: Timestamp.fromDate(checkoutTime),
       checkOutLocation: locationInfo,
       workReport: workReport,
-      totalHours: totalHours
+      totalHours: totalHours,
+      isWithinGeofenceCheckout: isWithinGeofenceCheckout,
     });
 
-  }, [dbInstance, user, companyId]);
+  }, [dbInstance, user, companyId, companySettings]);
+
+  const requestAdvance = useCallback(async (employeeId: string, amount: number, reason: string) => {
+    if (!dbInstance || !user) throw new Error("User context not available");
+
+    const newAdvance: Advance = {
+      id: uuidv4(),
+      employeeId,
+      amount,
+      reason,
+      dateRequested: new Date().toISOString(),
+      status: 'pending',
+    };
+
+    const userDocRef = doc(dbInstance, 'users', user.id);
+    await updateDoc(userDocRef, {
+      advances: arrayUnion(newAdvance)
+    });
+
+  }, [dbInstance, user]);
 
 
   const calculateMonthlyPayrollDetails = useCallback((employee: User, forYear: number, forMonth: number, employeeAttendanceEvents: AttendanceEvent[], companyHolidays: Holiday[] = []): MonthlyPayrollReport => {
@@ -403,14 +433,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { baseSalary } = employee;
     const standardDailyHours = employee.standardDailyHours || 8; // Default to 8 if not set
 
-    // Payroll calculation based on company settings
-    const salaryCalculationMode = companySettings?.salaryCalculationMode || 'hourly_deduction'; // Default to hourly
-
-    let totalActualHoursWorked = 0;
-    let totalDeduction = 0;
-    let totalHoursMissed = 0;
-    let perMinuteSalary = 0;
-    let totalPaidDays = 0; // For check_in_out mode
+    // Per-minute salary calculation based on a standard 30-day month
+    const perMinuteSalary = baseSalary / (30 * standardDailyHours * 60);
 
     const monthStartDate = startOfMonth(new Date(forYear, forMonth));
     const monthEndDate = endOfMonth(new Date(forYear, forMonth));
@@ -418,95 +442,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const approvedHolidayDates = new Set(companyHolidays.filter(h => h.status === 'approved').map(h => format(h.date, 'yyyy-MM-dd')));
 
-    if (salaryCalculationMode === 'hourly_deduction') {
-        // Per-minute salary calculation based on your specs for hourly deduction
-        const totalMinutesInMonth = 30 * standardDailyHours * 60; // Assuming 30 standard days for base calculation
-        perMinuteSalary = baseSalary / totalMinutesInMonth;
+    let totalMinutesWorked = 0;
+    let paidHolidayHours = 0;
 
-        allDaysInMonth.forEach(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const isSundayDay = isSunday(day);
-            const isHoliday = approvedHolidayDates.has(dayStr);
-            
-            // Skip Sundays and declared holidays - they are paid
-            if (isSundayDay || isHoliday) {
-                totalActualHoursWorked += standardDailyHours; // Assume full day for paid holidays
-                return;
+    allDaysInMonth.forEach(day => {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        const isSundayDay = isSunday(day);
+        const isHoliday = approvedHolidayDates.has(dayStr);
+
+        if (isSundayDay || isHoliday) {
+            paidHolidayHours += standardDailyHours;
+            return; // No deduction, and work hours are not counted from attendance on these days
+        }
+
+        const dailyEvents = employeeAttendanceEvents.filter(e => e.timestamp && isSameDay(safeParseISO(e.timestamp) as Date, day));
+        const dailyWorkHours = dailyEvents.reduce((sum, event) => {
+            if (event.status === 'Checked Out' && event.totalHours) {
+                return sum + event.totalHours;
             }
+            return sum;
+        }, 0);
 
-            // Find attendance for this specific day
-            const attendanceForDay = employeeAttendanceEvents.filter(e => e.timestamp && isSameDay(safeParseISO(e.timestamp) as Date, day));
-            
-            let workedMinutesThisDay = 0;
-            attendanceForDay.forEach(event => {
-                if (event.status === 'Checked Out' && event.totalHours !== undefined && event.totalHours !== null) {
-                    workedMinutesThisDay += event.totalHours * 60;
-                }
-            });
-            
-            totalActualHoursWorked += (workedMinutesThisDay / 60);
+        totalMinutesWorked += dailyWorkHours * 60;
+    });
 
-            // If no check-in/out record on a working day, deduct the full day
-            if (workedMinutesThisDay === 0) {
-                totalDeduction += (standardDailyHours * 60 * perMinuteSalary);
-            } else {
-                // If they worked, but less than standard hours, deduct the shortfall
-                const shortfallMinutes = (standardDailyHours * 60) - workedMinutesThisDay;
-                if (shortfallMinutes > 0) {
-                    totalDeduction += shortfallMinutes * perMinuteSalary;
-                }
-            }
-        });
-        totalHoursMissed = (totalDeduction / (perMinuteSalary * 60)); // Convert deduction back to hours
-    } else if (salaryCalculationMode === 'check_in_out') {
-        // Check-in/Checkout Based Full-Day Salary Logic
-        const dailySalary = baseSalary / 30; // Based on 30 standard days
+    const earnedSalaryFromWork = totalMinutesWorked * perMinuteSalary;
+    const holidayPay = paidHolidayHours * 60 * perMinuteSalary;
+    const salaryAfterDeductions = earnedSalaryFromWork + holidayPay;
 
-        allDaysInMonth.forEach(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const isSundayDay = isSunday(day);
-            const isHoliday = approvedHolidayDates.has(dayStr);
-
-            // Sundays and declared holidays are always paid full day
-            if (isSundayDay || isHoliday) {
-                totalPaidDays++;
-                totalActualHoursWorked += standardDailyHours; // Assume full standard hours for reporting paid days
-                return;
-            }
-
-            // For working days, check for a completed check-in/checkout pair
-            const hasCompletedCheckoutToday = employeeAttendanceEvents.some(event => 
-                event.status === 'Checked Out' && event.timestamp && isSameDay(safeParseISO(event.timestamp) as Date, day)
-            );
-
-            if (hasCompletedCheckoutToday) {
-                totalPaidDays++; // Count as a full paid day
-                // For reporting total hours, sum the actual hours worked on these days
-                 const attendanceForDay = employeeAttendanceEvents.filter(e => e.timestamp && isSameDay(safeParseISO(e.timestamp) as Date, day));
-                 attendanceForDay.forEach(event => {
-                     if (event.status === 'Checked Out' && event.totalHours !== undefined && event.totalHours !== null) {
-                        totalActualHoursWorked += event.totalHours;
-                     }
-                 });
-            } else {
-                 // If no completed checkout on a working day, deduct a full day's pay
-                 totalDeduction += dailySalary; // Deduct one full day's salary
-            }
-        });
-
-         // Adjust totalHoursMissed/calculatedDeductions for reporting clarity in check_in_out mode
-         const totalUnpaidWorkingDays = allDaysInMonth.length - allDaysInMonth.filter(isSunday).length - approvedHolidayDates.size - totalPaidDays;
-         totalDeduction = totalUnpaidWorkingDays * (baseSalary / 30);
-         totalHoursMissed = totalUnpaidWorkingDays * standardDailyHours;
-    }
-
-    // Sum up approved advances for the month
     const totalApprovedAdvances = employee.advances
         ?.filter(adv => adv.status === 'approved' && adv.dateProcessed && getYear(safeParseISO(adv.dateProcessed)) === forYear && getMonth(safeParseISO(adv.dateProcessed)) === forMonth)
         .reduce((sum, adv) => sum + adv.amount, 0) ?? 0;
-    
-    const salaryAfterDeductions = baseSalary - totalDeduction;
+
     const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
+    const totalActualHoursWorked = totalMinutesWorked / 60;
+    const totalWorkingDaysInMonth = allDaysInMonth.length - allDaysInMonth.filter(isSunday).length - approvedHolidayDates.size;
+    const totalStandardHoursForMonth = totalWorkingDaysInMonth * standardDailyHours;
+    const totalHoursMissed = Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked);
+    const calculatedDeductions = baseSalary - salaryAfterDeductions;
 
     return {
         employeeId: employee.employeeId,
@@ -515,15 +488,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         year: forYear,
         baseSalary,
         standardDailyHours,
-        totalWorkingDaysInMonth: allDaysInMonth.length,
-        totalStandardHoursForMonth: allDaysInMonth.length * standardDailyHours, 
-        totalActualHoursWorked: totalActualHoursWorked,
-        totalHoursMissed: totalHoursMissed,
-        hourlyRate: perMinuteSalary !== 0 ? perMinuteSalary * 60 : baseSalary / (30 * standardDailyHours),
-        calculatedDeductions: totalDeduction,
-        salaryAfterDeductions: salaryAfterDeductions,
+        totalWorkingDaysInMonth,
+        totalStandardHoursForMonth,
+        totalActualHoursWorked,
+        totalHoursMissed,
+        hourlyRate: perMinuteSalary * 60,
+        calculatedDeductions,
+        salaryAfterDeductions,
         totalApprovedAdvances,
-        finalNetPayable: Math.max(0, finalNetPayable), // Ensure salary isn't negative
+        finalNetPayable: Math.max(0, finalNetPayable),
     };
 }, [companySettings?.salaryCalculationMode]);
 
@@ -547,10 +520,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     updateTask,
     addAttendanceEvent,
     completeCheckout,
-    calculateMonthlyPayrollDetails
+    calculateMonthlyPayrollDetails,
+    requestAdvance
   }), [
     user, role, loading, companyId, companySettings, allUsers, tasks, attendanceLog, announcements,
-    login, logout, addNewEmployee, updateCompanySettings, updateHolidayStatus, approveHolidayForPay, addTask, updateTask, addAttendanceEvent, completeCheckout, calculateMonthlyPayrollDetails
+    login, logout, addNewEmployee, updateCompanySettings, updateHolidayStatus, approveHolidayForPay, addTask, updateTask, addAttendanceEvent, completeCheckout, calculateMonthlyPayrollDetails, requestAdvance
   ]);
 
   return (

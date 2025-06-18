@@ -19,6 +19,19 @@ export const formatDuration = (ms: number): string => {
 };
 
 /**
+ * Formats a total number of hours (can be a decimal) into a string like "Xh Ym".
+ * @param totalHours The total hours.
+ * @returns A string representation of the hours and minutes.
+ */
+export const formatHoursAndMinutes = (totalHours: number): string => {
+    if (totalHours < 0) return '0h 0m';
+    const hours = Math.floor(totalHours);
+    const minutes = Math.round((totalHours - hours) * 60);
+    return `${hours}h ${minutes}m`;
+};
+
+
+/**
  * Checks if a given date is a Sunday.
  * @param date The date to check (can be a Date object or an ISO string).
  * @returns True if the date is a Sunday, false otherwise.
