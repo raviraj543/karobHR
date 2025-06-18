@@ -12,11 +12,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin } from 'lucide-react';
-import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow } from 'date-fns';
+import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee } from 'lucide-react';
+import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Timestamp } from 'firebase/firestore';
-
 
 const safeParseISO = (dateString: string | Date | Timestamp | undefined | null): Date | null => {
   if (!dateString) return null;
@@ -28,98 +27,76 @@ const safeParseISO = (dateString: string | Date | Timestamp | undefined | null):
   }
   try {
     const date = parseISO(dateString);
-    // Check if the date is valid
     if (isNaN(date.getTime())) {
       return null;
     }
     return date;
   } catch (error) {
-    console.warn("Could not parse date string:", dateString, error);
+    console.error("Could not parse date string:", dateString, error);
     return null;
   }
-};
-
-
-// Helper to calculate total work duration for a set of events
-const calculateTotalWorkMinutes = (events: AttendanceEvent[]) => {
-  return events.reduce((acc, event) => {
-    if (event.status === 'Checked Out' && event.checkInTime && event.checkOutTime) {
-      const checkIn = safeParseISO(event.checkInTime);
-      const checkOut = safeParseISO(event.checkOutTime);
-      if (checkIn && checkOut) {
-        return acc + differenceInMinutes(checkOut, checkIn);
-      }
-    }
-    return acc;
-  }, 0);
 };
 
 export default function EmployeeDetailPage() {
   const params = useParams();
   const { allUsers, attendanceLog, tasks, calculateMonthlyPayrollDetails, companySettings, loading: authLoading } = useAuth();
-
   const employeeId = params.employeeId as string;
 
-  const [employee, setEmployee] = useState<User | null>(null);
-  const [employeeTasks, setEmployeeTasks] = useState<Task[]>([]);
-  const [employeeAttendance, setEmployeeAttendance] = useState<AttendanceEvent[]>([]);
-  const [liveDuration, setLiveDuration] = useState<number>(0);
-  const [payrollReport, setPayrollReport] = useState<MonthlyPayrollReport | null>(null);
-  const [aiSummary, setAiSummary] = useState<string>('');
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-  const [geofenceStats, setGeofenceStats] = useState({ inside: 0, outside: 0 });
-
-  // Find the employee and their data from context
-  useEffect(() => {
-    if (allUsers.length > 0) {
-      const foundEmployee = allUsers.find(u => u.employeeId === employeeId) || null;
-      setEmployee(foundEmployee);
-      
-      if (foundEmployee) {
-        setEmployeeTasks(tasks.filter(t => t.assigneeId === foundEmployee.employeeId));
-        const attendance = attendanceLog.filter(a => a.userId === foundEmployee.id);
-        setEmployeeAttendance(attendance);
-
-        // Calculate geofence stats
-        const stats = attendance.reduce((acc, event) => {
-            if (event.type === 'check-in') {
-                if (event.isWithinGeofence) {
-                    acc.inside++;
-                } else {
-                    acc.outside++;
-                }
-            }
-            return acc;
-        }, { inside: 0, outside: 0 });
-        setGeofenceStats(stats);
-      }
+  // Memoize all derived data to react to context changes
+  const employeeData = useMemo(() => {
+    if (!employeeId || allUsers.length === 0) {
+      return null;
     }
-  }, [allUsers, tasks, attendanceLog, employeeId]);
+    const employee = allUsers.find(u => u.employeeId === employeeId) || null;
+    if (!employee) return null;
 
-  // Live status and duration calculation
+    const employeeAttendance = attendanceLog.filter(a => a.userId === employee.id);
+    const employeeTasks = tasks.filter(t => t.assigneeId === employee.employeeId);
+
+    return { employee, employeeAttendance, employeeTasks };
+  }, [employeeId, allUsers, attendanceLog, tasks]);
+
+  const { employee, employeeAttendance, employeeTasks } = employeeData || {};
+
+  const geofenceStats = useMemo(() => {
+    return employeeAttendance?.reduce((acc, event) => {
+        if (event.type === 'check-in') {
+            if (event.isWithinGeofence) acc.inside++;
+            else acc.outside++;
+        }
+        return acc;
+    }, { inside: 0, outside: 0 }) || { inside: 0, outside: 0 };
+  }, [employeeAttendance]);
+  
   const liveAttendanceEvent = useMemo(() => 
-    employeeAttendance.find(e => e.status === 'Checked In'),
+    employeeAttendance?.find(e => e.status === 'Checked In'),
   [employeeAttendance]);
 
+  const [liveDuration, setLiveDuration] = useState<number>(0);
   useEffect(() => {
     let interval: NodeJS.Timeout;
     const checkInTime = safeParseISO(liveAttendanceEvent?.checkInTime);
     if (checkInTime) {
+      setLiveDuration(differenceInSeconds(new Date(), checkInTime)); // Set initial duration
       interval = setInterval(() => {
         setLiveDuration(differenceInSeconds(new Date(), checkInTime));
       }, 1000);
+    } else {
+        setLiveDuration(0); // Reset if not checked in
     }
     return () => clearInterval(interval);
   }, [liveAttendanceEvent]);
 
-  // Payroll Calculation
-  useEffect(() => {
-    if (employee && employeeAttendance.length > 0 && companySettings) {
+  const payrollReport = useMemo(() => {
+    if (employee && employeeAttendance && employeeAttendance.length > 0 && companySettings) {
       const now = new Date();
-      const report = calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, []);
-      setPayrollReport(report);
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, []);
     }
+    return null;
   }, [employee, employeeAttendance, companySettings, calculateMonthlyPayrollDetails]);
+
+  const [aiSummary, setAiSummary] = useState<string>('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   
   const handleGenerateSummary = async () => {
     if (!employee) return;
@@ -132,7 +109,7 @@ export default function EmployeeDetailPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 employeeName: employee.name,
-                tasks: employeeTasks.map(t => ({ title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate, description: t.description })),
+                tasks: employeeTasks?.map(t => ({ title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate, description: t.description })),
                 leaveApplications: employee.leaves,
                 attendanceFactor: employee.mockAttendanceFactor || 1.0,
                 baseSalary: employee.baseSalary
@@ -151,7 +128,34 @@ export default function EmployeeDetailPage() {
     }
   };
 
-  if (authLoading || !employee) {
+  const todayWorkMinutes = useMemo(() => {
+      const now = new Date();
+      const todaysEvents = employeeAttendance?.filter(e => e.timestamp && isToday(safeParseISO(e.timestamp)!)) || [];
+
+      let totalMinutes = 0;
+      todaysEvents.forEach(event => {
+          if (event.status === 'Checked Out' && event.totalHours) {
+              totalMinutes += event.totalHours * 60;
+          }
+      });
+      
+      if (liveAttendanceEvent) {
+          const liveCheckInTime = safeParseISO(liveAttendanceEvent.checkInTime);
+          if(liveCheckInTime && isToday(liveCheckInTime)) {
+             totalMinutes += differenceInMinutes(now, liveCheckInTime);
+          }
+      }
+
+      return totalMinutes;
+  }, [employeeAttendance, liveAttendanceEvent]);
+
+  const dailyEarnings = useMemo(() => {
+    if (!employee?.baseSalary || !employee.standardDailyHours) return 0;
+    const perMinuteSalary = employee.baseSalary / (30 * employee.standardDailyHours * 60);
+    return todayWorkMinutes * perMinuteSalary;
+  }, [employee, todayWorkMinutes]);
+
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center h-full py-10">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -159,6 +163,16 @@ export default function EmployeeDetailPage() {
       </div>
     );
   }
+  
+  if (!employee) {
+    return <div className="text-center py-10">Employee not found.</div>;
+  }
+  
+  const formatDurationFromMinutes = (minutes: number) => {
+    const h = Math.floor(minutes / 60);
+    const m = Math.floor(minutes % 60);
+    return `${h}h ${m}m`;
+  };
 
   const formatDurationFromSeconds = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -167,15 +181,7 @@ export default function EmployeeDetailPage() {
     return `${h}h ${m}m ${s}s`;
   };
 
-  const today = new Date();
-  const todaysEvents = employeeAttendance.filter(e => {
-    const checkInDate = safeParseISO(e.checkInTime);
-    return checkInDate && format(checkInDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
-  });
-  const todayWorkMinutes = calculateTotalWorkMinutes(todaysEvents);
-  
   const liveCheckInTime = safeParseISO(liveAttendanceEvent?.checkInTime);
-
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
@@ -202,7 +208,7 @@ export default function EmployeeDetailPage() {
                     <CardTitle className="flex items-center"><Clock className="mr-2"/>Live Status & Today's Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {liveCheckInTime ? (
+                    {liveCheckInTime && isToday(liveCheckInTime) ? (
                         <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg text-center">
                             <p className="text-lg font-semibold text-green-800 dark:text-green-300">Currently Checked In</p>
                             <p className="text-3xl font-mono tracking-wider">{formatDurationFromSeconds(liveDuration)}</p>
@@ -215,11 +221,31 @@ export default function EmployeeDetailPage() {
                     )}
                     <Separator />
                      <div>
-                        <Label>Total Work Hours Today ({format(today, 'MMM do')})</Label>
-                        <p className="text-2xl font-bold">{Math.floor(todayWorkMinutes / 60)}h {todayWorkMinutes % 60}m</p>
+                        <Label>Total Work Hours Today ({format(new Date(), 'MMM do')})</Label>
+                        <p className="text-2xl font-bold">{formatDurationFromMinutes(todayWorkMinutes)}</p>
                         <Progress value={(todayWorkMinutes / ((employee.standardDailyHours || 8) * 60)) * 100} className="mt-2 h-2"/>
                         <p className="text-xs text-muted-foreground text-right">Goal: {employee.standardDailyHours || 8} hours</p>
                      </div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle className="flex items-center"><FileText className="mr-2"/>Recent Attendance & Reports</CardTitle></CardHeader>
+                <CardContent>
+                     <Table>
+                        <TableHeader>
+                            <TableRow><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Work Report</TableHead></TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {employeeAttendance?.slice(0, 5).map(event => (
+                                <TableRow key={event.id}>
+                                    <TableCell>{safeParseISO(event.timestamp) ? format(safeParseISO(event.timestamp) as Date, 'PP') : 'N/A'}</TableCell>
+                                    <TableCell><Badge variant={event.status === 'Checked In' ? 'default' : 'secondary'}>{event.status}</Badge></TableCell>
+                                    <TableCell className="text-sm">{event.workReport || <span className="text-muted-foreground">No report</span>}</TableCell>
+                                </TableRow>
+                            ))}
+                             {employeeAttendance?.length === 0 && <TableRow><TableCell colSpan={3} className="text-center">No attendance records found.</TableCell></TableRow>}
+                        </TableBody>
+                     </Table>
                 </CardContent>
             </Card>
 
@@ -246,10 +272,10 @@ export default function EmployeeDetailPage() {
                             <TableRow><TableHead>Task</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
-                            {employeeTasks.slice(0, 5).map(task => (
+                            {employeeTasks?.slice(0, 5).map(task => (
                                 <TableRow key={task.id}><TableCell>{task.title}</TableCell><TableCell><Badge>{task.status}</Badge></TableCell><TableCell>{task.priority}</TableCell></TableRow>
                             ))}
-                             {employeeTasks.length === 0 && <TableRow><TableCell colSpan={3} className="text-center">No tasks assigned.</TableCell></TableRow>}
+                             {employeeTasks?.length === 0 && <TableRow><TableCell colSpan={3} className="text-center">No tasks assigned.</TableCell></TableRow>}
                         </TableBody>
                      </Table>
                 </CardContent>
@@ -263,6 +289,13 @@ export default function EmployeeDetailPage() {
                 <CardContent className="space-y-2 text-sm">
                     <p><strong className="w-24 inline-block">Employee ID:</strong> <span className="font-mono text-xs">{employee.employeeId}</span></p>
                     <p><strong className="w-24 inline-block">Email:</strong> {employee.email}</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle className="flex items-center"><IndianRupee className="mr-2" />Today's Estimated Earnings</CardTitle></CardHeader>
+                <CardContent>
+                    <p className="text-2xl font-bold">₹{dailyEarnings.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Based on hours worked today and monthly salary.</p>
                 </CardContent>
             </Card>
             <Card>

@@ -16,6 +16,12 @@ export default function NotificationPermissionHandler() {
         if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
             const { firebaseApp, db } = getFirebaseInstances();
             const messaging = getMessaging(firebaseApp);
+            const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+
+            if (!vapidKey) {
+                console.error('Firebase VAPID key is not set in environment variables.');
+                return;
+            }
 
             const requestPermission = async () => {
                 try {
@@ -24,7 +30,7 @@ export default function NotificationPermissionHandler() {
                         console.log('Notification permission granted.');
                         
                         // Get token
-                        const currentToken = await getToken(messaging, { vapidKey: "BAlb_eL5M1DSEVnJgC_S9Z2lq3OqO8gH1e9v6v2n2Y3m3jT8b8yL9jXpC5Zl3bYkHw8SgJ3jG_xJ2vYwGvCj4Y" });
+                        const currentToken = await getToken(messaging, { vapidKey: vapidKey });
                         
                         if (currentToken) {
                             console.log('FCM Token:', currentToken);

@@ -1,5 +1,7 @@
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
+export type SalaryCalculationMode = 'hourly_deduction' | 'check_in_out';
+
 export interface CompanySettings {
   companyId: string;
   companyName: string;
@@ -11,7 +13,7 @@ export interface CompanySettings {
     longitude: number;
     radius: number; // in meters
   };
-  // other company-wide settings can go here
+  salaryCalculationMode?: SalaryCalculationMode;
 }
 
 export interface Advance {
@@ -48,9 +50,9 @@ export interface AttendanceEvent {
   matchedGeofenceTypeCheckout?: 'office' | null; // For check-out
   status: 'Checked In' | 'Checked Out';
   workReport?: string | null;
+  totalHours?: number; // Total hours for check-out events
 }
 
-// For the top-level user directory lookup
 export interface UserDirectoryEntry {
     userId: string; // Firebase Auth UID
     employeeId: string;
@@ -60,13 +62,11 @@ export interface UserDirectoryEntry {
     name?: string;
 }
 
-
 export interface AiTask {
   title: string;
   description: string;
   status: 'In Progress' | 'Completed' | 'Blocked';
 }
-
 
 export interface ClientTask extends AiTask {
   id: string;
@@ -86,12 +86,12 @@ export interface Task {
   updatedAt: string; // ISO Date string
 }
 
-
 export interface Holiday {
-  id:string;
+  id: string;
   name: string;
   date: Date; // Stored as Timestamp in Firestore
   description?: string;
+  status: 'scheduled' | 'approved';
 }
 
 export interface LeaveApplication {
@@ -146,7 +146,8 @@ export interface User {
   department?: string;
   joiningDate?: string; // ISO date string
   baseSalary?: number;
-  standardDailyHours?: number; // Added standard daily hours
+  standardDailyHours?: number;
+  fcmToken?: string;
   contactInfo?: {
     phone?: string;
     address?: string;
@@ -159,5 +160,5 @@ export interface User {
   } | null;
   leaves?: LeaveApplication[];
   advances?: Advance[];
-  mockAttendanceFactor?: number; // Temporary for payslip calculation
+  mockAttendanceFactor?: number;
 }

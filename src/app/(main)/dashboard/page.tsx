@@ -1,29 +1,82 @@
 
-'use client'; // Required for useAuth hook
+'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckSquare, DollarSign, UserCircle, Megaphone } from 'lucide-react';
+import { CheckSquare, DollarSign, UserCircle, Megaphone, CalendarDays, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
-import { useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useEffect, useMemo } from 'react';
+import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO } from 'date-fns';
 
 export default function EmployeeDashboardPage() {
-  const { user, announcements } = useAuth(); 
+  const { user, announcements, attendanceLog, tasks, loading: authLoading } = useAuth(); 
 
   useEffect(() => {
     document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
   }, [user?.name]);
 
+  const dashboardStats = useMemo(() => {
+    if (!user || !attendanceLog || !tasks) {
+      return {
+        attendance: 'N/A',
+        pendingTasks: 'N/A',
+        leaveBalance: 'N/A',
+        nextPayslip: 'N/A'
+      };
+    }
 
-  const employeeName = user?.name || "Employee";
+    // Attendance Calculation
+    const today = new Date();
+    const monthStart = startOfMonth(today);
+    const totalDaysInMonth = getDaysInMonth(today);
+    const uniqueDaysAttended = new Set(
+      attendanceLog
+        .filter(event => {
+          const eventDate = parseISO(event.timestamp);
+          return isSameDay(eventDate, today) || (eventDate >= monthStart && eventDate < today);
+        })
+        .map(event => format(parseISO(event.timestamp), 'yyyy-MM-dd'))
+    ).size;
+    const attendance = `${uniqueDaysAttended}/${totalDaysInMonth} Days`;
+
+    // Pending Tasks Calculation
+    const pendingTasksCount = tasks.filter(task => task.assigneeId === user.employeeId && task.status !== 'Completed').length;
+    const pendingTasks = `${pendingTasksCount} Tasks`;
+
+    // Leave Balance (assuming a standard entitlement for now)
+    const annualLeaveEntitlement = 20; // This can be made configurable later
+    const leavesTaken = user.leaves?.filter(l => l.status === 'approved').length || 0;
+    const leaveBalance = `${annualLeaveEntitlement - leavesTaken} Days`;
+    
+    // Next Payslip Calculation
+    const nextPayslipDate = format(today, 'MMMM do, yyyy');
+
+    return {
+      attendance,
+      pendingTasks,
+      leaveBalance,
+      nextPayslip: nextPayslipDate
+    };
+  }, [user, attendanceLog, tasks]);
+  
+  if (authLoading || !user) {
+    return (
+        <div className="flex items-center justify-center h-full py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2 text-muted-foreground">Loading Your Dashboard...</p>
+        </div>
+    );
+  }
+
+  const employeeName = user.name || "Employee";
   const quickStats = [
-    { title: "Attendance This Month", value: "20/22 Days", icon: CheckSquare, link: "/attendance" }, // Mock
-    { title: "Pending Tasks", value: "3 Tasks", icon: CheckSquare, link: "/tasks" }, // Mock
-    { title: "Leave Balance", value: "10 Days", icon: UserCircle, link: "/leave" }, // Mock
-    { title: "Next Payslip", value: "Oct 30, 2023", icon: DollarSign, link: "/payroll" }, // Mock
+    { title: "Attendance This Month", value: dashboardStats.attendance, icon: CalendarDays, link: "/attendance" },
+    { title: "Pending Tasks", value: dashboardStats.pendingTasks, icon: CheckSquare, link: "/tasks" },
+    { title: "Leave Balance", value: dashboardStats.leaveBalance, icon: UserCircle, link: "/leave" },
+    { title: "Next Payslip", value: dashboardStats.nextPayslip, icon: DollarSign, link: "/payroll" },
   ];
 
   return (

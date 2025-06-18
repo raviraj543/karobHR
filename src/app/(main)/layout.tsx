@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
+import NotificationPermissionHandler from '@/components/layout/NotificationPermissionHandler';
 
 export default function AuthenticatedLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -35,5 +36,10 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
     );
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShell>
+      <NotificationPermissionHandler />
+      {children}
+    </AppShell>
+  );
 }

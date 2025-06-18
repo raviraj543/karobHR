@@ -15,6 +15,7 @@ import { getFirebaseInstances } from '@/lib/firebase/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { calculateDistance } from '@/lib/locationUtils';
+import { Label } from '@/components/ui/label';
 
 type AttendanceStatus = 'checked-out' | 'checked-in' | 'processing-check-in' | 'processing-check-out' | 'submitting-report' | 'unknown' | 'error';
 type LocationStatus = 'idle' | 'fetching' | 'success' | 'error';
@@ -69,7 +70,7 @@ export default function AttendancePage() {
         setCurrentDayDocId(latestDoc.id);
         setAttendanceStatus(data.status === 'Checked In' ? 'checked-in' : 'checked-out');
       }
-    }, (errorObject) => {
+    }, (errorObject: any) => {
       console.error("Firestore onSnapshot error:", errorObject);
       setAttendanceStatus('error');
       setInitializationError(`Database Error: ${errorObject.message}. Check console for details.`);
@@ -255,13 +256,13 @@ export default function AttendancePage() {
       <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center"><FileText className="mr-2 h-5 w-5 text-primary"/>Daily Work Report</DialogTitle>
+            <DialogTitle>Daily Work Report</DialogTitle>
             <DialogDescription>
               Before checking out, please submit a brief report of the work you completed today.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-2">
-            <label htmlFor="workReport" className="text-sm font-medium">Work Report</label>
+            <Label htmlFor="workReport">Work Report</Label>
             <Textarea id="workReport" value={workReport} onChange={(e) => setWorkReport(e.target.value)} placeholder="Enter your work summary here..." rows={5}/>
           </div>
           <DialogFooter>

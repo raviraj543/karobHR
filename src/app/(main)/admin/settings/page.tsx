@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { CompanySettings, LocationInfo } from '@/lib/types';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { SalarySettingsForm } from '@/components/admin/SalarySettingsForm';
 
 export default function AdminSettingsPage() {
   const { companySettings, updateCompanySettings, companyId, loading: authLoading, user } = useAuth();
@@ -22,7 +23,6 @@ export default function AdminSettingsPage() {
   const [officeLat, setOfficeLat] = useState('');
   const [officeLon, setOfficeLon] = useState('');
   const [officeRadius, setOfficeRadius] = useState('');
-  const [salaryCalcMethod, setSalaryCalcMethod] = useState<CompanySettings['salaryCalculationMethod']>('standard_hours');
   
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
@@ -40,7 +40,7 @@ export default function AdminSettingsPage() {
 
     if (companyId) {
       if (companySettings) {
-        const { officeLocation, salaryCalculationMethod } = companySettings;
+        const { officeLocation } = companySettings;
         if (officeLocation) {
           setOfficeName(officeLocation.name || 'Main Office');
           setOfficeLat(String(officeLocation.latitude));
@@ -52,13 +52,11 @@ export default function AdminSettingsPage() {
           setOfficeLon('0');
           setOfficeRadius('100');
         }
-        setSalaryCalcMethod(salaryCalculationMethod || 'standard_hours');
       } else {
         setOfficeName('Main Office');
         setOfficeLat('0');
         setOfficeLon('0');
         setOfficeRadius('100');
-        setSalaryCalcMethod('standard_hours');
       }
     }
     setFormInitialized(true);
@@ -113,7 +111,6 @@ export default function AdminSettingsPage() {
           longitude: Number(lon),
           radius: Number(radius),
         },
-        salaryCalculationMethod: salaryCalcMethod,
       };
       await updateCompanySettings(settingsToSave);
       toast({ title: "Settings Saved", description: "Your company settings have been updated successfully." });
@@ -163,30 +160,7 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
       
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center"><Wallet className="mr-2 h-5 w-5 text-primary" /> Salary Calculation Method</CardTitle>
-          <CardDescription>Choose how employee payroll is calculated based on attendance.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RadioGroup value={salaryCalcMethod} onValueChange={(value) => setSalaryCalcMethod(value as CompanySettings['salaryCalculationMethod'])} disabled={isActionDisabled}>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="standard_hours" id="standard_hours" />
-              <Label htmlFor="standard_hours" className="font-normal">
-                <span className="font-semibold">Standard Daily Hours</span>
-                <p className="text-xs text-muted-foreground">Calculate deductions for missed hours based on the employee's standard daily work hours (e.g., 8 hours). Full salary is paid if total hours meet or exceed the monthly standard.</p>
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="exact_checkin_checkout" id="exact_checkin_checkout" />
-              <Label htmlFor="exact_checkin_checkout" className="font-normal">
-                <span className="font-semibold">Exact Check-in/Check-out Time</span>
-                 <p className="text-xs text-muted-foreground">Calculate salary based on the exact duration between check-in and check-out, down to the minute. This provides a more precise, usage-based payroll.</p>
-              </Label>
-            </div>
-          </RadioGroup>
-        </CardContent>
-      </Card>
+      <SalarySettingsForm />
 
       <div className="flex justify-end">
         <Button onClick={handleSaveSettings} disabled={isActionDisabled}>

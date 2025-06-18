@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, AlertTriangle, RefreshCw, FileText } from 'lucide-react';
 import { formatDistanceToNow, differenceInMilliseconds, format, isToday, parseISO } from 'date-fns';
 import { formatDuration } from '@/lib/dateUtils';
 
@@ -20,6 +20,7 @@ interface EmployeeAttendanceStatus {
   location?: { latitude: number; longitude: number; accuracy?: number } | null;
   workingHoursToday: string;
   liveCheckInTime?: string;
+  workReport?: string | null; // Added work report field
 }
 
 const LiveDuration = ({ checkInTime }: { checkInTime: string }) => {
@@ -78,31 +79,33 @@ export default function AdminLiveAttendancePage() {
       let isWithinGeofence: boolean | null | undefined;
       let location: EmployeeAttendanceStatus['location'];
       let liveCheckInTime: string | undefined;
+      let totalHoursToday = 0;  // Track in total hours
+      let dailyWorkReport: string | null | undefined; // Variable for the report
 
-      // Calculate total hours today based on stored totalHours for completed events
-      let totalHoursToday = userEventsToday.reduce((sum, event) => {
-          // Add totalHours for completed check-out events
+       // Add up totalHours from 'Checked Out' events and calculate live duration
+       userEventsToday.forEach(event => {
           if (event.status === 'Checked Out' && event.totalHours !== undefined && event.totalHours !== null) {
-              return sum + event.totalHours;
+             totalHoursToday += event.totalHours;
           }
-          return sum;
-      }, 0); // Sum in hours
+       });
 
-      // Calculate duration for the current session if checked in today
-      let currentSessionDurationHours = 0;
-      const latestCheckInEventToday = userEventsToday.find(event => event.type === 'check-in' && event.status === 'Checked In');
+       // Handle live check-in
+       const liveEvent = userEventsToday.find(event => event.type === 'check-in' && event.status === 'Checked In');
+       if (liveEvent && liveEvent.timestamp) {
+          const checkInDate = parseISO(liveEvent.timestamp);
+           if (isToday(checkInDate)) {
+               const currentSessionDurationMs = todayDate.getTime() - checkInDate.getTime();
+               const currentSessionDurationHours = currentSessionDurationMs / (1000 * 60 * 60); // Convert to hours
+               totalHoursToday += currentSessionDurationHours; // Add live session duration
+               liveCheckInTime = liveEvent.timestamp; // Set for LiveDuration component
+           }
+       }
 
-      if (latestCheckInEventToday && latestCheckInEventToday.timestamp) {
-          const checkInDate = parseISO(latestCheckInEventToday.timestamp);
-          // Check if the check-in is actually from today before calculating live duration
-          if (isToday(checkInDate)) {
-             currentSessionDurationHours = differenceInMilliseconds(todayDate, checkInDate) / (1000 * 60 * 60);
-             liveCheckInTime = latestCheckInEventToday.timestamp; // Use this for live duration display
-          }
+      // Find the latest checked-out event today to get the report
+      const latestCheckoutEventToday = userEventsToday.find(event => event.type === 'check-out' && event.workReport);
+      if(latestCheckoutEventToday) {
+          dailyWorkReport = latestCheckoutEventToday.workReport; // Extract the report
       }
-
-      // Total hours today is the sum of completed sessions and the current session (if any)
-      totalHoursToday += currentSessionDurationHours;
 
 
       if (latestEvent) {
@@ -110,7 +113,7 @@ export default function AdminLiveAttendancePage() {
         lastActivityTime = latestEvent.timestamp;
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.checkInLocation;
-        // Note: liveCheckInTime is already set above if they are checked in today
+        // Note: liveCheckInTime and dailyWorkReport are already set above
       }
 
       return {
@@ -120,7 +123,8 @@ export default function AdminLiveAttendancePage() {
         isWithinGeofence,
         location,
         liveCheckInTime,
-        workingHoursToday: formatDuration(totalHoursToday * 60 * 60 * 1000), // Convert hours back to milliseconds for formatting
+        workingHoursToday: formatDuration(totalHoursToday * 60 * 60 * 1000), // Format total hours into a duration
+        workReport: dailyWorkReport, // Include the work report in the status object
       };
     }).sort((a,b) => (a.user.name || "").localeCompare(b.user.name || ""));
   }, [allUsers, attendanceLog, authLoading, lastRefreshed]); // Add attendanceLog as dependency
@@ -165,10 +169,11 @@ export default function AdminLiveAttendancePage() {
                 <TableHead>Geofence</TableHead>
                 <TableHead>Live Session Duration</TableHead>
                 <TableHead>Total Hours (Today)</TableHead>
+                <TableHead>Daily Report</TableHead>{/* Added new table header */}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employeeAttendanceData.map(({ user, status, lastActivityTime, isWithinGeofence, liveCheckInTime, workingHoursToday }) => (
+              {employeeAttendanceData.map(({ user, status, lastActivityTime, isWithinGeofence, liveCheckInTime, workingHoursToday, workReport }) => ( // Destructure workReport
                 <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell>
                     <div className="flex items-center space-x-3">
@@ -206,11 +211,18 @@ export default function AdminLiveAttendancePage() {
                      <Clock className="inline-block mr-1.5 h-4 w-4 text-primary/80" />
                      {workingHoursToday}
                   </TableCell>
+                   <TableCell className="text-sm">
+                      {workReport ? (
+                          <div className="flex items-center"><FileText className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> {workReport}</div>
+                      ) : (
+                          <span className="text-muted-foreground text-xs">No report filed today.</span>
+                      )}
+                   </TableCell>{/* Added new table cell */}
                 </TableRow>
               ))}
               {employeeAttendanceData.length === 0 && !authLoading && (
                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8"> {/* Updated colspan */}
                       No employee attendance data available for today.
                     </TableCell>
                  </TableRow>

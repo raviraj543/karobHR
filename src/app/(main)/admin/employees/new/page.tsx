@@ -1,7 +1,8 @@
-
+you
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -46,6 +47,7 @@ type NewEmployeeFormValues = z.infer<typeof newEmployeeSchema>;
 
 export default function AddNewEmployeePage() {
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
   const { toast } = useToast();
   const { addNewEmployee, companyId: adminCompanyId, loading: authLoading, companySettings } = useAuth();
 
@@ -102,13 +104,15 @@ export default function AddNewEmployeePage() {
     };
 
     try {
-      await addNewEmployee(employeeDataForContext, data.password);
-      toast({
-        title: "Employee Account Added",
-        description: `Account for ${data.name} (${data.employeeId}) in company ${adminCompanyId} has been added. Salary: ${data.baseSalary ? `₹${data.baseSalary.toLocaleString('en-IN')}` : 'N/A'}, Std. Hours: ${data.standardDailyHours || 'N/A'}h.`,
-        duration: 7000,
-      });
-      form.reset();
+      const newEmployee = await addNewEmployee(employeeDataForContext, data.password);
+      if (newEmployee) {
+        toast({
+          title: "Employee Account Added",
+          description: `Account for ${data.name} (${data.employeeId}) has been added successfully.`,
+          duration: 7000,
+        });
+        router.push(`/admin/employees/${data.employeeId}`);
+      }
     } catch (error) {
         toast({
             title: "Error Adding Employee",

@@ -1,57 +1,57 @@
 
 {
-  "name": "BizFlow - Employee Management",
-  "short_name": "BizFlow",
+  "name": "KarobHR - Employee Management",
+  "short_name": "KarobHR",
   "description": "Comprehensive Employee Attendance, Payroll, Leave, and Task Management.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#E9D8FD",
-  "theme_color": "#6D28D9",
+  "background_color": "#ffffff",
+  "theme_color": "#ff4747",
   "icons": [
     {
-      "src": "https://placehold.co/72x72.png?text=BF72",
+      "src": "karobhr.png",
       "sizes": "72x72",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://placehold.co/96x96.png?text=BF96",
+      "src": "karobhr.png",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://placehold.co/128x128.png?text=BF128",
+      "src": "karobhr.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://placehold.co/144x144.png?text=BF144",
+      "src": "karobhr.png",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://placehold.co/152x152.png?text=BF152",
+      "src": "karobhr.png",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://placehold.co/192x192.png?text=BF192",
+      "src": "karobhr.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://placehold.co/384x384.png?text=BF384",
+      "src": "karobhr.png",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://placehold.co/512x512.png?text=BF512",
+      "src": "karobhr.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
