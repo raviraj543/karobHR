@@ -1,0 +1,184 @@
+{
+  "version": 3,
+  "pages404": true,
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "dynamicRoutes": [
+    {
+      "page": "/admin/employees/[employeeId]",
+      "regex": "^/admin/employees/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPemployeeId": "nxtPemployeeId"
+      },
+      "namedRegex": "^/admin/employees/(?<nxtPemployeeId>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/admin/dashboard",
+      "regex": "^/admin/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/dashboard(?:/)?$"
+    },
+    {
+      "page": "/admin/employees",
+      "regex": "^/admin/employees(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/employees(?:/)?$"
+    },
+    {
+      "page": "/admin/employees/new",
+      "regex": "^/admin/employees/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/employees/new(?:/)?$"
+    },
+    {
+      "page": "/admin/holidays",
+      "regex": "^/admin/holidays(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/holidays(?:/)?$"
+    },
+    {
+      "page": "/admin/leave-approvals",
+      "regex": "^/admin/leave\\-approvals(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/leave\\-approvals(?:/)?$"
+    },
+    {
+      "page": "/admin/live-attendance",
+      "regex": "^/admin/live\\-attendance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/live\\-attendance(?:/)?$"
+    },
+    {
+      "page": "/admin/payroll",
+      "regex": "^/admin/payroll(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/payroll(?:/)?$"
+    },
+    {
+      "page": "/admin/settings",
+      "regex": "^/admin/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/settings(?:/)?$"
+    },
+    {
+      "page": "/admin/tasks",
+      "regex": "^/admin/tasks(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/tasks(?:/)?$"
+    },
+    {
+      "page": "/admin-signup",
+      "regex": "^/admin\\-signup(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin\\-signup(?:/)?$"
+    },
+    {
+      "page": "/attendance",
+      "regex": "^/attendance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/attendance(?:/)?$"
+    },
+    {
+      "page": "/checkout/report",
+      "regex": "^/checkout/report(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/checkout/report(?:/)?$"
+    },
+    {
+      "page": "/dashboard",
+      "regex": "^/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/dashboard(?:/)?$"
+    },
+    {
+      "page": "/favicon.ico",
+      "regex": "^/favicon\\.ico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/forgot-password",
+      "regex": "^/forgot\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/forgot\\-password(?:/)?$"
+    },
+    {
+      "page": "/leave",
+      "regex": "^/leave(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/leave(?:/)?$"
+    },
+    {
+      "page": "/login",
+      "regex": "^/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/login(?:/)?$"
+    },
+    {
+      "page": "/payroll",
+      "regex": "^/payroll(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/payroll(?:/)?$"
+    },
+    {
+      "page": "/profile",
+      "regex": "^/profile(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/profile(?:/)?$"
+    },
+    {
+      "page": "/settings",
+      "regex": "^/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/settings(?:/)?$"
+    },
+    {
+      "page": "/tasks",
+      "regex": "^/tasks(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/tasks(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "RSC",
+    "varyHeader": "RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch",
+    "prefetchHeader": "Next-Router-Prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSuffix": ".prefetch.rsc",
+    "prefetchSegmentHeader": "Next-Router-Segment-Prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments"
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  },
+  "rewrites": []
+}
