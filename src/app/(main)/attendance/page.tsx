@@ -187,14 +187,22 @@ export default function AttendancePage() {
             if (distance !== null) {
                 const geofenceRadius = companySettings?.officeLocation?.radius ?? user?.remoteWorkLocation?.radius ?? 0;
                 const isInside = distance <= geofenceRadius;
-                const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
+                const friendlyDist = distance > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
 
-                return <Alert variant={isInside ? 'default' : 'destructive'} className="text-center">
-                          <AlertTitle>{isInside ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
-                          <AlertDescription>
-                            Approx. {friendlyDist} away from the required location.
-                          </AlertDescription>
-                       </Alert>;
+                return (
+                  <div>
+                    <Alert variant={isInside ? 'default' : 'destructive'} className="text-center">
+                              <AlertTitle>{isInside ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
+                              <AlertDescription>
+                                Approx. {friendlyDist} away from the required location.
+                              </AlertDescription>
+                           </Alert>
+                    <div className="text-xs text-muted-foreground mt-2">
+                        <p>Your Location: {currentLocation?.latitude.toFixed(6)}, {currentLocation?.longitude.toFixed(6)}</p>
+                        <p>Office Location: {companySettings?.officeLocation?.latitude.toFixed(6)}, {companySettings?.officeLocation?.longitude.toFixed(6)}</p>
+                    </div>
+                  </div>
+                )
             }
             return <p className="text-sm text-center text-muted-foreground">Location fetched, but no geofence to compare.</p>;
         case 'error':

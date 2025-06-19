@@ -27,6 +27,7 @@ import {
   CreditCard,
   Clock,
   Menu,
+  HandCoins
 } from 'lucide-react';
 import { useMobile } from '@/hooks/use-mobile';
 
@@ -52,6 +53,7 @@ const navItems: NavItem[] = [
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
   { href: '/admin/live-attendance', label: 'Live Attendance', icon: Clock, allowedRoles: ['admin'] },
   { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] },
+  { href: '/admin/advance-approvals', label: 'Advance Approvals', icon: HandCoins, allowedRoles: ['admin'] },
   { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin'] },
   { href: '/admin/settings', label: 'Company Settings', icon: SettingsIcon, allowedRoles: ['admin'], isBottom: true },
 ];

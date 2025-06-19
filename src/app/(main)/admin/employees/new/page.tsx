@@ -111,7 +111,7 @@ export default function AddNewEmployeePage() {
           description: `Account for ${data.name} (${data.employeeId}) has been added successfully.`,
           duration: 7000,
         });
-        router.push(`/admin/employees/${data.employeeId}`);
+        form.reset();
       }
     } catch (error) {
         toast({

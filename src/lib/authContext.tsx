@@ -61,7 +61,12 @@ export interface AuthContextType {
   addAttendanceEvent: (locationInfo: LocationInfo) => Promise<string>;
   completeCheckout: (docId: string, workReport: string, locationInfo: LocationInfo) => Promise<void>;
   calculateMonthlyPayrollDetails: (employee: User, forYear: number, forMonth: number, employeeAttendanceEvents: AttendanceEvent[], companyHolidays?: Holiday[]) => MonthlyPayrollReport;
+  addLeaveApplication: (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => Promise<void>;
+  approveLeaveApplication: (userId: string, leaveId: string) => Promise<void>;
+  rejectLeaveApplication: (userId: string, leaveId: string) => Promise<void>;
   requestAdvance: (employeeId: string, amount: number, reason: string) => Promise<void>;
+  approveAdvance: (advanceId: string) => Promise<void>;
+  rejectAdvance: (advanceId: string) => Promise<void>;
 }
 
 // Create the context
@@ -363,7 +368,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [dbInstance, user, companyId, companySettings]);
 
   const completeCheckout = useCallback(async (docId: string, workReport: string, locationInfo: LocationInfo) => {
-    if (!dbInstance || !user || !companyId || !companySettings?.officeLocation) throw new Error("Context not available");
+    if (!dbInstance || !user || !companyId) throw new Error("Context not available");
 
     const attendanceDocRef = doc(dbInstance, `companies/${companyId}/attendanceLog`, docId);
     const attendanceDocSnap = await getDoc(attendanceDocRef);
@@ -383,33 +388,49 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const checkoutTime = new Date();
     const totalHours = differenceInMilliseconds(checkoutTime, checkinTime) / (1000 * 60 * 60);
 
-    const { officeLocation } = companySettings;
-    const distance = calculateDistance(
-      locationInfo.latitude,
-      locationInfo.longitude,
-      officeLocation.latitude,
-      officeLocation.longitude
-    );
-    const isWithinGeofenceCheckout = distance <= officeLocation.radius;
-
-
     await updateDoc(attendanceDocRef, {
       status: 'Checked Out',
       type: 'check-out', // Ensure the event type is updated
       checkOutTime: Timestamp.fromDate(checkoutTime),
       checkOutLocation: locationInfo,
       workReport: workReport,
-      totalHours: totalHours,
-      isWithinGeofenceCheckout: isWithinGeofenceCheckout,
+      totalHours: totalHours
     });
 
-  }, [dbInstance, user, companyId, companySettings]);
+  }, [dbInstance, user, companyId]);
+
+  const addLeaveApplication = useCallback(async (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => {
+    if (!dbInstance || !user || !companyId) throw new Error("User context not available");
+
+    const newLeaveApplication: Omit<LeaveApplication, 'id'> = {
+      ...leaveData,
+      id: uuidv4(),
+      userId: user.id,
+      employeeId: user.employeeId,
+      status: 'pending',
+      appliedAt: new Date().toISOString(),
+    };
+
+    await addDoc(collection(dbInstance, `companies/${companyId}/leaveApplications`), newLeaveApplication);
+
+  }, [dbInstance, user, companyId]);
+
+  const approveLeaveApplication = useCallback(async (userId: string, leaveId: string) => {
+    if (!dbInstance || !companyId) throw new Error("User context not available");
+    const leaveDocRef = doc(dbInstance, `companies/${companyId}/leaveApplications`, leaveId);
+    await updateDoc(leaveDocRef, { status: 'approved' });
+  }, [dbInstance, companyId]);
+
+  const rejectLeaveApplication = useCallback(async (userId: string, leaveId: string) => {
+    if (!dbInstance || !companyId) throw new Error("User context not available");
+    const leaveDocRef = doc(dbInstance, `companies/${companyId}/leaveApplications`, leaveId);
+    await updateDoc(leaveDocRef, { status: 'rejected' });
+  }, [dbInstance, companyId]);
 
   const requestAdvance = useCallback(async (employeeId: string, amount: number, reason: string) => {
-    if (!dbInstance || !user) throw new Error("User context not available");
+    if (!dbInstance || !user || !companyId) throw new Error("User context not available");
 
-    const newAdvance: Advance = {
-      id: uuidv4(),
+    const newAdvance: Omit<Advance, 'id'> = {
       employeeId,
       amount,
       reason,
@@ -417,12 +438,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       status: 'pending',
     };
 
-    const userDocRef = doc(dbInstance, 'users', user.id);
-    await updateDoc(userDocRef, {
-      advances: arrayUnion(newAdvance)
-    });
+    await addDoc(collection(dbInstance, `companies/${companyId}/advances`), newAdvance);
 
-  }, [dbInstance, user]);
+  }, [dbInstance, user, companyId]);
+
+  const approveAdvance = useCallback(async (advanceId: string) => {
+    if (!dbInstance || !companyId) throw new Error("User context not available");
+    const advanceDocRef = doc(dbInstance, `companies/${companyId}/advances`, advanceId);
+    await updateDoc(advanceDocRef, { status: 'approved', dateProcessed: new Date().toISOString() });
+  }, [dbInstance, companyId]);
+
+  const rejectAdvance = useCallback(async (advanceId: string) => {
+    if (!dbInstance || !companyId) throw new Error("User context not available");
+    const advanceDocRef = doc(dbInstance, `companies/${companyId}/advances`, advanceId);
+    await updateDoc(advanceDocRef, { status: 'rejected', dateProcessed: new Date().toISOString() });
+  }, [dbInstance, companyId]);
 
 
   const calculateMonthlyPayrollDetails = useCallback((employee: User, forYear: number, forMonth: number, employeeAttendanceEvents: AttendanceEvent[], companyHolidays: Holiday[] = []): MonthlyPayrollReport => {
@@ -521,10 +551,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addAttendanceEvent,
     completeCheckout,
     calculateMonthlyPayrollDetails,
-    requestAdvance
+    addLeaveApplication,
+    approveLeaveApplication,
+    rejectLeaveApplication,
+    requestAdvance,
+    approveAdvance,
+    rejectAdvance
   }), [
     user, role, loading, companyId, companySettings, allUsers, tasks, attendanceLog, announcements,
-    login, logout, addNewEmployee, updateCompanySettings, updateHolidayStatus, approveHolidayForPay, addTask, updateTask, addAttendanceEvent, completeCheckout, calculateMonthlyPayrollDetails, requestAdvance
+    login, logout, addNewEmployee, updateCompanySettings, updateHolidayStatus, approveHolidayForPay, addTask, updateTask, addAttendanceEvent, completeCheckout, calculateMonthlyPayrollDetails, addLeaveApplication, approveLeaveApplication, rejectLeaveApplication, requestAdvance, approveAdvance, rejectAdvance
   ]);
 
   return (

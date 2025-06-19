@@ -116,7 +116,7 @@ export default function EmployeeDetailPage() {
     const perMinuteSalary = employee.baseSalary / (30 * employee.standardDailyHours * 60);
     return todayWorkMinutes * perMinuteSalary;
   }, [employee, todayWorkMinutes]);
-  
+
   const payrollReport = useMemo(() => {
     if (employee && employeeAttendance && employeeAttendance.length > 0 && companySettings) {
       const now = new Date();
