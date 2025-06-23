@@ -4,7 +4,7 @@
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect, useMemo } from 'react';
-import type { User, AttendanceEvent, Task, MonthlyPayrollReport } from '@/lib/types';
+import type { User, AttendanceEvent, Task, MonthlyPayrollReport, Holiday } from '@/lib/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee } from 'lucide-react';
-import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday } from 'date-fns';
+import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday, startOfMonth, endOfMonth, eachDayOfInterval, isSunday, getDaysInMonth } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Timestamp } from 'firebase/firestore';
+import { TruncatedText } from '@/components/ui/truncated-text';
 
 const safeParseISO = (dateString: string | Date | Timestamp | undefined | null): Date | null => {
   if (!dateString) return null;
@@ -39,10 +40,9 @@ const safeParseISO = (dateString: string | Date | Timestamp | undefined | null):
 
 export default function EmployeeDetailPage() {
   const params = useParams();
-  const { allUsers, attendanceLog, tasks, calculateMonthlyPayrollDetails, companySettings, loading: authLoading } = useAuth();
+  const { allUsers, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails, companySettings, loading: authLoading } = useAuth();
   const employeeId = params.employeeId as string;
 
-  // Memoize all derived data to react to context changes
   const employeeData = useMemo(() => {
     if (!employeeId || allUsers.length === 0) {
       return null;
@@ -57,6 +57,14 @@ export default function EmployeeDetailPage() {
   }, [employeeId, allUsers, attendanceLog, tasks]);
 
   const { employee, employeeAttendance, employeeTasks } = employeeData || {};
+
+  const payrollReport = useMemo(() => {
+    if (employee && companySettings) {
+      const now = new Date();
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth());
+    }
+    return null;
+  }, [employee, companySettings, calculateMonthlyPayrollDetails]);
 
   const geofenceStats = useMemo(() => {
     return employeeAttendance?.reduce((acc, event) => {
@@ -82,15 +90,13 @@ export default function EmployeeDetailPage() {
         setLiveDuration(0);
         return;
     }
-    const checkInTime = safeParseISO(liveAttendanceEvent.timestamp);
+    const checkInTime = safeParseISO(liveAttendanceEvent.checkInTime || liveAttendanceEvent.timestamp);
     if (!checkInTime) {
         setLiveDuration(0);
         return;
     }
 
-    // Set initial duration immediately
     setLiveDuration(differenceInSeconds(new Date(), checkInTime));
-    
     const interval = setInterval(() => {
       setLiveDuration(differenceInSeconds(new Date(), checkInTime));
     }, 1000);
@@ -98,32 +104,32 @@ export default function EmployeeDetailPage() {
     return () => clearInterval(interval);
   }, [liveAttendanceEvent]);
 
-  const completedTodayMinutes = useMemo(() => {
-    const todaysCompletedEvents = employeeAttendance?.filter(e => {
+  const todayWorkMinutes = useMemo(() => {
+    const todaysCompletedMinutes = employeeAttendance?.filter(e => {
         const eventDate = safeParseISO(e.timestamp);
         return eventDate && isToday(eventDate) && e.status === 'Checked Out';
-    }) || [];
+    }).reduce((total, event) => total + (event.totalHours ? event.totalHours * 60 : 0), 0) || 0;
 
-    return todaysCompletedEvents.reduce((total, event) => {
-        return total + (event.totalHours ? event.totalHours * 60 : 0);
-    }, 0);
-  }, [employeeAttendance]);
-
-  const todayWorkMinutes = completedTodayMinutes + Math.floor(liveDuration / 60);
+    return todaysCompletedMinutes + Math.floor(liveDuration / 60);
+  }, [employeeAttendance, liveDuration]);
 
   const dailyEarnings = useMemo(() => {
-    if (!employee?.baseSalary || !employee.standardDailyHours) return 0;
-    const perMinuteSalary = employee.baseSalary / (30 * employee.standardDailyHours * 60);
-    return todayWorkMinutes * perMinuteSalary;
-  }, [employee, todayWorkMinutes]);
-
-  const payrollReport = useMemo(() => {
-    if (employee && employeeAttendance && employeeAttendance.length > 0 && companySettings) {
-      const now = new Date();
-      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, []);
+    if (!employee?.baseSalary || !companySettings || !employee.standardDailyHours) {
+        return 0;
     }
-    return null;
-  }, [employee, employeeAttendance, companySettings, calculateMonthlyPayrollDetails]);
+
+    const isCheckedOutToday = employeeAttendance?.some(e => isToday(safeParseISO(e.timestamp)!) && e.status === 'Checked Out');
+
+    if (companySettings.salaryCalculationMode === 'check_in_out') {
+        const perDaySalary = employee.baseSalary / 30;
+        return isCheckedOutToday || liveAttendanceEvent ? perDaySalary : 0;
+    } else {
+        const monthlyWorkHoursGoal = employee.standardDailyHours * 30;
+        const perMinuteRate = monthlyWorkHoursGoal > 0 ? employee.baseSalary / (monthlyWorkHoursGoal * 60) : 0;
+        return todayWorkMinutes * perMinuteRate;
+    }
+}, [employee, todayWorkMinutes, companySettings, employeeAttendance, liveAttendanceEvent]);
+
 
   const [aiSummary, setAiSummary] = useState<string>('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
@@ -184,7 +190,7 @@ export default function EmployeeDetailPage() {
     return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
   };
 
-  const liveCheckInTime = liveAttendanceEvent ? safeParseISO(liveAttendanceEvent.timestamp) : null;
+  const liveCheckInTime = liveAttendanceEvent ? safeParseISO(liveAttendanceEvent.checkInTime || liveAttendanceEvent.timestamp) : null;
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
@@ -243,7 +249,9 @@ export default function EmployeeDetailPage() {
                                 <TableRow key={event.id}>
                                     <TableCell>{safeParseISO(event.timestamp) ? format(safeParseISO(event.timestamp) as Date, 'PP') : 'N/A'}</TableCell>
                                     <TableCell><Badge variant={event.status === 'Checked In' ? 'default' : 'secondary'}>{event.status}</Badge></TableCell>
-                                    <TableCell className="text-sm">{event.workReport || <span className="text-muted-foreground">No report</span>}</TableCell>
+                                    <TableCell className="text-sm">
+                                        {event.workReport ? <TruncatedText text={event.workReport} /> : <span className="text-muted-foreground">No report</span>}
+                                    </TableCell>
                                 </TableRow>
                             ))}
                              {employeeAttendance?.length === 0 && <TableRow><TableCell colSpan={3} className="text-center">No attendance records found.</TableCell></TableRow>}

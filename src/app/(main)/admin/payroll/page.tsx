@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { User, Advance, MonthlyPayrollReport } from '@/lib/types';
+import type { User, Advance, MonthlyPayrollReport, Holiday } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,7 +13,7 @@ import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, 
 import { getMonth, getYear } from 'date-fns';
 
 export default function AdminPayrollPage() {
-  const { allUsers, processAdvance, loading: authLoading, attendanceLog, calculateMonthlyPayrollDetails } = useAuth();
+  const { allUsers, holidays, processAdvance, loading: authLoading, attendanceLog, calculateMonthlyPayrollDetails } = useAuth();
   const [isProcessingAdvance, setIsProcessingAdvance] = useState(false);
   const { toast } = useToast();
   const [payrollData, setPayrollData] = useState<MonthlyPayrollReport[]>([]);
@@ -31,13 +31,10 @@ export default function AdminPayrollPage() {
       setIsCalculatingPayroll(true);
       const nonAdminUsers = allUsers.filter(u => u.role !== 'admin');
       const reports = nonAdminUsers.map(user => {
-        // Filter attendance logs for the current user for the current month
-        // This is a simplification; for many users, batching or more optimized fetching might be needed
         const userAttendanceForMonth = attendanceLog.filter(
           log => log.employeeId === user.employeeId
         );
-        // TODO: Add holiday data if available and integrate into calculateMonthlyPayrollDetails
-        return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, []);
+        return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, holidays);
       });
       setPayrollData(reports);
       setIsCalculatingPayroll(false);
@@ -45,7 +42,7 @@ export default function AdminPayrollPage() {
       setIsCalculatingPayroll(false);
       setPayrollData([]);
     }
-  }, [allUsers, authLoading, calculateMonthlyPayrollDetails, attendanceLog, currentMonth, currentYear]);
+  }, [allUsers, authLoading, calculateMonthlyPayrollDetails, attendanceLog, holidays, currentMonth, currentYear]);
 
 
   const pendingAdvances = useMemo(() => {
@@ -68,7 +65,7 @@ export default function AdminPayrollPage() {
           const nonAdminUsers = allUsers.filter(u => u.role !== 'admin');
           const reports = nonAdminUsers.map(user => {
             const userAttendanceForMonth = attendanceLog.filter(log => log.employeeId === user.employeeId);
-            return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, []);
+            return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, holidays);
           });
           setPayrollData(reports);
       }

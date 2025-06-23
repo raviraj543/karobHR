@@ -162,3 +162,18 @@ export interface User {
   advances?: Advance[];
   mockAttendanceFactor?: number;
 }
+
+export interface Link {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  categoryId: string;
+  userId: string; // The user who created the link
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  userId: string; // The user who created the category
+}

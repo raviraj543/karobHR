@@ -12,7 +12,7 @@ import { useEffect, useMemo } from 'react';
 import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO } from 'date-fns';
 
 export default function EmployeeDashboardPage() {
-  const { user, announcements, attendanceLog, tasks, loading: authLoading } = useAuth(); 
+  const { user, announcements, attendanceLog, tasks, loading: authLoading, companySettings } = useAuth(); 
 
   useEffect(() => {
     document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
@@ -24,12 +24,37 @@ export default function EmployeeDashboardPage() {
         attendance: 'N/A',
         pendingTasks: 'N/A',
         leaveBalance: 'N/A',
-        nextPayslip: 'N/A'
+        nextPayslip: 'N/A',
+        todaysEarnings: 0,
       };
     }
 
-    // Attendance Calculation
+    // Today's Earnings Calculation
     const today = new Date();
+    const todaysAttendance = attendanceLog.find(e => isSameDay(parseISO(e.timestamp), today) && e.status === 'Checked In');
+    let todaysEarnings = 0;
+
+    if (todaysAttendance && user.baseSalary) {
+      if (companySettings?.salaryCalculationMode === 'check_in_out') {
+        todaysEarnings = user.baseSalary / 30;
+      } else {
+        const checkInTime = parseISO(todaysAttendance.checkInTime as string);
+        const now = new Date();
+        const hoursWorkedToday = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+
+        const monthStartDate = startOfMonth(today);
+        const allDaysInMonth = eachDayOfInterval({ start: monthStartDate, end: endOfMonth(today) });
+        const sundaysInMonth = allDaysInMonth.filter(isSunday);
+        // This should be updated to get holidays from context
+        const approvedHolidayDates = new Set();
+        const workingDaysInMonth = allDaysInMonth.length - sundaysInMonth.length - approvedHolidayDates.size;
+        const totalStandardHoursForMonth = workingDaysInMonth * (user.standardDailyHours || 8);
+        const perHourRate = user.baseSalary / totalStandardHoursForMonth;
+        todaysEarnings = hoursWorkedToday * perHourRate;
+      }
+    }
+
+    // Attendance Calculation
     const monthStart = startOfMonth(today);
     const totalDaysInMonth = getDaysInMonth(today);
     const uniqueDaysAttended = new Set(
@@ -58,9 +83,10 @@ export default function EmployeeDashboardPage() {
       attendance,
       pendingTasks,
       leaveBalance,
-      nextPayslip: nextPayslipDate
+      nextPayslip: nextPayslipDate,
+      todaysEarnings,
     };
-  }, [user, attendanceLog, tasks]);
+  }, [user, attendanceLog, tasks, companySettings]);
   
   if (authLoading || !user) {
     return (
@@ -93,6 +119,16 @@ export default function EmployeeDashboardPage() {
            </Button>
         </Link>
       </div>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>Today's Estimated Earnings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-bold">₹{dashboardStats.todaysEarnings.toFixed(2)}</p>
+          <p className="text-xs text-muted-foreground">Based on hours worked today and monthly salary.</p>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {quickStats.map((stat) => (

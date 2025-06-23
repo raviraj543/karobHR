@@ -27,7 +27,8 @@ import {
   CreditCard,
   Clock,
   Menu,
-  HandCoins
+  HandCoins,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useMobile } from '@/hooks/use-mobile';
 
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { href: '/profile', label: 'Profile', icon: UserCircle, allowedRoles: ['admin', 'manager', 'employee'] },
   { href: '/attendance', label: 'My Attendance', icon: Fingerprint, allowedRoles: ['employee', 'manager', 'admin'] },
   { href: '/tasks', label: 'My Tasks', icon: ListChecks, allowedRoles: ['employee', 'manager'] },
+  { href: '/links', label: 'Links', icon: LinkIcon, allowedRoles: ['admin', 'manager', 'employee'] },
   { href: '/leave', label: 'Leave', icon: CalendarOff, allowedRoles: ['employee', 'admin', 'manager'] },
   { href: '/payroll', label: 'My Payslip', icon: CreditCard, allowedRoles: ['employee', 'manager'] },
   { href: '/settings', label: 'Settings', icon: SettingsIcon, allowedRoles: ['employee', 'manager'] },
