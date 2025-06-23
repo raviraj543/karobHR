@@ -62,7 +62,7 @@ export interface AuthContextType {
   updateTask: (task: Task) => Promise<void>;
   addAttendanceEvent: (locationInfo: LocationInfo) => Promise<string>;
   completeCheckout: (docId: string, workReport: string, locationInfo: LocationInfo) => Promise<void>;
-  calculateMonthlyPayrollDetails: (employee: User, forYear: number, forMonth: number) => MonthlyPayrollReport;
+  calculateMonthlyPayrollDetails: (employee: User, forYear: number, forMonth: number) => MonthlyPayrollReport | null;
   addLeaveApplication: (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => Promise<void>;
   approveLeaveApplication: (userId: string, leaveId: string) => Promise<void>;
   rejectLeaveApplication: (userId: string, leaveId: string) => Promise<void>;
@@ -272,9 +272,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   }, [dbInstance, user, companyId]);
   
-  const calculateMonthlyPayrollDetails = useCallback((employee: User, forYear: number, forMonth: number): MonthlyPayrollReport => {
+  const calculateMonthlyPayrollDetails = useCallback((employee: User, forYear: number, forMonth: number): MonthlyPayrollReport | null => {
     if (!employee?.baseSalary || !employee.standardDailyHours || !companySettings) {
-        throw new Error("Cannot calculate payroll: Employee or company settings are incomplete.");
+        return null;
     }
 
     const { baseSalary, standardDailyHours } = employee;
