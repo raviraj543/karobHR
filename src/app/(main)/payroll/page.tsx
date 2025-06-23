@@ -12,10 +12,11 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CreditCard, IndianRupee, Send, History, Loader2 } from 'lucide-react';
+import { CreditCard, IndianRupee, Send, History, Loader2, AlertCircle } from 'lucide-react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const advanceRequestSchema = z.object({
   amount: z.preprocess(
@@ -34,6 +35,8 @@ export default function EmployeePayrollPage() {
 
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [payrollReport, setPayrollReport] = useState<MonthlyPayrollReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(true);
 
   const form = useForm<AdvanceRequestFormValues>({
     resolver: zodResolver(advanceRequestSchema),
@@ -47,11 +50,13 @@ export default function EmployeePayrollPage() {
     document.title = 'My Payslip - KarobHR';
   }, []);
 
-  const payrollReport: MonthlyPayrollReport | null = useMemo(() => {
+  useEffect(() => {
+    setReportLoading(true);
     if (user && attendanceLog) {
-      return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, attendanceLog);
+      const report = calculateMonthlyPayrollDetails(user, currentYear, currentMonth, attendanceLog);
+      setPayrollReport(report);
     }
-    return null;
+    setReportLoading(false);
   }, [user, attendanceLog, currentYear, currentMonth, calculateMonthlyPayrollDetails]);
 
   const onSubmitAdvance: SubmitHandler<AdvanceRequestFormValues> = async (data) => {
@@ -84,8 +89,80 @@ export default function EmployeePayrollPage() {
     }
   };
 
+  const renderPayslipContent = () => {
+    if (authLoading || reportLoading) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-8 w-1/2" />
+            </div>
+             <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-10 w-1/2" />
+            </div>
+        </div>
+      );
+    }
+
+    if (!payrollReport) {
+      return (
+         <div className="text-center py-10 text-muted-foreground flex flex-col items-center justify-center">
+            <AlertCircle className="w-12 h-12 mb-4 text-destructive" />
+            <p className="font-semibold">Could not calculate your payslip for the selected period.</p>
+            <p className="text-sm">This can happen if there is no attendance data for the month.</p>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
+          <div>
+            <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
+            <p className="text-2xl font-semibold text-foreground">₹{payrollReport.baseSalary.toLocaleString('en-IN')}</p>
+          </div>
+          <div>
+            <Label className="text-sm text-muted-foreground">Hours Worked</Label>
+            <p className="text-2xl font-semibold text-foreground">{payrollReport.totalActualHoursWorked.toFixed(2)} / {payrollReport.totalStandardHoursForMonth.toFixed(2)}</p>
+          </div>
+          <div>
+            <Label className="text-sm text-muted-foreground">Deductions for hours missed</Label>
+            <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.calculatedDeductions.toLocaleString('en-IN')})</p>
+          </div>
+        </div>
+        <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
+           <div>
+            <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
+            <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.totalApprovedAdvances.toLocaleString('en-IN')})</p>
+          </div>
+          <div className="pt-2">
+            <Label className="text-sm text-primary/80">Net Payable Amount</Label>
+            <p className="text-3xl font-bold text-primary">₹{payrollReport.finalNetPayable.toLocaleString('en-IN')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (authLoading || !user) {
-    return <div className="text-center py-10">Loading your payslip data...</div>;
+    return (
+        <div className="space-y-6">
+            <Skeleton className="h-12 w-1/2" />
+            <Card>
+                <CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader>
+                <CardContent>{renderPayslipContent()}</CardContent>
+            </Card>
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-40" /></CardContent></Card>
+                <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-40" /></CardContent></Card>
+            </div>
+        </div>
+    );
   }
 
   return (
@@ -105,38 +182,7 @@ export default function EmployeePayrollPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {payrollReport ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-              <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
-                <div>
-                  <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
-                  <p className="text-2xl font-semibold text-foreground">₹{payrollReport.baseSalary.toLocaleString('en-IN')}</p>
-                </div>
-                <div>
-                  <Label className="text-sm text-muted-foreground">Hours Worked</Label>
-                  <p className="text-2xl font-semibold text-foreground">{payrollReport.totalActualHoursWorked.toFixed(2)} / {payrollReport.totalStandardHoursForMonth.toFixed(2)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm text-muted-foreground">Deductions for hours missed</Label>
-                  <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.calculatedDeductions.toLocaleString('en-IN')})</p>
-                </div>
-              </div>
-              <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
-                 <div>
-                  <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
-                  <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.totalApprovedAdvances.toLocaleString('en-IN')})</p>
-                </div>
-                <div className="pt-2">
-                  <Label className="text-sm text-primary/80">Net Payable Amount</Label>
-                  <p className="text-3xl font-bold text-primary">₹{payrollReport.finalNetPayable.toLocaleString('en-IN')}</p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-10 text-muted-foreground">
-              <p>Could not calculate your payslip. This usually happens at the beginning of the month.</p>
-            </div>
-          )}
+          {renderPayslipContent()}
         </CardContent>
       </Card>
 
