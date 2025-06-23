@@ -98,26 +98,29 @@ export default function AttendancePage() {
         setCurrentLocation(userLocation);
         setLocationStatus('success');
 
-        let dist = null;
-        let geofenceUsed = null;
-        
-        if (companySettings?.officeLocation) {
-             dist = calculateDistance(userLocation.latitude, userLocation.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude);
-             geofenceUsed = 'office';
-        } else if (user?.remoteWorkLocation) {
-             dist = calculateDistance(userLocation.latitude, userLocation.longitude, user.remoteWorkLocation.latitude, user.remoteWorkLocation.longitude);
-             geofenceUsed = 'remote';
-        }
-        
-        if (dist !== null && geofenceUsed) {
-            setDistance(dist);
-            const friendlyDist = dist > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${dist.toFixed(0)} m`;
-            toast({
-                title: "Location Updated",
-                description: `You are approx. ${friendlyDist} from the ${geofenceUsed} geofence.`,
-            });
+        const targetLocationInfo = user?.remoteWorkLocation ?? companySettings?.officeLocation;
+        const geofenceUsed = user?.remoteWorkLocation ? 'remote work' : 'office';
+
+        if (targetLocationInfo && targetLocationInfo.latitude && targetLocationInfo.longitude) {
+          const dist = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            targetLocationInfo.latitude,
+            targetLocationInfo.longitude
+          );
+          setDistance(dist);
+          const friendlyDist = dist > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${dist.toFixed(0)} m`;
+          toast({
+            title: "Location Updated",
+            description: `You are approx. ${friendlyDist} from the ${geofenceUsed} geofence.`,
+          });
         } else {
-            toast({ variant: 'destructive', title: "No Geofence Configured", description: "Could not find a valid office or remote geofence to compare against." });
+          setDistance(null);
+          toast({
+            variant: 'destructive',
+            title: "No Geofence Configured",
+            description: "Could not find a valid office or remote geofence to compare against."
+          });
         }
       },
       (error) => {
@@ -128,7 +131,7 @@ export default function AttendancePage() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  }, [companySettings, user?.remoteWorkLocation, toast]);
+  }, [user, companySettings, toast]);
 
   const handleCheckIn = async () => {
     if (!currentLocation) {
@@ -185,26 +188,37 @@ export default function AttendancePage() {
             return <p className="text-sm text-center text-muted-foreground">Fetching location...</p>;
         case 'success':
             if (distance !== null) {
-                const geofenceRadius = companySettings?.officeLocation?.radius ?? user?.remoteWorkLocation?.radius ?? 0;
+                const targetLocation = user?.remoteWorkLocation ?? companySettings?.officeLocation;
+                const geofenceType = user?.remoteWorkLocation ? 'Your Remote Location' : 'Company Office';
+
+                if (!targetLocation) {
+                    return (
+                        <Alert variant="destructive" className="text-center">
+                            <AlertDescription>Location fetched, but no geofence is configured for your account.</AlertDescription>
+                        </Alert>
+                    );
+                }
+
+                const geofenceRadius = targetLocation.radius ?? 0;
                 const isInside = distance <= geofenceRadius;
-                const friendlyDist = distance > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
+                const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
 
                 return (
                   <div>
                     <Alert variant={isInside ? 'default' : 'destructive'} className="text-center">
-                              <AlertTitle>{isInside ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
-                              <AlertDescription>
-                                Approx. {friendlyDist} away from the required location.
-                              </AlertDescription>
-                           </Alert>
-                    <div className="text-xs text-muted-foreground mt-2">
-                        <p>Your Location: {currentLocation?.latitude.toFixed(6)}, {currentLocation?.longitude.toFixed(6)}</p>
-                        <p>Office Location: {companySettings?.officeLocation?.latitude.toFixed(6)}, {companySettings?.officeLocation?.longitude.toFixed(6)}</p>
+                        <AlertTitle>{isInside ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
+                        <AlertDescription>
+                          Approx. {friendlyDist} away from the required location. (Max: {geofenceRadius}m)
+                        </AlertDescription>
+                    </Alert>
+                    <div className="text-xs text-muted-foreground mt-2 text-center space-y-1">
+                        <p><b>Your Location:</b> {currentLocation?.latitude.toFixed(5)}, {currentLocation?.longitude.toFixed(5)} (Accuracy: {currentLocation?.accuracy.toFixed(0)}m)</p>
+                        <p><b>{geofenceType}:</b> {targetLocation.latitude.toFixed(5)}, {targetLocation.longitude.toFixed(5)}</p>
                     </div>
                   </div>
-                )
+                );
             }
-            return <p className="text-sm text-center text-muted-foreground">Location fetched, but no geofence to compare.</p>;
+             return <p className="text-sm text-center text-muted-foreground">Location fetched, but could not determine distance to geofence.</p>;
         case 'error':
              return <Alert variant="destructive" className="text-center">
                         <AlertDescription>Failed to get location. Please check browser permissions and try again.</AlertDescription>

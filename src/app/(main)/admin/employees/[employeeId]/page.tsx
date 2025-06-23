@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee } from 'lucide-react';
-import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday, startOfMonth, endOfMonth, eachDayOfInterval, isSunday, getDaysInMonth } from 'date-fns';
+import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday, startOfMonth, endOfMonth, eachDayOfInterval, isSunday } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Timestamp } from 'firebase/firestore';
 import { TruncatedText } from '@/components/ui/truncated-text';
@@ -59,12 +59,12 @@ export default function EmployeeDetailPage() {
   const { employee, employeeAttendance, employeeTasks } = employeeData || {};
 
   const payrollReport = useMemo(() => {
-    if (employee && companySettings) {
+    if (employee && employeeAttendance && companySettings) {
       const now = new Date();
-      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth());
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, holidays);
     }
     return null;
-  }, [employee, companySettings, calculateMonthlyPayrollDetails]);
+  }, [employee, employeeAttendance, companySettings, calculateMonthlyPayrollDetails, holidays]);
 
   const geofenceStats = useMemo(() => {
     return employeeAttendance?.reduce((acc, event) => {
@@ -114,21 +114,18 @@ export default function EmployeeDetailPage() {
   }, [employeeAttendance, liveDuration]);
 
   const dailyEarnings = useMemo(() => {
-    if (!employee?.baseSalary || !companySettings || !employee.standardDailyHours) {
+    if (!employee?.baseSalary || !companySettings) {
         return 0;
     }
-
-    const isCheckedOutToday = employeeAttendance?.some(e => isToday(safeParseISO(e.timestamp)!) && e.status === 'Checked Out');
-
+    const isCheckedIn = liveAttendanceEvent != null;
     if (companySettings.salaryCalculationMode === 'check_in_out') {
-        const perDaySalary = employee.baseSalary / 30;
-        return isCheckedOutToday || liveAttendanceEvent ? perDaySalary : 0;
+        return isCheckedIn ? employee.baseSalary / 30 : 0;
     } else {
-        const monthlyWorkHoursGoal = employee.standardDailyHours * 30;
-        const perMinuteRate = monthlyWorkHoursGoal > 0 ? employee.baseSalary / (monthlyWorkHoursGoal * 60) : 0;
+        if (!payrollReport?.hourlyRate) return 0;
+        const perMinuteRate = payrollReport.hourlyRate / 60;
         return todayWorkMinutes * perMinuteRate;
     }
-}, [employee, todayWorkMinutes, companySettings, employeeAttendance, liveAttendanceEvent]);
+}, [employee, todayWorkMinutes, companySettings, liveAttendanceEvent, payrollReport]);
 
 
   const [aiSummary, setAiSummary] = useState<string>('');
