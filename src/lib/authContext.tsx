@@ -135,44 +135,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Effect to manage live data subscriptions based on user role and companyId
   useEffect(() => {
-    if (!dbInstance || !user || !companyId) {
-      setAllUsers([]); setTasks([]); setHolidays([]); setAttendanceLog([]); setAnnouncements([]); setCompanySettings(null);
+    if (!dbInstance || !companyId) {
+      setAllUsers([]);
+      setTasks([]);
+      setHolidays([]);
+      setAttendanceLog([]);
+      setAnnouncements([]);
+      setCompanySettings(null);
       return;
     }
-
+  
     const subscriptions: (() => void)[] = [];
-
+  
     const settingsRef = doc(dbInstance, 'companies', companyId);
     subscriptions.push(onSnapshot(settingsRef, (doc) => setCompanySettings(doc.exists() ? doc.data() as CompanySettings : null)));
-    
+  
     const tasksQuery = query(collection(dbInstance, `companies/${companyId}/tasks`));
     subscriptions.push(onSnapshot(tasksQuery, (snapshot) => setTasks(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Task)))));
-
+  
     const holidaysQuery = query(collection(dbInstance, `companies/${companyId}/holidays`));
     subscriptions.push(onSnapshot(holidaysQuery, (snapshot) => {
       const fetchedHolidays: Holiday[] = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, date: (doc.data().date as Timestamp).toDate() } as Holiday));
       setHolidays(fetchedHolidays);
     }));
-
+  
     const attendanceQuery = query(collection(dbInstance, `companies/${companyId}/attendanceLog`));
     subscriptions.push(onSnapshot(attendanceQuery, (snapshot) => {
         const logList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, timestamp: (doc.data().timestamp as Timestamp)?.toDate().toISOString() } as AttendanceEvent));
         setAttendanceLog(logList);
     }));
-
+  
     const announcementsQuery = query(collection(dbInstance, `companies/${companyId}/announcements`));
     subscriptions.push(onSnapshot(announcementsQuery, (snapshot) => setAnnouncements(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Announcement)))));
     
-    if (user.role === 'admin') {
-      const allUsersQuery = query(collection(dbInstance, 'users'), where('companyId', '==', companyId));
-      subscriptions.push(onSnapshot(allUsersQuery, (snapshot) => setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)))));
-    } else {
-        const userQuery = doc(dbInstance, 'users', user.id);
-        subscriptions.push(onSnapshot(userQuery, (doc) => setAllUsers(doc.exists() ? [{ id: doc.id, ...doc.data() } as User] : [])));
-    }
-
+    const allUsersQuery = query(collection(dbInstance, 'users'), where('companyId', '==', companyId));
+    subscriptions.push(onSnapshot(allUsersQuery, (snapshot) => setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)))));
+  
     return () => subscriptions.forEach(unsub => unsub());
-  }, [dbInstance, user, companyId]);
+  }, [dbInstance, companyId]);
 
 
   const login = useCallback(async (employeeId: string, password: string): Promise<User | null> => {
@@ -246,12 +246,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [dbInstance, companyId]);
 
   const addAttendanceEvent = useCallback(async (locationInfo: LocationInfo): Promise<string> => {
-     if (!dbInstance || !user || !companyId || !companySettings?.officeLocation) throw new Error("Context not available");
+    if (!dbInstance || !user || !companyId || !companySettings?.officeLocation) throw new Error("Context not available");
     const { officeLocation } = companySettings;
     const distance = calculateDistance(locationInfo.latitude, locationInfo.longitude, officeLocation.latitude, officeLocation.longitude);
     const newEvent: Omit<AttendanceEvent, 'id' | 'timestamp'> & { timestamp: any } = {
-      employeeId: user.employeeId, userId: user.id, userName: user.name || '', type: 'check-in',
-      timestamp: serverTimestamp(), checkInLocation: locationInfo, isWithinGeofence: distance <= officeLocation.radius,
+      employeeId: user.employeeId,
+      userId: user.id,
+      userName: user.name || '',
+      type: 'check-in',
+      timestamp: serverTimestamp(),
+      checkInLocation: locationInfo,
+      isWithinGeofence: distance <= officeLocation.radius,
       status: 'Checked In',
     };
     const docRef = await addDoc(collection(dbInstance, `companies/${companyId}/attendanceLog`), newEvent);

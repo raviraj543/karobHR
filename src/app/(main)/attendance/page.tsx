@@ -72,66 +72,102 @@ export default function AttendancePage() {
       }
     }, (errorObject: any) => {
       console.error("Firestore onSnapshot error:", errorObject);
-      setAttendanceStatus('error');
       setInitializationError(`Database Error: ${errorObject.message}. Check console for details.`);
     });
 
     return () => unsubscribe();
   }, [dbFs, user?.id, user?.companyId, authLoading]);
 
-  const handleFetchLocation = useCallback(async () => {
+  const handleFetchLocation = useCallback(async (forceLowAccuracy = false) => {
     if (!navigator.geolocation) {
-      toast({ variant: "destructive", title: "Unsupported Browser", description: "Geolocation is not supported." });
-      return;
+        toast({ variant: "destructive", title: "Unsupported Browser", description: "Geolocation is not supported." });
+        return;
     }
 
     setLocationStatus('fetching');
     toast({ title: "Getting your location..." });
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    const processPosition = (position: GeolocationPosition) => {
+        console.log("Geolocation Success - Position:", position);
         const userLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
         };
         setCurrentLocation(userLocation);
         setLocationStatus('success');
 
-        const targetLocationInfo = user?.remoteWorkLocation ?? companySettings?.officeLocation;
-        const geofenceUsed = user?.remoteWorkLocation ? 'remote work' : 'office';
+        const officeLocation = companySettings?.officeLocation;
+        console.log("Company Settings for Geofence:", companySettings);
+        console.log("Office Location for Geofence:", officeLocation);
 
-        if (targetLocationInfo && targetLocationInfo.latitude && targetLocationInfo.longitude) {
-          const dist = calculateDistance(
-            userLocation.latitude,
-            userLocation.longitude,
-            targetLocationInfo.latitude,
-            targetLocationInfo.longitude
-          );
-          setDistance(dist);
-          const friendlyDist = dist > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${dist.toFixed(0)} m`;
-          toast({
-            title: "Location Updated",
-            description: `You are approx. ${friendlyDist} from the ${geofenceUsed} geofence.`,
-          });
+        if (officeLocation?.latitude && officeLocation?.longitude) {
+            const dist = calculateDistance(
+                userLocation.latitude,
+                userLocation.longitude,
+                officeLocation.latitude,
+                officeLocation.longitude
+            );
+            setDistance(dist);
+            const friendlyDist = dist > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${dist.toFixed(0)} m`;
+            toast({
+                title: "Location Updated",
+                description: `You are approx. ${friendlyDist} from the office geofence.`,
+            });
         } else {
-          setDistance(null);
-          toast({
-            variant: 'destructive',
-            title: "No Geofence Configured",
-            description: "Could not find a valid office or remote geofence to compare against."
-          });
+            setDistance(null);
+            toast({
+                variant: 'destructive',
+                title: "No Geofence Configured",
+                description: "The company office location has not been set by the admin."
+            });
         }
-      },
-      (error) => {
+    };
+
+    const handleError = (error: GeolocationPositionError, isHighAccuracyAttempt: boolean) => {
+        console.error(`Geolocation Error (High Accuracy: ${isHighAccuracyAttempt}): Code ${error.code} - ${error.message}`);
+
+        if (isHighAccuracyAttempt && error.code === error.TIMEOUT) {
+            // If high accuracy times out, try low accuracy
+            toast({ title: "Location accuracy timeout", description: "Trying to get location with lower accuracy..."});
+            navigator.geolocation.getCurrentPosition(
+                processPosition, 
+                (err) => handleError(err, false), // Second attempt, now with isHighAccuracyAttempt = false
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
+            );
+            return;
+        }
+
+        // Final error handling for both attempts
         setLocationStatus('error');
         setCurrentLocation(null);
         setDistance(null);
-        toast({ variant: "destructive", title: "Location Error", description: error.message });
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
-  }, [user, companySettings, toast]);
+        let description = error.message;
+        if (error.code === error.PERMISSION_DENIED) {
+            description = "Location permission denied. Please enable it in your browser settings.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+            description = "Location information is unavailable (e.g., GPS off).";
+        } else if (error.code === error.TIMEOUT) {
+            description = "Could not get your location in time. Please try again or check your signal.";
+        }
+        toast({ variant: "destructive", title: "Location Error", description });
+    };
+
+    if (forceLowAccuracy) {
+        navigator.geolocation.getCurrentPosition(
+            processPosition,
+            (err) => handleError(err, false),
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
+        );
+    } else {
+        // First attempt: High Accuracy (8 seconds timeout)
+        navigator.geolocation.getCurrentPosition(
+            processPosition,
+            (err) => handleError(err, true),
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    }
+  }, [companySettings, toast]);
 
   const handleCheckIn = async () => {
     if (!currentLocation) {
@@ -188,10 +224,9 @@ export default function AttendancePage() {
             return <p className="text-sm text-center text-muted-foreground">Fetching location...</p>;
         case 'success':
             if (distance !== null) {
-                const targetLocation = user?.remoteWorkLocation ?? companySettings?.officeLocation;
-                const geofenceType = user?.remoteWorkLocation ? 'Your Remote Location' : 'Company Office';
+                const officeLocation = companySettings?.officeLocation;
 
-                if (!targetLocation) {
+                if (!officeLocation) {
                     return (
                         <Alert variant="destructive" className="text-center">
                             <AlertDescription>Location fetched, but no geofence is configured for your account.</AlertDescription>
@@ -199,7 +234,7 @@ export default function AttendancePage() {
                     );
                 }
 
-                const geofenceRadius = targetLocation.radius ?? 0;
+                const geofenceRadius = officeLocation.radius ?? 0;
                 const isInside = distance <= geofenceRadius;
                 const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
 
@@ -213,7 +248,7 @@ export default function AttendancePage() {
                     </Alert>
                     <div className="text-xs text-muted-foreground mt-2 text-center space-y-1">
                         <p><b>Your Location:</b> {currentLocation?.latitude.toFixed(5)}, {currentLocation?.longitude.toFixed(5)} (Accuracy: {currentLocation?.accuracy.toFixed(0)}m)</p>
-                        <p><b>{geofenceType}:</b> {targetLocation.latitude.toFixed(5)}, {targetLocation.longitude.toFixed(5)}</p>
+                        <p><b>Company Office:</b> {officeLocation.latitude.toFixed(5)}, {officeLocation.longitude.toFixed(5)}</p>
                     </div>
                   </div>
                 );
@@ -257,9 +292,13 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="space-y-4">
             {renderLocationStatus()}
-            <Button className="w-full" variant="secondary" onClick={handleFetchLocation} disabled={locationStatus === 'fetching'}>
+            <Button className="w-full" variant="secondary" onClick={() => handleFetchLocation()}>
                 {locationStatus === 'fetching' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LocateFixed className="mr-2 h-4 w-4"/>}
                 Refresh My Location
+            </Button>
+            <Button className="w-full" variant="outline" onClick={() => handleFetchLocation(true)}>
+                {locationStatus === 'fetching' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LocateFixed className="mr-2 h-4 w-4"/>}
+                Force Low Accuracy Refresh
             </Button>
         </CardContent>
       </Card>
