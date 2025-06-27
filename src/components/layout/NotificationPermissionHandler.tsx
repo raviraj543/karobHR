@@ -4,7 +4,7 @@
 import { useEffect } from 'react';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { useAuth } from '@/hooks/useAuth';
-import { getFirebaseInstances } from '@/lib/firebase/firebase';
+import { firebaseApp, db } from '@/lib/firebase/firebase'; // Changed: Import firebaseApp and db directly
 import { doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,7 +14,7 @@ export default function NotificationPermissionHandler() {
 
     useEffect(() => {
         if (typeof window !== 'undefined' && 'serviceWorker' in navigator && user) {
-            const { firebaseApp, db } = getFirebaseInstances();
+            // const { firebaseApp, db } = getFirebaseInstances(); // Removed this line
             const messaging = getMessaging(firebaseApp);
             const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 
