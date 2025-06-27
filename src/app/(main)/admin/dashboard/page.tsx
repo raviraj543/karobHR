@@ -1,36 +1,21 @@
 
 'use client'; // Required for useState, useEffect, useAuth
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity, Megaphone, Send } from 'lucide-react';
-import type { Metadata } from 'next';
+import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity, Megaphone, Send, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 import { useToast } from '@/hooks/use-toast'; // Import useToast
 import type { Announcement } from '@/lib/types'; // Import Announcement type
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-
-// Metadata cannot be exported from client components directly.
-// export const metadata: Metadata = {
-//   title: 'Admin Dashboard - KarobHR',
-//   description: 'Manage your organization with KarobHR.',
-// };
-
-const adminStats = [
-  { title: "Total Employees", value: "75", icon: Users, link: "/admin/employees" }, // Value will be dynamic
-  { title: "Pending Leave Approvals", value: "5", icon: CalendarOff, link: "/admin/leave-approvals" },
-  { title: "Tasks In Progress", value: "23", icon: ListChecks, link: "/admin/tasks" },
-  { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
-];
-
 export default function AdminDashboardPage() {
-  const { allUsers, announcements, addAnnouncement, user } = useAuth(); // Get announcements and addAnnouncement
+  const { allUsers, announcements, addAnnouncement, user, tasks, loading } = useAuth(); // Get tasks and loading state
   const { toast } = useToast();
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
@@ -40,14 +25,22 @@ export default function AdminDashboardPage() {
     document.title = 'Admin Dashboard - KarobHR';
   }, []);
 
-  const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;
-  adminStats[0].value = totalEmployees.toString(); // Update dynamic stat
+  const adminStats = useMemo(() => {
+    const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;
+    const pendingLeaves = allUsers.flatMap(u => u.leaves || []).filter(l => l.status === 'pending').length;
+    const tasksInProgress = tasks.filter(t => t.status === 'In Progress').length;
+
+    return [
+      { title: "Total Employees", value: totalEmployees.toString(), icon: Users, link: "/admin/employees" },
+      { title: "Pending Leave Approvals", value: pendingLeaves.toString(), icon: CalendarOff, link: "/admin/leave-approvals" },
+      { title: "Tasks In Progress", value: tasksInProgress.toString(), icon: ListChecks, link: "/admin/tasks" },
+      { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
+    ];
+  }, [allUsers, tasks]);
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log(">>> KAROBHR TRACE: AdminDashboardPage - handlePostAnnouncement triggered.");
     if (!user || user.role !== 'admin') {
-      console.error(">>> KAROBHR TRACE: AdminDashboardPage - User is not an admin or not logged in. Cannot post announcement.");
       toast({
         title: "Permission Denied",
         description: "You do not have permission to post announcements.",
@@ -56,7 +49,6 @@ export default function AdminDashboardPage() {
       return;
     }
     if (!announcementTitle.trim() || !announcementContent.trim()) {
-      console.log(">>> KAROBHR TRACE: AdminDashboardPage - Announcement title or content is empty.");
       toast({
         title: "Missing Information",
         description: "Please provide both a title and content for the announcement.",
@@ -64,12 +56,9 @@ export default function AdminDashboardPage() {
       });
       return;
     }
-    console.log(">>> KAROBHR TRACE: AdminDashboardPage - Setting isPostingAnnouncement to true.");
     setIsPostingAnnouncement(true);
     try {
-      console.log(`>>> KAROBHR TRACE: AdminDashboardPage - Calling addAnnouncement from context with title: "${announcementTitle}"`);
-      await addAnnouncement(announcementTitle, announcementContent); // This is from useAuth()
-      console.log(">>> KAROBHR TRACE: AdminDashboardPage - addAnnouncement call successful.");
+      await addAnnouncement(announcementTitle, announcementContent);
       toast({
         title: "Announcement Posted!",
         description: "Your announcement is now visible to all employees.",
@@ -77,17 +66,23 @@ export default function AdminDashboardPage() {
       setAnnouncementTitle('');
       setAnnouncementContent('');
     } catch (error) {
-      console.error(">>> KAROBHR TRACE: AdminDashboardPage - Error in handlePostAnnouncement:", error);
       toast({
         title: "Error Posting Announcement",
         description: (error as Error).message || "Could not post the announcement.",
         variant: "destructive",
       });
     } finally {
-      console.log(">>> KAROBHR TRACE: AdminDashboardPage - Setting isPostingAnnouncement to false.");
       setIsPostingAnnouncement(false);
     }
   };
+  
+  if (loading) {
+      return (
+          <div className="flex items-center justify-center h-full py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+      )
+  }
 
   return (
     <div className="space-y-6">

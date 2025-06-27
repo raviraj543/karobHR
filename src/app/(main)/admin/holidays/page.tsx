@@ -2,230 +2,201 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import type { Holiday } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PlusCircle, Edit2, Trash2, CalendarDays as CalendarDaysIcon, CheckCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Trash2, Edit, Loader2 } from 'lucide-react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { collection, onSnapshot, query, Timestamp, addDoc } from 'firebase/firestore';
-import { getFirebaseInstances } from '@/lib/firebase/firebase';
-import { format, startOfYear, endOfYear, eachDayOfInterval, isSunday } from 'date-fns';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import type { Holiday } from '@/lib/types';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSunday, isPast } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
-
-const holidaySchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters."),
-  date: z.string().refine(d => !isNaN(Date.parse(d)), "Invalid date"),
-});
-
-type HolidayFormValues = z.infer<typeof holidaySchema>;
-
-export default function HolidaysPage() {
-  const { companyId, deleteHoliday, loading } = useAuth();
+export default function AdminHolidaysPage() {
+  const { holidays: fetchedHolidays, addHoliday, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [customHolidays, setCustomHolidays] = useState<Holiday[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  const form = useForm<HolidayFormValues>({
-    resolver: zodResolver(holidaySchema),
-    defaultValues: { name: '', date: '' }
-  });
 
-  useEffect(() => {
-    if (!companyId) return;
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newHolidayName, setNewHolidayName] = useState('');
+  const [newHolidayDate, setNewHolidayDate] = useState<Date | undefined>(undefined);
+  const [newHolidayDescription, setNewHolidayDescription] = useState('');
 
-    const { db } = getFirebaseInstances();
-    const q = query(collection(db, `companies/${companyId}/holidays`));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedHolidays: Holiday[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          name: data.name,
-          date: (data.date as Timestamp).toDate(),
-          status: data.status || 'approved',
-          isDefault: data.isDefault || false
-        };
-      });
-      setCustomHolidays(fetchedHolidays);
-    });
-
-    return () => unsubscribe();
-  }, [companyId]);
-  
   const allHolidays = useMemo(() => {
-    const year = new Date().getFullYear();
-    const yearStart = startOfYear(new Date(year, 0, 1));
-    const yearEnd = endOfYear(new Date(year, 0, 1));
-    const days = eachDayOfInterval({ start: yearStart, end: yearEnd });
-    
-    const sundays: Holiday[] = days
+    const today = new Date();
+    const yearStart = startOfMonth(today); // Start from current month for Sundays
+    const yearEnd = endOfMonth(today); // End of current month for Sundays
+    const allDays = eachDayOfInterval({ start: yearStart, end: yearEnd });
+
+    const sundays: Holiday[] = allDays
       .filter(day => isSunday(day))
-      .map((sunday, index) => ({
-        id: `sunday-${year}-${index}`,
+      .map(sunday => ({
+        id: `sunday-${format(sunday, 'yyyy-MM-dd')}`,
         name: 'Sunday',
         date: sunday,
         status: 'approved',
-        isDefault: true,
+        description: 'Weekly day off',
       }));
 
-    // Combine and remove duplicates, giving precedence to custom holidays
-    const all = [...customHolidays, ...sundays];
-    const uniqueHolidays = all.reduce<Record<string, Holiday>>((acc, holiday) => {
-        const dateString = format(holiday.date, 'yyyy-MM-dd');
-        if (!acc[dateString] || !holiday.isDefault) {
-            acc[dateString] = holiday;
-        }
-        return acc;
-    }, {});
+    // Combine Sundays with fetched holidays, giving precedence to fetched holidays if dates clash
+    const combined = [...sundays, ...fetchedHolidays];
+    const uniqueHolidays = Array.from(new Map(combined.map(h => [format(h.date, 'yyyy-MM-dd'), h])).values());
 
-    return Object.values(uniqueHolidays).sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [customHolidays]);
-
-
-  const handleDelete = async (holiday: Holiday) => {
-     if (holiday.isDefault) {
-       toast({
-         title: "Cannot Delete Default Holiday",
-         description: "Default holidays like Sundays are automatic and cannot be deleted.",
-         variant: "default"
-       });
-       return;
-     }
-    try {
-      await deleteHoliday(holiday.id);
-      toast({ title: "Holiday Deleted", description: `Successfully deleted ${holiday.name}.` });
-    } catch (error) {
-      toast({ title: "Error", description: "Could not delete holiday.", variant: "destructive" });
-    }
-  };
-
-  const onSubmit: SubmitHandler<HolidayFormValues> = async (data) => {
-    if (!companyId) return;
-    setIsSubmitting(true);
-    try {
-      const { db } = getFirebaseInstances();
-      await addDoc(collection(db, `companies/${companyId}/holidays`), {
-        name: data.name,
-        date: Timestamp.fromDate(new Date(data.date)),
-        status: 'approved',
-        isDefault: false,
+    return uniqueHolidays.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [fetchedHolidays]);
+  
+  const handleAddNewHoliday = async () => {
+    if (!newHolidayName || !newHolidayDate) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please provide a name and a date for the holiday.',
+        variant: 'destructive',
       });
-      toast({ title: 'Holiday Added', description: `${data.name} has been added.` });
-      setIsModalOpen(false);
-      form.reset();
+      return;
+    }
+
+    try {
+      await addHoliday({
+        name: newHolidayName,
+        date: newHolidayDate,
+        description: newHolidayDescription,
+      });
+      toast({
+        title: 'Holiday Added',
+        description: `${newHolidayName} has been successfully added.`,
+      });
+      setNewHolidayName('');
+      setNewHolidayDate(undefined);
+      setNewHolidayDescription('');
+      setIsDialogOpen(false);
     } catch (error) {
-      toast({ title: 'Error', description: 'Could not save holiday.', variant: 'destructive' });
-    } finally {
-      setIsSubmitting(false);
+      toast({
+        title: 'Error Adding Holiday',
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Holiday Management</h1>
-        <Button onClick={() => setIsModalOpen(true)}><PlusCircle className="mr-2 h-4 w-4"/>Add New Holiday</Button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Holiday Management</h1>
+          <p className="text-muted-foreground">Define and manage the company holiday calendar.</p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Holiday
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add a New Holiday</DialogTitle>
+              <DialogDescription>
+                This holiday will be marked as a paid day for all employees.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">Name</Label>
+                <Input id="name" value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} className="col-span-3" placeholder="e.g., New Year's Day"/>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="date" className="text-right">Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="col-span-3 font-normal justify-start">
+                      <CalendarDaysIcon className="mr-2 h-4 w-4" />
+                      {newHolidayDate ? format(newHolidayDate, 'PPP') : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={newHolidayDate} onSelect={setNewHolidayDate} initialFocus/>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="description" className="text-right">Description</Label>
+                <Textarea id="description" value={newHolidayDescription} onChange={(e) => setNewHolidayDescription(e.target.value)} className="col-span-3" placeholder="(Optional)"/>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleAddNewHoliday} disabled={authLoading}>
+                {authLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Holiday
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Upcoming Holidays</CardTitle>
-          <CardDescription>List of scheduled holidays. All holidays added are automatically approved as paid. Sundays are included by default.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Holiday Name</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={3} className="text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></TableCell></TableRow>
-              ) : allHolidays.length > 0 ? (
-                allHolidays.map((holiday) => (
-                  <TableRow key={holiday.id} className={holiday.isDefault ? 'bg-muted/50' : ''}>
-                    <TableCell className="font-medium">{holiday.name}</TableCell>
-                    <TableCell>{format(holiday.date, 'PPP')}</TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive-foreground" disabled={holiday.isDefault}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. This will permanently delete the holiday
-                              <strong className="mx-1">{holiday.name}</strong>.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(holiday)}>Delete</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow><TableCell colSpan={3} className="text-center">No holidays found.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1">
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center"><CalendarDaysIcon className="mr-2 h-5 w-5 text-primary" />Upcoming Holidays</CardTitle>
+            <CardDescription>List of scheduled holidays. All holidays added are automatically approved as paid.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Holiday Name</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allHolidays.map(holiday => {
+                    const holidayIsPast = isPast(holiday.date, new Date());
+                    const isDefaultSunday = holiday.id.startsWith('sunday-');
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Holiday</DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-               <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Holiday Name</FormLabel>
-                    <FormControl><Input {...field} placeholder="e.g., New Year's Day" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
-                 <FormField control={form.control} name="date" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Date</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                  Add Holiday
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+                    return (
+                    <TableRow key={holiday.id} className={holidayIsPast ? 'opacity-50' : ''}>
+                        <TableCell className="font-medium">{holiday.name}</TableCell>
+                        <TableCell>{format(new Date(holiday.date), 'PPP')}</TableCell>
+                        <TableCell>
+                        <Badge variant={holiday.status === 'approved' ? 'default' : 'secondary'}>
+                            {holiday.status.charAt(0).toUpperCase() + holiday.status.slice(1)}
+                        </Badge>
+                        </TableCell>
+                        <TableCell className="space-x-1">
+                            {isDefaultSunday || holidayIsPast ? (
+                                <span className="text-xs text-muted-foreground">N/A</span>
+                            ) : (
+                                <>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={holidayIsPast}>
+                                        <Edit2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" disabled={holidayIsPast}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </>
+                            )}
+                        </TableCell>
+                    </TableRow>
+                    );
+                })}
+              </TableBody>
+            </Table>
+            {allHolidays.length === 0 && !authLoading && (
+              <p className="text-muted-foreground text-center py-8">No holidays defined yet.</p>
+            )}
+            {authLoading && (
+                <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

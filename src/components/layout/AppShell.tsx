@@ -29,6 +29,7 @@ import {
   Menu,
   HandCoins,
   Link as LinkIcon,
+  FileCheck,
 } from 'lucide-react';
 import { useMobile } from '@/hooks/use-mobile';
 
@@ -54,6 +55,7 @@ const navItems: NavItem[] = [
   { href: '/admin/employees', label: 'Employees', icon: Users, allowedRoles: ['admin'] },
   { href: '/admin/tasks', label: 'Manage Tasks', icon: Briefcase, allowedRoles: ['admin'] },
   { href: '/admin/live-attendance', label: 'Live Attendance', icon: Clock, allowedRoles: ['admin'] },
+  { href: '/admin/checkout-reports', label: 'Checkout Reports', icon: FileCheck, allowedRoles: ['admin'] },
   { href: '/admin/payroll', label: 'Payroll', icon: IndianRupee, allowedRoles: ['admin'] },
   { href: '/admin/advance-approvals', label: 'Advance Approvals', icon: HandCoins, allowedRoles: ['admin'] },
   { href: '/admin/holidays', label: 'Holidays', icon: CalendarDays, allowedRoles: ['admin'] },

@@ -12,11 +12,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee } from 'lucide-react';
-import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday, startOfMonth, endOfMonth, eachDayOfInterval, isSunday } from 'date-fns';
+import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee, CalendarOff, CalendarCheck } from 'lucide-react';
+import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday, startOfMonth, endOfMonth, eachDayOfInterval, isSunday, isSameMonth } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Timestamp } from 'firebase/firestore';
 import { TruncatedText } from '@/components/ui/truncated-text';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const safeParseISO = (dateString: string | Date | Timestamp | undefined | null): Date | null => {
   if (!dateString) return null;
@@ -57,6 +58,12 @@ export default function EmployeeDetailPage() {
   }, [employeeId, allUsers, attendanceLog, tasks]);
 
   const { employee, employeeAttendance, employeeTasks } = employeeData || {};
+  
+  const monthlyAttendance = useMemo(() => {
+      const now = new Date();
+      return employeeAttendance?.filter(e => e.timestamp && isSameMonth(safeParseISO(e.timestamp)!, now))
+        .sort((a,b) => safeParseISO(b.timestamp)!.getTime() - safeParseISO(a.timestamp)!.getTime()) || [];
+  }, [employeeAttendance]);
 
   const payrollReport = useMemo(() => {
     if (employee && employeeAttendance && companySettings) {
@@ -67,17 +74,28 @@ export default function EmployeeDetailPage() {
   }, [employee, employeeAttendance, companySettings, calculateMonthlyPayrollDetails, holidays]);
 
   const geofenceStats = useMemo(() => {
-    return employeeAttendance?.reduce((acc, event) => {
+    // Initialize all four counters
+    const stats = { checkInInside: 0, checkOutInside: 0, checkInOutside: 0, checkOutOutside: 0 };
+
+    if (!employeeAttendance) return stats;
+
+    employeeAttendance.forEach(event => {
         if (event.type === 'check-in') {
-            if (event.isWithinGeofence) acc.inside++;
-            else acc.outside++;
+            if (event.isWithinGeofence === true) { // Explicitly check for true
+                stats.checkInInside++;
+            } else { // Covers false or null (outside/unknown)
+                stats.checkInOutside++;
+            }
+        } else if (event.type === 'check-out') {
+            // isWithinGeofenceCheckout is for the checkout location
+            if (event.isWithinGeofenceCheckout === true) { // Explicitly check for true
+                stats.checkOutInside++;
+            } else { // Covers false or null (outside/unknown)
+                stats.checkOutOutside++;
+            }
         }
-        if (event.type === 'check-out') {
-            if (event.isWithinGeofenceCheckout) acc.inside++;
-            else acc.outside++;
-        }
-        return acc;
-    }, { inside: 0, outside: 0 }) || { inside: 0, outside: 0 };
+    });
+    return stats;
   }, [employeeAttendance]);
   
   const liveAttendanceEvent = useMemo(() => 
@@ -114,18 +132,20 @@ export default function EmployeeDetailPage() {
   }, [employeeAttendance, liveDuration]);
 
   const dailyEarnings = useMemo(() => {
-    if (!employee?.baseSalary || !companySettings) {
+    if (!employee?.baseSalary || !companySettings || !employee.standardDailyHours) {
         return 0;
     }
+
     const isCheckedIn = liveAttendanceEvent != null;
+    const hasWorkedToday = isCheckedIn || (employeeAttendance?.some(e => isToday(safeParseISO(e.timestamp)!) && e.status === 'Checked Out'));
+
     if (companySettings.salaryCalculationMode === 'check_in_out') {
-        return isCheckedIn ? employee.baseSalary / 30 : 0;
+        return hasWorkedToday ? employee.baseSalary / 30 : 0;
     } else {
-        if (!payrollReport?.hourlyRate) return 0;
-        const perMinuteRate = payrollReport.hourlyRate / 60;
+        const perMinuteRate = employee.baseSalary / (30 * employee.standardDailyHours * 60);
         return todayWorkMinutes * perMinuteRate;
     }
-}, [employee, todayWorkMinutes, companySettings, liveAttendanceEvent, payrollReport]);
+  }, [employee, todayWorkMinutes, companySettings, liveAttendanceEvent, employeeAttendance]);
 
 
   const [aiSummary, setAiSummary] = useState<string>('');
@@ -235,28 +255,35 @@ export default function EmployeeDetailPage() {
                 </CardContent>
             </Card>
             <Card>
-                <CardHeader><CardTitle className="flex items-center"><FileText className="mr-2"/>Recent Attendance & Reports</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center"><CalendarCheck className="mr-2"/>Full Monthly Attendance</CardTitle></CardHeader>
                 <CardContent>
-                     <Table>
-                        <TableHeader>
-                            <TableRow><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Work Report</TableHead></TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {employeeAttendance?.slice(0, 5).map(event => (
-                                <TableRow key={event.id}>
-                                    <TableCell>{safeParseISO(event.timestamp) ? format(safeParseISO(event.timestamp) as Date, 'PP') : 'N/A'}</TableCell>
-                                    <TableCell><Badge variant={event.status === 'Checked In' ? 'default' : 'secondary'}>{event.status}</Badge></TableCell>
-                                    <TableCell className="text-sm">
-                                        {event.workReport ? <TruncatedText text={event.workReport} /> : <span className="text-muted-foreground">No report</span>}
-                                    </TableCell>
+                     <ScrollArea className="h-72">
+                         <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Check-in</TableHead>
+                                    <TableHead>Check-out</TableHead>
+                                    <TableHead>Total Hours</TableHead>
                                 </TableRow>
-                            ))}
-                             {employeeAttendance?.length === 0 && <TableRow><TableCell colSpan={3} className="text-center">No attendance records found.</TableCell></TableRow>}
-                        </TableBody>
-                     </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {monthlyAttendance.map(event => (
+                                    <TableRow key={event.id}>
+                                        <TableCell>{safeParseISO(event.timestamp) ? format(safeParseISO(event.timestamp) as Date, 'PP') : 'N/A'}</TableCell>
+                                        <TableCell><Badge variant={event.status === 'Checked In' ? 'destructive' : 'default'}>{event.status}</Badge></TableCell>
+                                        <TableCell>{event.checkInTime ? format(safeParseISO(event.checkInTime)!, 'p') : 'N/A'}</TableCell>
+                                        <TableCell>{event.checkOutTime ? format(safeParseISO(event.checkOutTime)!, 'p') : 'N/A'}</TableCell>
+                                        <TableCell>{event.totalHours ? event.totalHours.toFixed(2) + 'h' : 'N/A'}</TableCell>
+                                    </TableRow>
+                                ))}
+                                {monthlyAttendance.length === 0 && <TableRow><TableCell colSpan={5} className="text-center">No attendance records this month.</TableCell></TableRow>}
+                            </TableBody>
+                         </Table>
+                     </ScrollArea>
                 </CardContent>
             </Card>
-
             <Card>
                  <CardHeader><CardTitle className="flex items-center"><BrainCircuit className="mr-2"/>AI Performance Summary</CardTitle></CardHeader>
                  <CardContent>
@@ -288,6 +315,41 @@ export default function EmployeeDetailPage() {
                      </Table>
                 </CardContent>
             </Card>
+            
+            <Card>
+                <CardHeader><CardTitle className="flex items-center"><CalendarOff className="mr-2"/>Leave History</CardTitle></CardHeader>
+                <CardContent>
+                     <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Leave Type</TableHead>
+                                <TableHead>Start Date</TableHead>
+                                <TableHead>End Date</TableHead>
+                                <TableHead>Reason</TableHead>
+                                <TableHead>Status</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {employee?.leaves?.map(leave => (
+                                <TableRow key={leave.id}>
+                                    <TableCell>{leave.leaveType}</TableCell>
+                                    <TableCell>{format(parseISO(leave.startDate), 'PP')}</TableCell>
+                                    <TableCell>{format(parseISO(leave.endDate), 'PP')}</TableCell>
+                                    <TableCell>
+                                        <TruncatedText text={leave.reason} />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant={leave.status === 'approved' ? 'default' : leave.status === 'rejected' ? 'destructive' : 'secondary'}>
+                                            {leave.status}
+                                        </Badge>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                             {(employee?.leaves?.length || 0) === 0 && <TableRow><TableCell colSpan={5} className="text-center">No leave history found.</TableCell></TableRow>}
+                        </TableBody>
+                     </Table>
+                </CardContent>
+            </Card>
         </div>
 
         {/* Right Column */}
@@ -311,11 +373,19 @@ export default function EmployeeDetailPage() {
                 <CardContent className="space-y-2 text-sm">
                     <div className="flex justify-between items-center">
                         <span>Check-ins Inside Geofence:</span>
-                        <Badge variant="default" className="text-lg">{geofenceStats.inside}</Badge>
+                        <Badge variant="default" className="text-lg">{geofenceStats.checkInInside}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span>Check-outs Inside Geofence:</span>
+                        <Badge variant="default" className="text-lg">{geofenceStats.checkOutInside}</Badge>
                     </div>
                     <div className="flex justify-between items-center">
                         <span>Check-ins Outside Geofence:</span>
-                        <Badge variant="destructive" className="text-lg">{geofenceStats.outside}</Badge>
+                        <Badge variant="destructive" className="text-lg">{geofenceStats.checkInOutside}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span>Check-outs Outside Geofence:</span>
+                        <Badge variant="destructive" className="text-lg">{geofenceStats.checkOutOutside}</Badge>
                     </div>
                 </CardContent>
             </Card>
