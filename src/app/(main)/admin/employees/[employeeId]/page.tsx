@@ -39,6 +39,16 @@ const safeParseISO = (dateString: string | Date | Timestamp | undefined | null):
   }
 };
 
+// This function is required for Next.js static export of dynamic routes
+// It should return an array of all possible `employeeId` values that should be pre-rendered.
+export async function generateStaticParams() {
+  // TODO: Replace this with actual logic to fetch all employee IDs from your data source (e.g., Firebase, API)
+  // Example:
+  // const employeeIds = await fetchEmployeeIdsFromFirebase();
+  const employeeIds = ["placeholder_id_1", "placeholder_id_2"]; // Replace with actual employee IDs
+  return employeeIds.map(id => ({ employeeId: id }));
+}
+
 export default function EmployeeDetailPage() {
   const params = useParams();
   const { allUsers, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails, companySettings, loading: authLoading } = useAuth();
