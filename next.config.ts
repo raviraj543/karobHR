@@ -28,7 +28,7 @@ const nextConfig = {
       },
     ],
   },
-  output: 'export',
+  // REMOVED: output: 'export', // This line is removed for SSR/Cloud Functions deployment
 };
 
 module.exports = withPWA(nextConfig);
