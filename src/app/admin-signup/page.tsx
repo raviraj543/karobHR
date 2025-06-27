@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import type { NewEmployeeData } from '@/lib/authContext';
 import type { UserRole } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
-import { getFirebaseInstances } from '@/lib/firebase/firebase';
+import { db } from '@/lib/firebase/firebase'; // Corrected import
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription as AlertDescriptionComponent, AlertTitle as AlertTitleComponent } from '@/components/ui/alert';
 
@@ -70,9 +70,9 @@ export default function AdminSignupPage() {
       }
 
       // If not logged in and auth context is done loading, check for existing admins
-      const { db } = getFirebaseInstances();
+      // const { db } = getFirebaseInstances(); // Removed this line
       try {
-        const q = query(collection(db, "userDirectory"), where("role", "==", "admin"));
+        const q = query(collection(db, "userDirectory"), where("role", "==", "admin")); // Used db directly
         const adminSnapshot = await getDocs(q);
         setAdminAccountsExist(!adminSnapshot.empty);
         if (!adminSnapshot.empty) {

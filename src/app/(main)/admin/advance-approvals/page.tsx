@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Check, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getFirebaseInstances } from '@/lib/firebase/firebase';
+import { db } from '@/lib/firebase/firebase'; // Corrected import
 import type { Advance } from '@/lib/types';
 
 export default function AdvanceApprovalsPage() {
@@ -24,7 +24,7 @@ export default function AdvanceApprovalsPage() {
       return;
     }
 
-    const { db } = getFirebaseInstances();
+    // const { db } = getFirebaseInstances(); // Removed this line
     const q = query(
       collection(db, `companies/${companyId}/advances`), 
       where('status', '==', 'pending')

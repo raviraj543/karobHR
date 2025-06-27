@@ -11,7 +11,7 @@ import { LogIn, LogOut, FileText, Loader2, AlertCircle, MapPin, LocateFixed } fr
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { getFirebaseInstances } from '@/lib/firebase/firebase';
+import { db } from '@/lib/firebase/firebase'; // Corrected import
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { calculateDistance } from '@/lib/locationUtils';
@@ -24,7 +24,7 @@ export default function AttendancePage() {
   const { user, companySettings, addAttendanceEvent, completeCheckout, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  const [dbFs, setDbFs] = useState<Firestore | null>(null);
+  // const [dbFs, setDbFs] = useState<Firestore | null>(null); // Removed this state as db is directly imported
 
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('unknown');
   const [currentDayDocId, setCurrentDayDocId] = useState<string | null>(null);
@@ -39,23 +39,18 @@ export default function AttendancePage() {
 
   useEffect(() => {
     document.title = 'My Attendance - KarobHR';
-    try {
-      const { db: firebaseDbInstance } = getFirebaseInstances();
-      setDbFs(firebaseDbInstance);
-    } catch (e: any) {
-      setInitializationError("Failed to connect to database. " + e.message);
-      setAttendanceStatus('error');
-    }
+    // No need to setDbFs here, as db is directly imported and available.
+    // The try-catch block for getFirebaseInstances is also no longer needed.
   }, []);
 
   useEffect(() => {
-    if (authLoading || !dbFs || !user?.id || !user?.companyId) {
+    if (authLoading || !db || !user?.id || !user?.companyId) { // Changed dbFs to db
       setAttendanceStatus('unknown');
       return;
     }
 
     const q = query(
-      collection(dbFs, `companies/${user.companyId}/attendanceLog`),
+      collection(db, `companies/${user.companyId}/attendanceLog`), // Changed dbFs to db
       where('userId', '==', user.id),
       orderBy('timestamp', 'desc'),
       limit(1)
@@ -76,7 +71,7 @@ export default function AttendancePage() {
     });
 
     return () => unsubscribe();
-  }, [dbFs, user?.id, user?.companyId, authLoading]);
+  }, [db, user?.id, user?.companyId, authLoading]); // Changed dbFs to db
 
   const handleFetchLocation = useCallback(async (forceLowAccuracy = false) => {
     if (!navigator.geolocation) {

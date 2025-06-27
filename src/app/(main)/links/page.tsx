@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { getFirebaseInstances } from '@/lib/firebase/firebase';
+import { db } from '@/lib/firebase/firebase'; // Corrected import
 import {
   collection,
   addDoc,
@@ -12,7 +12,7 @@ import {
   query,
   where,
   writeBatch,
-  Firestore,
+  // Firestore, // No longer needed
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -48,7 +48,7 @@ import { X, Globe, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 const LinksPage = () => {
-  const [db, setDb] = useState<Firestore | null>(null);
+  // const [db, setDb] = useState<Firestore | null>(null); // Removed this state
   const { user, loading } = useAuth();
   const [links, setLinks] = useState<LinkType[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -56,17 +56,14 @@ const LinksPage = () => {
   const [newCategory, setNewCategory] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
-  useEffect(() => {
-    const { db: firestoreDb } = getFirebaseInstances();
-    setDb(firestoreDb);
-  }, []);
-
+  // Removed the useEffect that was calling getFirebaseInstances and setting db state
+  
   useEffect(() => {
     if (user && user.id && db) {
       fetchCategories();
       fetchLinks();
     }
-  }, [user, selectedCategory, db]);
+  }, [user, selectedCategory]); // Removed db from dependency array as it's directly imported
 
   const fetchCategories = async () => {
     if (!user || !user.id || !db) return;
