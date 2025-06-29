@@ -3,7 +3,7 @@ name: Deploy to Firebase Hosting (Static)
 on: 
   push:
     branches:
-      - main # or master, depending on your primary branch
+      - master # Explicitly set to master to match your push branch
 
 jobs:
   build_and_deploy:
