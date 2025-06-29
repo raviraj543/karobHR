@@ -24,11 +24,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'placehold.co',
         port: '',
-        pathname: '/**',
+        pathname: '/**', 
       },
     ],
   },
-  // REMOVED: output: 'export', // This line is removed for SSR/Cloud Functions deployment
+  output: 'export', // Re-enabled for static site export
 };
 
 module.exports = withPWA(nextConfig);

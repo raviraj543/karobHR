@@ -5,13 +5,13 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-    projectId: "karobhr-app",
-    appId: "1:173193434755:web:ade88ec8193ca04dff2db6",
-    storageBucket: "karobhr-app.firebasestorage.app",
-    apiKey: "AIzaSyCP67K069RaS0kRF_2RrwkyMkit6KpYtVU",
-    authDomain: "karobhr-app.firebaseapp.com",
-    messagingSenderId: "173193434755",
-    measurementId: "G-YDWNN7RCWP"
+  apiKey: "AIzaSyDVcbhLASfYQ0wpr4DyhngZqvClEG6qT1s",
+  authDomain: "automation-4e6bd.firebaseapp.com",
+  projectId: "automation-4e6bd",
+  storageBucket: "automation-4e6bd.firebasestorage.app",
+  messagingSenderId: "790882259931",
+  appId: "1:790882259931:web:ed6ca2966b80cc2eb5cdfe",
+  measurementId: "G-KK07ZQS39Z"
 };
 
 // Initialize Firebase

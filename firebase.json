@@ -1,25 +1,13 @@
 {
   "hosting": {
-    "site": "karobhr-app",
+    "site": "automation-4e6bd",
+    "public": "out",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "function": "ssrkarobhrapp" 
-      }
     ]
   },
-  "functions": [
-    {
-      "source": ".firebase/functions",
-      "runtime": "nodejs20",
-      "codebase": "firebase-frameworks-karobhr-app"
-    }
-  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

@@ -15,13 +15,13 @@ self.__WB_MANIFEST;
 // your app's Firebase config object.
 // https://firebase.google.com/docs/web/setup#config-object
 firebase.initializeApp({
-  apiKey: "AIzaSyCP67K069RaS0kRF_2RrwkyMkit6KpYtVU",
-  authDomain: "karobhr-app.firebaseapp.com",
-  projectId: "karobhr-app",
-  storageBucket: "karobhr-app.firebasestorage.app",
-  messagingSenderId: "173193434755",
-  appId: "1:173193434755:web:ff524a012e3ad42bff2db6",
-  measurementId: "G-PTWL6WSMHZ"
+  apiKey: "AIzaSyDVcbhLASfYQ0wpr4DyhngZqvClEG6qT1s",
+  authDomain: "automation-4e6bd.firebaseapp.com",
+  projectId: "automation-4e6bd",
+  storageBucket: "automation-4e6bd.firebasestorage.app",
+  messagingSenderId: "790882259931",
+  appId: "1:790882259931:web:ed6ca2966b80cc2eb5cdfe",
+  measurementId: "G-KK07ZQS39Z"
 });
 
 // Retrieve an instance of Firebase Messaging so that it can handle background
