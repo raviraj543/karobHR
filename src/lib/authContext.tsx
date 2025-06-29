@@ -2,17 +2,19 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth, db } from '@/lib/firebase/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
 interface AuthContextProps {
     user: User | null | undefined;
     loading: boolean;
+    login: (email: string, password: string) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextProps>({
+export const AuthContext = createContext<AuthContextProps>({
     user: undefined,
     loading: true,
+    login: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -39,7 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsubscribe();
     }, []);
 
-    const value: AuthContextProps = { user, loading };
+    const login = async (email: string, password: string) => {
+        await signInWithEmailAndPassword(auth, email, password);
+    };
+
+    const value: AuthContextProps = { user, loading, login };
 
     return (
         <AuthContext.Provider value={value}>
