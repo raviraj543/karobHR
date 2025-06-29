@@ -1,0 +1,33 @@
+name: Deploy to Firebase Hosting (Static)
+
+on: 
+  push:
+    branches:
+      - main # or master, depending on your primary branch
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Ensure this matches your project's requirements
+
+      - name: Install dependencies
+        run: npm ci # Use npm ci for clean installs in CI environments
+
+      - name: Build Next.js Static App
+        run: npm run build
+
+      - name: Deploy to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}'
+          projectId: 'automation-4e6bd'
+          channelId: 'live' # Deploys to the live channel
+          # Make sure your firebase.json has "public": "out"
