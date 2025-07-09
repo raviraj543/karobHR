@@ -11,7 +11,7 @@ export async function generateStaticParams() {
 }
 
 // Main Page Component for the Employee Detail Page
-export default function EmployeeDetailPage({ params }: PageProps) {
+export default function EmployeeDetailPage({ params }: PageProps<{ employeeId: string }>) {
   const { employeeId } = params;
 
   // Initial data will be null/empty, and the client component will fetch it.
