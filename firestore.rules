@@ -1,51 +1,26 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Users can read their own document, and admins can read any user's document.
     match /users/{userId} {
-      // Allow creation only if authenticated and data matches expected format for self-creation
-      allow create: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.data.keys().hasAll([
-                       'uid',
-                       'email',
-                       'name',
-                       'employeeId',
-                       'department',
-                       'role',
-                       'companyId',
-                       'companyName',
-                       'joiningDate',
-                       'baseSalary',
-                       'createdAt'
-                   ])
-                   && request.resource.data.keys().hasOnly([
-                       'uid',
-                       'email',
-                       'name',
-                       'employeeId',
-                       'department',
-                       'role',
-                       'companyId',
-                       'companyName',
-                       'joiningDate',
-                       'baseSalary',
-                       'createdAt'
-                   ])
-                   && request.resource.data.uid == request.auth.uid
-                   && request.resource.data.role is string
-                   && request.resource.data.companyId is string;
-
-      // TEMPORARY: Allow any authenticated user to read ANY user document
-      // This is for debugging to rule out rule issues. REVERT IN PRODUCTION.
-      allow read: if request.auth != null;
-
-      // Deny direct client-side updates/deletes for sensitive fields or roles
-      allow update, delete: if false; 
+      allow read: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if request.auth.uid == userId;
     }
 
-    // Default deny for other collections for security
-    match /{document=**} {
-      allow read, write: if false;
+    // Rules for all other collections.
+    match /{collection}/{docId} {
+      // Any authenticated user can read from any collection.
+      allow read: if request.auth != null;
+
+      // Allow any authenticated user to CREATE new documents.
+      // This is necessary for things like creating a new company, task, etc.
+      allow create: if request.auth != null;
+
+      // By default, do NOT allow users to update or delete documents in other collections.
+      // You will need to add specific, more secure rules for this later.
+      allow update, delete: if false;
     }
   }
 }

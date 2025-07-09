@@ -1,35 +1,41 @@
 import * as admin from 'firebase-admin';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, ServiceAccount } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 if (!getApps().length) {
   console.log("Firebase Admin: Initializing...");
-  console.log("Firebase Admin - Env Check (Raw):");
-  console.log("  PROJECT_ID:", process.env.FIREBASE_PROJECT_ID);
-  console.log("  CLIENT_EMAIL:", process.env.FIREBASE_CLIENT_EMAIL);
-  console.log("  PRIVATE_KEY length:", process.env.FIREBASE_PRIVATE_KEY?.length);
-  console.log("  PRIVATE_KEY (First 50 chars):", process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50));
 
-  // Process the private key to handle escaped newlines from CI/CD environments
-  const processedPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  let serviceAccount: ServiceAccount;
 
-  console.log("Firebase Admin - Env Check (Processed):");
-  console.log("  PRIVATE_KEY length (Processed):", processedPrivateKey?.length);
-  console.log("  PRIVATE_KEY (First 50 chars, Processed):", processedPrivateKey?.substring(0, 50));
-
-  initializeApp({
-    credential: admin.credential.cert({
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    console.log("Found FIREBASE_SERVICE_ACCOUNT_BASE64. Decoding and using it.");
+    const decodedServiceAccount = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8');
+    serviceAccount = JSON.parse(decodedServiceAccount);
+  } else {
+    // This is a fallback for local development if you're not using the base64 var
+    console.log("FIREBASE_SERVICE_ACCOUNT_BASE64 not found. Using individual env vars.");
+    serviceAccount = {
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: processedPrivateKey,
-    }),
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/
+/g, '
+'),
+    };
+  }
+  
+  console.log("Firebase Admin - Service Account Check:");
+  console.log("  Project ID:", serviceAccount.projectId);
+  console.log("  Client Email:", serviceAccount.clientEmail);
+  console.log("  Private Key defined:", !!serviceAccount.privateKey);
+
+  initializeApp({
+    credential: admin.credential.cert(serviceAccount),
   });
-  console.log("Firebase Admin: App initialized.");
+  console.log("Firebase Admin: App initialized successfully.");
 }
 
 const authAdmin = getAuth();
 const firestoreAdmin = getFirestore();
 
 export { authAdmin, firestoreAdmin };
-// Final attempt re-creation: Re-created firebaseAdmin.ts with robust private key parsing and enhanced logging.
