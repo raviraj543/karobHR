@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth, db } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import *s firestore from 'firebase/firestore';
+import * as firestore from 'firebase/firestore'; // Corrected: Used 'as' keyword
 import type { CompanySettings, Employee, Task, AttendanceEvent, Announcement, LeaveRequest, AdvanceRequest } from '@/lib/types';
 
 export interface NewEmployeeData {
@@ -24,12 +24,10 @@ interface AuthContextProps {
     login: (loginId: string, password: string) => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeeData, password: string) => Promise<void>;
     role: string | null;
-    // New properties for dashboard data
     announcements: Announcement[] | null;
     attendanceLog: AttendanceEvent[] | null;
     tasks: Task[] | null;
     companySettings: CompanySettings | null;
-    // Add user's full Firestore data here
     karobUser: Employee | null; 
 }
 
@@ -50,7 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [userRole, setUserRole] = useState<string | null>(null);
-    // New states for dashboard data
     const [announcements, setAnnouncements] = useState<Announcement[] | null>(null);
     const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[] | null>(null);
     const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -59,38 +56,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            setLoading(true); // Start loading when auth state changes
+            setLoading(true); 
             if (firebaseUser) {
                 const userDocRef = firestore.doc(db, 'users', firebaseUser.uid);
                 const userDoc = await firestore.getDoc(userDocRef);
 
                 if (userDoc.exists()) {
-                    const userData = userDoc.data() as Employee; // Cast to Employee type
+                    const userData = userDoc.data() as Employee; 
                     setUser(firebaseUser);
                     setKarobUser(userData);
                     setUserRole(userData.role || null);
 
-                    // --- Fetch related data based on user's companyId/role ---
                     if (userData.companyId) {
-                        // Fetch Company Settings
                         const settingsRef = firestore.doc(db, 'companies', userData.companyId);
                         const settingsDoc = await firestore.getDoc(settingsRef);
                         if (settingsDoc.exists()) {
                             setCompanySettings(settingsDoc.data() as CompanySettings);
                         }
 
-                        // Fetch Announcements for the company
                         const announcementsRef = firestore.collection(db, 'companies', userData.companyId, 'announcements');
                         const annSnapshot = await firestore.getDocs(firestore.query(announcementsRef, firestore.orderBy('postedAt', 'desc')));
                         setAnnouncements(annSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Announcement[]);
                     }
                     
-                    // Fetch Attendance Log for the user
                     const attendanceRef = firestore.collection(db, 'attendanceLog');
                     const attSnapshot = await firestore.getDocs(firestore.query(attendanceRef, firestore.where('userId', '==', firebaseUser.uid), firestore.orderBy('timestamp', 'desc')));
                     setAttendanceLog(attSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AttendanceEvent[]);
 
-                    // Fetch Tasks assigned to the user
                     const tasksRef = firestore.collection(db, 'tasks');
                     const tasksSnapshot = await firestore.getDocs(firestore.query(tasksRef, firestore.where('assigneeId', '==', userData.employeeId), firestore.orderBy('createdAt', 'desc')));
                     setTasks(tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[]);
@@ -102,7 +94,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     console.warn("User exists in Auth but corresponding Firestore document not found immediately.");
                 }
             } else {
-                // Clear all user and related data on sign out
                 setUser(null);
                 setKarobUser(null);
                 setUserRole(null);
@@ -111,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setTasks(null);
                 setCompanySettings(null);
             }
-            setLoading(false); // End loading
+            setLoading(false); 
         });
 
         return () => unsubscribe();
