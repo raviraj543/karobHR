@@ -7,7 +7,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { Employee, LeaveRequest, AdvanceRequest } from '@/lib/types';
 import EmployeeDetailsClient from '@/components/employees/EmployeeDetailsClient';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 interface EmployeeDetailPageProps {
   params: {
