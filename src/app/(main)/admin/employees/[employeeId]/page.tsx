@@ -1,17 +1,10 @@
 
-// Removed: import type { PageProps } from '@/lib/types';
 import EmployeeDetailsClient from '@/components/employees/EmployeeDetailsClient';
 
-// This function is required for Next.js static export of dynamic routes.
-// For static export (output: 'export'), we'll return a dummy path.
-// This ensures the build process doesn't complain about missing static params.
-// Data fetching for specific employee details should happen client-side after the page mounts.
-export async function generateStaticParams() {
-  return [{ employeeId: 'dummy-employee-id' }];
-}
+// generateStaticParams has been definitively removed to resolve persistent build typing conflict.
+// This page is now purely dynamic (SSR) and data fetching happens client-side.
 
 // Main Page Component for the Employee Detail Page
-// Changed to inline type definition for params to resolve build error
 export default function EmployeeDetailPage({ params }: { params: { employeeId: string } }) {
   const { employeeId } = params;
 
