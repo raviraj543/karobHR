@@ -21,7 +21,7 @@ export interface NewEmployeeData {
 interface AuthContextProps {
     user: User | null | undefined;
     loading: boolean;
-    login: (email: string, password: string) => Promise<void>;
+    login: (loginId: string, password: string) => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeeData, password: string) => Promise<void>;
 }
 
@@ -46,9 +46,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (userDoc.exists()) {
                     setUser(user);
                 } else {
-                    // If user exists in Auth but not Firestore, something went wrong or it's a new signup
-                    // For admin signup via API route, the doc should be created server-side.
-                    // We might need to ensure a delay or retry here if propagation is slow.
                     setUser(user); // Still set the user from Auth even if Firestore doc isn't immediately found
                     console.warn("User exists in Auth but corresponding Firestore document not found immediately.");
                 }
@@ -61,7 +58,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsubscribe();
     }, []);
 
-    const login = async (email: string, password: string) => {
+    const login = async (loginId: string, password: string) => {
+        // Step 1: Query Firestore to find the user by employeeId
+        const usersRef = firestore.collection(db, "users");
+        const q = firestore.query(usersRef, firestore.where("employeeId", "==", loginId));
+        const querySnapshot = await firestore.getDocs(q);
+
+        if (querySnapshot.empty) {
+            console.error("No user found with that Login ID.");
+            throw new Error("No user found with that Login ID.");
+        }
+
+        // Step 2: Get the user's email from the document
+        const userDoc = querySnapshot.docs[0];
+        const userData = userDoc.data();
+        const email = userData.email;
+
+        if (!email) {
+            console.error("User document does not contain an email address.");
+            throw new Error("User document does not contain an email address.");
+        }
+
+        // Step 3: Sign in with the retrieved email and password
         await signInWithEmailAndPassword(auth, email, password);
     };
 
