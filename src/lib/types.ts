@@ -177,3 +177,11 @@ export interface Category {
   name: string;
   userId: string; // The user who created the category
 }
+
+// New: PageProps type for Next.js dynamic routes
+export type PageProps = {
+  params: {
+    [key: string]: string;
+  };
+};
+
