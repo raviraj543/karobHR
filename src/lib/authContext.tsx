@@ -3,15 +3,15 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth, db } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import * as firestore from 'firebase/firestore'; // Import all firestore functions via alias
+import *s firestore from 'firebase/firestore';
+import type { CompanySettings, Employee, Task, AttendanceEvent, Announcement, LeaveRequest, AdvanceRequest } from '@/lib/types';
 
-// Define NewEmployeeData interface here as it's imported from this file
 export interface NewEmployeeData {
     name: string;
     employeeId: string;
     email?: string;
     department: string;
-    role: string; // Assuming UserRole is string
+    role: string;
     companyId: string;
     companyName: string;
     joiningDate: string;
@@ -23,42 +23,95 @@ interface AuthContextProps {
     loading: boolean;
     login: (loginId: string, password: string) => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeeData, password: string) => Promise<void>;
-    role: string | null; // Add role to the context props
+    role: string | null;
+    // New properties for dashboard data
+    announcements: Announcement[] | null;
+    attendanceLog: AttendanceEvent[] | null;
+    tasks: Task[] | null;
+    companySettings: CompanySettings | null;
+    // Add user's full Firestore data here
+    karobUser: Employee | null; 
 }
 
 export const AuthContext = createContext<AuthContextProps>({
     user: undefined,
     loading: true,
     login: async () => {},
-    addNewEmployee: async () => {}, // Default empty function
-    role: null, // Default role
+    addNewEmployee: async () => {}, 
+    role: null,
+    announcements: null,
+    attendanceLog: null,
+    tasks: null,
+    companySettings: null,
+    karobUser: null,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [userRole, setUserRole] = useState<string | null>(null); // New state for role
+    const [userRole, setUserRole] = useState<string | null>(null);
+    // New states for dashboard data
+    const [announcements, setAnnouncements] = useState<Announcement[] | null>(null);
+    const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[] | null>(null);
+    const [tasks, setTasks] = useState<Task[] | null>(null);
+    const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+    const [karobUser, setKarobUser] = useState<Employee | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            setLoading(true); // Start loading when auth state changes
             if (firebaseUser) {
                 const userDocRef = firestore.doc(db, 'users', firebaseUser.uid);
                 const userDoc = await firestore.getDoc(userDocRef);
 
                 if (userDoc.exists()) {
-                    const userData = userDoc.data();
+                    const userData = userDoc.data() as Employee; // Cast to Employee type
                     setUser(firebaseUser);
-                    setUserRole(userData.role || null); // Set the role from Firestore
+                    setKarobUser(userData);
+                    setUserRole(userData.role || null);
+
+                    // --- Fetch related data based on user's companyId/role ---
+                    if (userData.companyId) {
+                        // Fetch Company Settings
+                        const settingsRef = firestore.doc(db, 'companies', userData.companyId);
+                        const settingsDoc = await firestore.getDoc(settingsRef);
+                        if (settingsDoc.exists()) {
+                            setCompanySettings(settingsDoc.data() as CompanySettings);
+                        }
+
+                        // Fetch Announcements for the company
+                        const announcementsRef = firestore.collection(db, 'companies', userData.companyId, 'announcements');
+                        const annSnapshot = await firestore.getDocs(firestore.query(announcementsRef, firestore.orderBy('postedAt', 'desc')));
+                        setAnnouncements(annSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Announcement[]);
+                    }
+                    
+                    // Fetch Attendance Log for the user
+                    const attendanceRef = firestore.collection(db, 'attendanceLog');
+                    const attSnapshot = await firestore.getDocs(firestore.query(attendanceRef, firestore.where('userId', '==', firebaseUser.uid), firestore.orderBy('timestamp', 'desc')));
+                    setAttendanceLog(attSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AttendanceEvent[]);
+
+                    // Fetch Tasks assigned to the user
+                    const tasksRef = firestore.collection(db, 'tasks');
+                    const tasksSnapshot = await firestore.getDocs(firestore.query(tasksRef, firestore.where('assigneeId', '==', userData.employeeId), firestore.orderBy('createdAt', 'desc')));
+                    setTasks(tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[]);
+
                 } else {
                     setUser(firebaseUser);
-                    setUserRole(null); // No Firestore doc, so no role or default to null
+                    setKarobUser(null);
+                    setUserRole(null);
                     console.warn("User exists in Auth but corresponding Firestore document not found immediately.");
                 }
             } else {
+                // Clear all user and related data on sign out
                 setUser(null);
-                setUserRole(null); // Clear role if no user
+                setKarobUser(null);
+                setUserRole(null);
+                setAnnouncements(null);
+                setAttendanceLog(null);
+                setTasks(null);
+                setCompanySettings(null);
             }
-            setLoading(false);
+            setLoading(false); // End loading
         });
 
         return () => unsubscribe();
@@ -84,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         await signInWithEmailAndPassword(auth, email, password);
-        // The onAuthStateChanged listener will handle setting user and role after successful sign-in
     };
 
     const addNewEmployee = async (employeeData: NewEmployeeData, password: string) => {
@@ -106,12 +158,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.error("Server-side error details:", result);
                 throw new Error(result.details || 'Failed to create admin account via API.');
             }
-            return; // Exit after successful API call for admin
+            return; 
         }
 
         const userCredential = await createUserWithEmailAndPassword(
             auth,
-            employeeData.email || `${employeeData.employeeId}@${employeeData.companyId}.karobhr.com`, // Use provided email or generate one
+            employeeData.email || `${employeeData.employeeId}@${employeeData.companyId}.karobhr.com`, 
             password
         );
 
@@ -134,7 +186,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const value: AuthContextProps = { user, loading, login, addNewEmployee, role: userRole }; // Pass userRole here
+    const value: AuthContextProps = {
+      user, 
+      loading, 
+      login, 
+      addNewEmployee, 
+      role: userRole,
+      announcements, 
+      attendanceLog, 
+      tasks, 
+      companySettings,
+      karobUser,
+    };
 
     return (
         <AuthContext.Provider value={value}>
