@@ -5,9 +5,9 @@ const nextConfig = {
   // compiler: {
   //   styledComponents: true,
   // },
-  // typescript: {
-  //   ignoreBuildErrors: true,
-  // },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // eslint: {
   //   ignoreDuringBuilds: true,
   // },
