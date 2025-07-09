@@ -1,15 +1,13 @@
-// @ts-nocheck
-
 import EmployeeDetailsClient from '@/components/employees/EmployeeDetailsClient';
 
-// generateStaticParams has been definitively removed to resolve persistent build typing conflict.
-// This page is now purely dynamic (SSR) and data fetching happens client-side.
+// This page is now a purely dynamic (SSR) route.
+// generateStaticParams has been definitively removed.
+// All data fetching for employee details will happen client-side within EmployeeDetailsClient.
 
-// Main Page Component for the Employee Detail Page
 export default function EmployeeDetailPage({ params }: { params: { employeeId: string } }) {
   const { employeeId } = params;
 
-  // Initial data will be null/empty, and the client component will fetch it.
+  // Initial data is null/empty; client component fetches it.
   const initialEmployeeData = null;
   const initialHolidays = [];
   const initialCompanySettings = null;
@@ -19,7 +17,7 @@ export default function EmployeeDetailPage({ params }: { params: { employeeId: s
       initialEmployeeData={initialEmployeeData} 
       initialHolidays={initialHolidays}
       initialCompanySettings={initialCompanySettings}
-      employeeId={employeeId} // Pass employeeId to client component for fetching
+      employeeId={employeeId}
     />
   );
-} // Forced re-build marker: {{DATE_TIME}}
+}
