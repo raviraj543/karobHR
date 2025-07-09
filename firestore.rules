@@ -2,9 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
+      // Allow creation only if authenticated and data matches expected format for self-creation
       allow create: if request.auth != null
                    && request.auth.uid == userId
-                   // Ensure all required fields are present and no extra fields are added
                    && request.resource.data.keys().hasAll([
                        'uid',
                        'email',
@@ -31,12 +31,13 @@ service cloud.firestore {
                        'baseSalary',
                        'createdAt'
                    ])
-                   // Optional basic type/value validation for essential fields
                    && request.resource.data.uid == request.auth.uid
                    && request.resource.data.role is string
                    && request.resource.data.companyId is string;
 
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // TEMPORARY: Allow any authenticated user to read ANY user document
+      // This is for debugging to rule out rule issues. REVERT IN PRODUCTION.
+      allow read: if request.auth != null;
 
       // Deny direct client-side updates/deletes for sensitive fields or roles
       allow update, delete: if false; 

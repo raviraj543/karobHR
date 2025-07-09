@@ -39,14 +39,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // Use firestore.doc and firestore.getDoc with the aliased import
+                // Only attempt to fetch user document if user object is not null
                 const userDocRef = firestore.doc(db, 'users', user.uid);
                 const userDoc = await firestore.getDoc(userDocRef);
 
                 if (userDoc.exists()) {
                     setUser(user);
                 } else {
-                    setUser(user);
+                    // If user exists in Auth but not Firestore, something went wrong or it's a new signup
+                    // For admin signup via API route, the doc should be created server-side.
+                    // We might need to ensure a delay or retry here if propagation is slow.
+                    setUser(user); // Still set the user from Auth even if Firestore doc isn't immediately found
+                    console.warn("User exists in Auth but corresponding Firestore document not found immediately.");
                 }
             } else {
                 setUser(null);
@@ -62,7 +66,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const addNewEmployee = async (employeeData: NewEmployeeData, password: string) => {
-        // Create user with Firebase Auth
+        if (employeeData.role === 'admin') {
+            // Handle admin creation via API route
+            console.log("Client: Attempting to call /api/admin-signup...");
+            const response = await fetch('/api/admin-signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ employeeData, password }),
+            });
+            
+            console.log("Client: Received response status:", response.status);
+            const result = await response.json();
+            console.log("Client: Received response body:", result);
+
+            if (!response.ok) {
+                // Log the detailed error from the server
+                console.error("Server-side error details:", result);
+                throw new Error(result.details || 'Failed to create admin account via API.');
+            }
+            return; // Exit after successful API call for admin
+        }
+
+        // Existing logic for non-admin employee creation (client-side)
         const userCredential = await createUserWithEmailAndPassword(
             auth,
             employeeData.email || `${employeeData.employeeId}@${employeeData.companyId}.karobhr.com`, // Use provided email or generate one
@@ -71,9 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const newUser = userCredential.user;
 
-        // Store employee data in Firestore
         if (newUser) {
-            // Use firestore.doc and firestore.setDoc with the aliased import
             await firestore.setDoc(firestore.doc(db, 'users', newUser.uid), {
                 uid: newUser.uid,
                 email: employeeData.email || `${employeeData.employeeId}@${employeeData.companyId}.karobhr.com`,

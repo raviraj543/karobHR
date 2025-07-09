@@ -14,5 +14,31 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "emulators": {
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8080
+    },
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9099
+    },
+    "hosting": {
+      "host": "127.0.0.1",
+      "port": 5000
+    },
+    "storage": {
+      "host": "127.0.0.1",
+      "port": 9199
+    },
+    "ui": {
+      "host": "127.0.0.1",
+      "port": 4000
+    },
+    "hub": {
+      "host": "127.0.0.1",
+      "port": 4400
+    }
   }
 }

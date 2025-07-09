@@ -25,7 +25,7 @@ const adminSignupSchema = z.object({
   adminName: z.string().min(2, { message: 'Admin name must be at least 2 characters.' }),
   adminId: z.string().min(3, { message: 'Admin Login ID must be at least 3 characters.' })
     .regex(/^[a-zA-Z0-9_.-]*$/, { message: 'Admin Login ID can only contain letters, numbers, and _ . -' }),
-  adminEmail: z.string().email({ message: 'Invalid email address.' }).optional().or(z.literal('')),
+  adminEmail: z.string().email({ message: 'Invalid email address.' }), // Made mandatory
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
 }).refine(data => data.password === data.confirmPassword, {
@@ -200,11 +200,11 @@ export default function AdminSignupPage() {
                   name="adminEmail"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Admin Email (Optional)</FormLabel>
+                      <FormLabel>Admin Email</FormLabel>
                       <FormControl>
                         <Input type="email" placeholder="e.g., admin@company.com" {...field} />
                       </FormControl>
-                      <FormDescription>If blank, one may be auto-generated.</FormDescription>
+                      {/* <FormDescription>If blank, one may be auto-generated.</FormDescription> */}
                       <FormMessage />
                     </FormItem>
                   )}

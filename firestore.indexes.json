@@ -1,38 +1,4 @@
-
 {
-  "indexes": [
-    {
-      "collectionGroup": "attendanceLog",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "timestamp", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "links",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "categoryId", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "categories",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "userId", "order": "ASCENDING" }]
-    }
-  ],
-  "fieldOverrides": [
-    {
-      "collectionGroup": "attendanceLog",
-      "fieldPath": "checkInTime",
-      "indexes": [{ "order": "DESCENDING", "queryScope": "COLLECTION" }]
-    },
-    {
-      "collectionGroup": "attendanceLog",
-      "fieldPath": "userId",
-      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
-    }
-  ]
+  "indexes": [],
+  "fieldOverrides": []
 }
