@@ -23,6 +23,7 @@ interface AuthContextProps {
     loading: boolean;
     login: (loginId: string, password: string) => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeeData, password: string) => Promise<void>;
+    role: string | null; // Add role to the context props
 }
 
 export const AuthContext = createContext<AuthContextProps>({
@@ -30,27 +31,32 @@ export const AuthContext = createContext<AuthContextProps>({
     loading: true,
     login: async () => {},
     addNewEmployee: async () => {}, // Default empty function
+    role: null, // Default role
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [userRole, setUserRole] = useState<string | null>(null); // New state for role
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // Only attempt to fetch user document if user object is not null
-                const userDocRef = firestore.doc(db, 'users', user.uid);
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                const userDocRef = firestore.doc(db, 'users', firebaseUser.uid);
                 const userDoc = await firestore.getDoc(userDocRef);
 
                 if (userDoc.exists()) {
-                    setUser(user);
+                    const userData = userDoc.data();
+                    setUser(firebaseUser);
+                    setUserRole(userData.role || null); // Set the role from Firestore
                 } else {
-                    setUser(user); // Still set the user from Auth even if Firestore doc isn't immediately found
+                    setUser(firebaseUser);
+                    setUserRole(null); // No Firestore doc, so no role or default to null
                     console.warn("User exists in Auth but corresponding Firestore document not found immediately.");
                 }
             } else {
                 setUser(null);
+                setUserRole(null); // Clear role if no user
             }
             setLoading(false);
         });
@@ -59,7 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = async (loginId: string, password: string) => {
-        // Step 1: Query Firestore to find the user by employeeId
         const usersRef = firestore.collection(db, "users");
         const q = firestore.query(usersRef, firestore.where("employeeId", "==", loginId));
         const querySnapshot = await firestore.getDocs(q);
@@ -69,7 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error("No user found with that Login ID.");
         }
 
-        // Step 2: Get the user's email from the document
         const userDoc = querySnapshot.docs[0];
         const userData = userDoc.data();
         const email = userData.email;
@@ -79,13 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error("User document does not contain an email address.");
         }
 
-        // Step 3: Sign in with the retrieved email and password
         await signInWithEmailAndPassword(auth, email, password);
+        // The onAuthStateChanged listener will handle setting user and role after successful sign-in
     };
 
     const addNewEmployee = async (employeeData: NewEmployeeData, password: string) => {
         if (employeeData.role === 'admin') {
-            // Handle admin creation via API route
             console.log("Client: Attempting to call /api/admin-signup...");
             const response = await fetch('/api/admin-signup', {
                 method: 'POST',
@@ -100,14 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("Client: Received response body:", result);
 
             if (!response.ok) {
-                // Log the detailed error from the server
                 console.error("Server-side error details:", result);
                 throw new Error(result.details || 'Failed to create admin account via API.');
             }
             return; // Exit after successful API call for admin
         }
 
-        // Existing logic for non-admin employee creation (client-side)
         const userCredential = await createUserWithEmailAndPassword(
             auth,
             employeeData.email || `${employeeData.employeeId}@${employeeData.companyId}.karobhr.com`, // Use provided email or generate one
@@ -133,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const value: AuthContextProps = { user, loading, login, addNewEmployee };
+    const value: AuthContextProps = { user, loading, login, addNewEmployee, role: userRole }; // Pass userRole here
 
     return (
         <AuthContext.Provider value={value}>

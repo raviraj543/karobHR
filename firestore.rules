@@ -3,23 +3,22 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can read their own document, and admins can read any user's document.
     match /users/{userId} {
-      allow read: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Allow anyone to perform a query (list) on the users collection.
+      // This is required for the login flow to find an email by employeeId.
+      allow list: if true;
+
+      // Allow a user to GET their own document, and admins to GET any user's document.
+      allow get: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+
+      // Allow users to WRITE to their own document.
       allow write: if request.auth.uid == userId;
     }
 
     // Rules for all other collections.
     match /{collection}/{docId} {
-      // Any authenticated user can read from any collection.
       allow read: if request.auth != null;
-
-      // Allow any authenticated user to CREATE new documents.
-      // This is necessary for things like creating a new company, task, etc.
       allow create: if request.auth != null;
-
-      // By default, do NOT allow users to update or delete documents in other collections.
-      // You will need to add specific, more secure rules for this later.
       allow update, delete: if false;
     }
   }
