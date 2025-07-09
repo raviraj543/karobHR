@@ -12,9 +12,7 @@ if (!getApps().length) {
   console.log("  PRIVATE_KEY (First 50 chars):", process.env.FIREBASE_PRIVATE_KEY?.substring(0, 50));
 
   // Process the private key to handle escaped newlines from CI/CD environments
-  const processedPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(new RegExp('
-', 'g'), '
-');
+  const processedPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   console.log("Firebase Admin - Env Check (Processed):");
   console.log("  PRIVATE_KEY length (Processed):", processedPrivateKey?.length);
