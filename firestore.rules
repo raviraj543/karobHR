@@ -3,23 +3,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Users collection rules
     match /users/{userId} {
-      // Allow anyone to perform a query (list) on the users collection.
-      // This is required for the login flow to find an email by employeeId.
+      // Allows queries to find user by employeeId for login (e.g., allow login form to search)
       allow list: if true;
 
       // Allow a user to GET their own document, and admins to GET any user's document.
       allow get: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
 
-      // Allow users to WRITE to their own document.
+      // Allow a user to WRITE to their own document (e.g., update profile, save FCM token)
       allow write: if request.auth.uid == userId;
     }
 
-    // Rules for all other collections.
+    // Rules for top-level collections (like 'companies', 'attendanceLog', 'tasks')
     match /{collection}/{docId} {
+      // Authenticated users can read any document in these top-level collections
       allow read: if request.auth != null;
+
+      // Authenticated users can create new documents in these top-level collections
       allow create: if request.auth != null;
+
+      // Deny updates/deletes by default for top-level collections
       allow update, delete: if false;
+
+      // Nested rule for all subcollections (like 'announcements' under 'companies')
+      match /{subCollection}/{subDocId} {
+        // Authenticated users can read from any subcollection
+        allow read: if request.auth != null;
+
+        // Authenticated users can create new documents in subcollections
+        allow create: if request.auth != null;
+
+        // Deny updates/deletes by default for subcollections
+        allow update, delete: if false;
+      }
     }
   }
 }

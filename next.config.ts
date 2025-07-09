@@ -22,15 +22,7 @@ const nextConfig = {
   //   ],
   // },
   experimental: {
-    allowedDevOrigins: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://10.88.0.3:3000',
-      'http://10.88.0.3:3001',
-      'https://3000-firebase-studio-1748594124367.cluster-xpmcxs2fjnhg6xvn446ubtgpio.cloudworkstations.dev',
-      'https://3001-firebase-studio-1748594124367.cluster-xpmcxs2fjnhg6xvn446ubtgpio.cloudworkstations.dev',
-      'https://9000-firebase-studio-1748594124367.cluster-xpmcxs2fjnhg6xvn446ubtgpio.cloudworkstations.dev',
-    ],
+    // allowedDevOrigins removed for production deployment
   },
 };
 
