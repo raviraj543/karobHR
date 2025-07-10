@@ -71,7 +71,7 @@ export default function AttendancePage() {
     });
 
     return () => unsubscribe();
-  }, [user?.id, user?.companyId, authLoading]); // FIX: Removed `db` from dependency array
+  }, [user?.id, user?.companyId, authLoading]);
 
   const handleFetchLocation = useCallback(async (forceLowAccuracy = false) => {
     if (!navigator.geolocation) {
