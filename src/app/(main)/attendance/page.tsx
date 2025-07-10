@@ -256,7 +256,16 @@ export default function AttendancePage() {
     }
   }
 
-  if (attendanceStatus === 'error') { 
+  if (attendanceStatus === 'unknown' || authLoading) {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
+            <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
+            <p className="text-muted-foreground">Loading attendance status...</p>
+        </div>
+    );
+  }
+
+  if (attendanceStatus === 'error' || initializationError) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
@@ -264,12 +273,6 @@ export default function AttendancePage() {
         <p className="text-muted-foreground max-w-md">{initializationError}</p>
       </div>
     );
-  }
-
-  // The main layout now handles the primary loading state.
-  // We only show the error state here if something goes wrong after loading.
-  if (authLoading || attendanceStatus === 'unknown') {
-    return null; // Rely on the layout's loading spinner
   }
 
   return (
