@@ -175,10 +175,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!currentCompanySettings || currentCompanySettings.companyId !== companyId) {
             const companyDocRef = doc(db, "companies", companyId);
             const companyDocSnap = await getDoc(companyDocRef);
-            if (!companyDocSnap.exists()) {
-                throw new Error("Could not find the specified company to add an employee to.");
+            if (companyDocSnap.exists()) {
+                currentCompanySettings = companyDocSnap.data() as CompanySettings;
+            } else if (employeeData.role !== 'admin') {
+                // Only throw error if not creating the first admin
+                 throw new Error("Could not find the specified company to add an employee to.");
             }
-            currentCompanySettings = companyDocSnap.data() as CompanySettings;
         }
     
         const userCredential = await createUserWithEmailAndPassword(auth, finalEmail, password);
@@ -205,18 +207,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             batch.set(userDocRef, newUserDocument);
     
             // If this is the very first admin, create the company document
-            if (newUserDocument.role === 'admin') {
+            if (newUserDocument.role === 'admin' && !currentCompanySettings) {
                 const companyDocRefToCreate = doc(db, "companies", newUserDocument.companyId);
-                const companyDocSnap = await getDoc(companyDocRefToCreate);
-                if (!companyDocSnap.exists()) {
-                    batch.set(companyDocRefToCreate, {
-                        companyId: newUserDocument.companyId,
-                        companyName: employeeData.companyName, // This now comes from the form directly
-                        adminUid: newUser.uid,
-                        createdAt: new Date().toISOString(),
-                        salaryCalculationMode: 'hourly_deduction', // Default setting
-                    } as CompanySettings);
-                }
+                batch.set(companyDocRefToCreate, {
+                    companyId: newUserDocument.companyId,
+                    companyName: employeeData.companyName,
+                    adminUid: newUser.uid,
+                    createdAt: new Date().toISOString(),
+                    salaryCalculationMode: 'hourly_deduction',
+                } as CompanySettings);
             }
     
             await batch.commit();
