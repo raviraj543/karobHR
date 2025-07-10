@@ -169,10 +169,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const addNewEmployee = async (employeeData: NewEmployeePayload, password: string): Promise<User | null> => {
         const { email, employeeId, companyId } = employeeData;
         const finalEmail = email || `${employeeId}@${companyId}.karobhr.com`;
-
+    
+        // Ensure company settings are loaded before proceeding.
+        let currentCompanySettings = companySettings;
+        if (!currentCompanySettings || currentCompanySettings.companyId !== companyId) {
+            const companyDocRef = doc(db, "companies", companyId);
+            const companyDocSnap = await getDoc(companyDocRef);
+            if (!companyDocSnap.exists()) {
+                throw new Error("Could not find the specified company to add an employee to.");
+            }
+            currentCompanySettings = companyDocSnap.data() as CompanySettings;
+        }
+    
         const userCredential = await createUserWithEmailAndPassword(auth, finalEmail, password);
         const newUser = userCredential.user;
-
+    
         if (newUser) {
             const newUserDocument: User = {
                 id: newUser.uid,
@@ -188,24 +199,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 advances: [],
                 leaves: [],
             };
-
+    
             const batch = writeBatch(db);
             const userDocRef = doc(db, 'users', newUser.uid);
             batch.set(userDocRef, newUserDocument);
-
+    
             // If this is the very first admin, create the company document
-            const companyDocRef = doc(db, "companies", newUserDocument.companyId);
-            const companyDocSnap = await getDoc(companyDocRef);
-            if (!companyDocSnap.exists() && newUserDocument.role === 'admin') {
-              batch.set(companyDocRef, {
-                companyId: newUserDocument.companyId,
-                companyName: employeeData.companyName,
-                adminUid: newUser.uid,
-                createdAt: new Date().toISOString(),
-                salaryCalculationMode: 'hourly_deduction', // Default setting
-              } as CompanySettings);
+            if (newUserDocument.role === 'admin') {
+                const companyDocRefToCreate = doc(db, "companies", newUserDocument.companyId);
+                const companyDocSnap = await getDoc(companyDocRefToCreate);
+                if (!companyDocSnap.exists()) {
+                    batch.set(companyDocRefToCreate, {
+                        companyId: newUserDocument.companyId,
+                        companyName: employeeData.companyName, // This now comes from the form directly
+                        adminUid: newUser.uid,
+                        createdAt: new Date().toISOString(),
+                        salaryCalculationMode: 'hourly_deduction', // Default setting
+                    } as CompanySettings);
+                }
             }
-
+    
             await batch.commit();
             return newUserDocument;
         }
