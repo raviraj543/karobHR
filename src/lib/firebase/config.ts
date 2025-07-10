@@ -5,5 +5,6 @@ export const firebaseConfig = {
   storageBucket: "automation-4e6bd.firebasestorage.app",
   messagingSenderId: "790882259931",
   appId: "1:790882259931:web:ed6ca2966b80cc2eb5cdfe",
-  measurementId: "G-KK07ZQS39Z"
+  measurementId: "G-KK07ZQS39Z",
+  vapidKey: "BFMBcuN6uQgTlA4ut8Tz-pW4Rs4oBCHBHQkMO56X7ZGUQqTWBvPPOvYmVsBoLcsshpYtOulZG2qIM_nRDrJfWRg"
 };

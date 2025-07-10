@@ -1,28 +1,32 @@
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getStorage } from "firebase/storage";
-import { firebaseConfig } from './config'; // Import only the config object
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getMessaging, type Messaging } from "firebase/messaging";
+import { firebaseConfig } from './config';
 
-// Declare variables that will hold our Firebase instances
-let firebaseApp: any;
-let auth: any;
-let db: Firestore;
-let storage: any;
-
-// Initialize Firebase App (runs once when the module is imported)
+let firebaseApp: FirebaseApp;
 if (!getApps().length) {
   firebaseApp = initializeApp(firebaseConfig);
 } else {
   firebaseApp = getApp();
 }
 
-// Initialize Firebase Services immediately and assign to the declared variables.
-// This ensures they are always assigned and available upon module load.
-auth = getAuth(firebaseApp);
-db = getFirestore(firebaseApp);
-storage = getStorage(firebaseApp);
+const auth: Auth = getAuth(firebaseApp);
+const db: Firestore = getFirestore(firebaseApp);
+const storage: FirebaseStorage = getStorage(firebaseApp);
 
-// Export the initialized instances directly
-export { firebaseApp, auth, db, storage };
+let messaging: Messaging | null = null;
+
+// Only initialize messaging in the browser
+if (typeof window !== 'undefined') {
+  try {
+    messaging = getMessaging(firebaseApp);
+  } catch (error) {
+    console.error("Failed to initialize Firebase Messaging:", error);
+    // This might happen if the browser doesn't support it (e.g., in an iframe or private mode)
+  }
+}
+
+export { firebaseApp, auth, db, storage, messaging };
