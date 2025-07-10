@@ -24,10 +24,13 @@ interface AuthContextProps {
     login: (loginId: string, password: string) => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeeData, password: string) => Promise<void>;
     role: string | null;
-    announcements: Announcement[] | null;
-    attendanceLog: AttendanceEvent[] | null;
-    tasks: Task[] | null;
-    companySettings: CompanySettings | null;
+    announcements: Announcement[]; 
+    attendanceLog: AttendanceEvent[]; 
+    tasks: Task[]; 
+    employees: Employee[]; 
+    leaveRequests: LeaveRequest[]; 
+    advanceRequests: AdvanceRequest[]; 
+    companySettings: CompanySettings | null; 
     karobUser: Employee | null; 
 }
 
@@ -37,9 +40,12 @@ export const AuthContext = createContext<AuthContextProps>({
     login: async () => {},
     addNewEmployee: async () => {}, 
     role: null,
-    announcements: null,
-    attendanceLog: null,
-    tasks: null,
+    announcements: [], // Changed to []
+    attendanceLog: [], // Changed to []
+    tasks: [], // Changed to []
+    employees: [], // Default to []
+    leaveRequests: [], // Default to []
+    advanceRequests: [], // Default to []
     companySettings: null,
     karobUser: null,
 });
@@ -48,11 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [userRole, setUserRole] = useState<string | null>(null);
-    const [announcements, setAnnouncements] = useState<Announcement[] | null>(null);
-    const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[] | null>(null);
-    const [tasks, setTasks] = useState<Task[] | null>(null);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]); 
+    const [attendanceLog, setAttendanceLog] = useState<AttendanceEvent[]>([]); 
+    const [tasks, setTasks] = useState<Task[]>([]); 
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [karobUser, setKarobUser] = useState<Employee | null>(null);
+    const [employees, setEmployees] = useState<Employee[]>([]); 
+    const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]); 
+    const [advanceRequests, setAdvanceRequests] = useState<AdvanceRequest[]>([]); 
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -87,19 +96,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const tasksSnapshot = await firestore.getDocs(firestore.query(tasksRef, firestore.where('assigneeId', '==', userData.employeeId), firestore.orderBy('createdAt', 'desc')));
                     setTasks(tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[]);
 
+                    if (userData.role === 'admin' && userData.companyId) {
+                        const employeesRef = firestore.collection(db, 'users');
+                        const employeesSnapshot = await firestore.getDocs(firestore.query(employeesRef, firestore.where('companyId', '==', userData.companyId)));
+                        setEmployees(employeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Employee[]);
+
+                        const leaveRequestsRef = firestore.collection(db, 'leaveRequests');
+                        const leaveSnapshot = await firestore.getDocs(firestore.query(leaveRequestsRef, firestore.where('companyId', '==', userData.companyId), firestore.orderBy('createdAt', 'desc')));
+                        setLeaveRequests(leaveSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LeaveRequest[]);
+
+                        const advanceRequestsRef = firestore.collection(db, 'advanceRequests');
+                        const advanceSnapshot = await firestore.getDocs(firestore.query(advanceRequestsRef, firestore.where('companyId', '==', userData.companyId), firestore.orderBy('createdAt', 'desc')));
+                        setAdvanceRequests(advanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AdvanceRequest[]);
+                    }
+
                 } else {
                     setUser(firebaseUser);
                     setKarobUser(null);
                     setUserRole(null);
                     console.warn("User exists in Auth but corresponding Firestore document not found immediately.");
                 }
-            } else {
+            }
+            else {
                 setUser(null);
                 setKarobUser(null);
                 setUserRole(null);
-                setAnnouncements(null);
-                setAttendanceLog(null);
-                setTasks(null);
+                setAnnouncements([]); 
+                setAttendanceLog([]); 
+                setTasks([]); 
+                setEmployees([]); 
+                setLeaveRequests([]); 
+                setAdvanceRequests([]); 
                 setCompanySettings(null);
             }
             setLoading(false); 
@@ -188,6 +215,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tasks, 
       companySettings,
       karobUser,
+      employees, 
+      leaveRequests, 
+      advanceRequests,
     };
 
     return (

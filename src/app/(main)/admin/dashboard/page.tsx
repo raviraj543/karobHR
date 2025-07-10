@@ -15,7 +15,8 @@ import type { Announcement } from '@/lib/types'; // Import Announcement type
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function AdminDashboardPage() {
-  const { allUsers, announcements, addAnnouncement, user, tasks, loading } = useAuth(); // Get tasks and loading state
+  // Correctly destructure `employees`, `leaveRequests`, and `advanceRequests` from useAuth
+  const { employees, announcements, addAnnouncement, user, tasks, loading, leaveRequests, advanceRequests } = useAuth(); 
   const { toast } = useToast();
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
@@ -26,9 +27,14 @@ export default function AdminDashboardPage() {
   }, []);
 
   const adminStats = useMemo(() => {
-    const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;
-    const pendingLeaves = allUsers.flatMap(u => u.leaves || []).filter(l => l.status === 'pending').length;
-    const tasksInProgress = tasks.filter(t => t.status === 'In Progress').length;
+    // Safely access arrays by defaulting to empty arrays if they are null/undefined
+    const safeEmployees = employees || [];
+    const safeTasks = tasks || [];
+    const safeLeaveRequests = leaveRequests || [];
+
+    const totalEmployees = safeEmployees.filter(u => u.role === 'employee' || u.role === 'manager').length;
+    const pendingLeaves = safeLeaveRequests.filter(l => l.status === 'pending').length; // Use safeLeaveRequests
+    const tasksInProgress = safeTasks.filter(t => t.status === 'In Progress').length;
 
     return [
       { title: "Total Employees", value: totalEmployees.toString(), icon: Users, link: "/admin/employees" },
@@ -36,7 +42,7 @@ export default function AdminDashboardPage() {
       { title: "Tasks In Progress", value: tasksInProgress.toString(), icon: ListChecks, link: "/admin/tasks" },
       { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
     ];
-  }, [allUsers, tasks]);
+  }, [employees, tasks, leaveRequests]); // Add leaveRequests to dependencies
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
