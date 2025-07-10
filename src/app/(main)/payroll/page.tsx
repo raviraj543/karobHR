@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { Advance, MonthlyPayrollReport } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,9 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Skeleton } from '@/components/ui/skeleton';
+import { onSnapshot, collection, query, where, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase/firebase';
+
 
 const advanceRequestSchema = z.object({
   amount: z.preprocess(
@@ -29,12 +32,15 @@ const advanceRequestSchema = z.object({
 type AdvanceRequestFormValues = z.infer<typeof advanceRequestSchema>;
 
 export default function EmployeePayrollPage() {
-  const { user, attendanceLog, requestAdvance, calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
+  const { karobUser, requestAdvance, calculateMonthlyPayrollDetails, loading: authLoading, holidays } = useAuth();
   const [isSubmittingAdvance, setIsSubmittingAdvance] = useState(false);
   const { toast } = useToast();
 
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  
+  const [userAttendance, setUserAttendance] = useState<AttendanceEvent[]>([]);
+  const [userAdvances, setUserAdvances] = useState<Advance[]>([]);
   const [payrollReport, setPayrollReport] = useState<MonthlyPayrollReport | null>(null);
   const [reportLoading, setReportLoading] = useState(true);
 
@@ -49,21 +55,53 @@ export default function EmployeePayrollPage() {
   useEffect(() => {
     document.title = 'My Payslip - KarobHR';
   }, []);
+  
+  useEffect(() => {
+    if (!karobUser || !karobUser.companyId) return;
+
+    // Listener for this user's attendance
+    const attendanceQuery = query(
+        collection(db, `companies/${karobUser.companyId}/attendanceLog`),
+        where('userId', '==', karobUser.id)
+    );
+    const unsubAttendance = onSnapshot(attendanceQuery, (snapshot) => {
+        const attendanceData = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as AttendanceEvent));
+        setUserAttendance(attendanceData);
+    });
+
+    // Listener for this user's advances
+    const advancesQuery = query(
+        collection(db, `companies/${karobUser.companyId}/advances`),
+        where('employeeId', '==', karobUser.employeeId),
+        orderBy('dateRequested', 'desc')
+    );
+    const unsubAdvances = onSnapshot(advancesQuery, (snapshot) => {
+        const advancesData = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as Advance));
+        setUserAdvances(advancesData);
+    });
+
+    return () => {
+        unsubAttendance();
+        unsubAdvances();
+    };
+  }, [karobUser]);
+
 
   useEffect(() => {
     setReportLoading(true);
-    if (user && attendanceLog) {
-      const report = calculateMonthlyPayrollDetails(user, currentYear, currentMonth, attendanceLog);
+    if (karobUser) {
+      const userWithAdvances = { ...karobUser, advances: userAdvances };
+      const report = calculateMonthlyPayrollDetails(userWithAdvances, currentYear, currentMonth, userAttendance, holidays);
       setPayrollReport(report);
     }
     setReportLoading(false);
-  }, [user, attendanceLog, currentYear, currentMonth, calculateMonthlyPayrollDetails]);
+  }, [karobUser, userAttendance, userAdvances, holidays, currentYear, currentMonth, calculateMonthlyPayrollDetails]);
 
   const onSubmitAdvance: SubmitHandler<AdvanceRequestFormValues> = async (data) => {
-    if (!user) return;
+    if (!karobUser) return;
     setIsSubmittingAdvance(true);
     try {
-      await requestAdvance(user.employeeId, data.amount, data.reason);
+      await requestAdvance(karobUser.employeeId, data.amount, data.reason);
       toast({
         title: 'Advance Requested',
         description: 'Your advance request has been submitted for approval.',
@@ -149,7 +187,7 @@ export default function EmployeePayrollPage() {
     );
   }
 
-  if (authLoading || !user) {
+  if (authLoading || !karobUser) {
     return (
         <div className="space-y-6">
             <Skeleton className="h-12 w-1/2" />
@@ -230,7 +268,7 @@ export default function EmployeePayrollPage() {
             <CardDescription>Track the status of your advance requests.</CardDescription>
           </CardHeader>
           <CardContent>
-            {(user.advances && user.advances.length > 0) ? (
+            {(userAdvances && userAdvances.length > 0) ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -241,7 +279,7 @@ export default function EmployeePayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {user.advances.slice().reverse().map(advance => ( 
+                  {userAdvances.map(advance => ( 
                     <TableRow key={advance.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">₹{advance.amount.toLocaleString('en-IN')}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>

@@ -9,17 +9,33 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect, useMemo } from 'react';
-import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO } from 'date-fns';
+import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO, eachDayOfInterval, isSunday, endOfMonth } from 'date-fns';
 
 export default function EmployeeDashboardPage() {
-  const { user, announcements, attendanceLog, tasks, loading: authLoading, companySettings } = useAuth(); 
+  const { user: firebaseUser, karobUser, announcements, loading: authLoading, companySettings, calculateMonthlyPayrollDetails, allUsers } = useAuth(); 
+
+  const user = useMemo(() => {
+    if (!karobUser) return null;
+    // For regular users, find their own tasks, attendance, etc.
+    // This logic assumes `allUsers` is populated for admins, and for regular users, their own data is on `karobUser`
+    // A better approach is to have dedicated state slices in AuthContext for the current user's data
+    // For now, we'll work with what we have.
+    const myAttendance = allUsers.flatMap(u => u.attendanceLog || []).filter(a => a.userId === karobUser.id);
+    const myTasks = allUsers.flatMap(u => u.tasks || []).filter(t => t.assigneeId === karobUser.employeeId);
+    
+    return {
+        ...karobUser,
+        attendanceLog: myAttendance,
+        tasks: myTasks
+    }
+  }, [karobUser, allUsers]);
 
   useEffect(() => {
     document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
   }, [user?.name]);
 
   const dashboardStats = useMemo(() => {
-    if (!user || !attendanceLog || !tasks) {
+    if (!user || !user.attendanceLog || !user.tasks) {
       return {
         attendance: 'N/A',
         pendingTasks: 'N/A',
@@ -28,56 +44,36 @@ export default function EmployeeDashboardPage() {
         todaysEarnings: 0,
       };
     }
-
-    // Today's Earnings Calculation
     const today = new Date();
-    const todaysAttendance = attendanceLog.find(e => isSameDay(parseISO(e.timestamp), today) && e.status === 'Checked In');
-    let todaysEarnings = 0;
 
-    if (todaysAttendance && user.baseSalary) {
-      if (companySettings?.salaryCalculationMode === 'check_in_out') {
-        todaysEarnings = user.baseSalary / 30;
-      } else {
-        const checkInTime = parseISO(todaysAttendance.checkInTime as string);
-        const now = new Date();
-        const hoursWorkedToday = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
-
-        const monthStartDate = startOfMonth(today);
-        const allDaysInMonth = eachDayOfInterval({ start: monthStartDate, end: endOfMonth(today) });
-        const sundaysInMonth = allDaysInMonth.filter(isSunday);
-        // This should be updated to get holidays from context
-        const approvedHolidayDates = new Set();
-        const workingDaysInMonth = allDaysInMonth.length - sundaysInMonth.length - approvedHolidayDates.size;
-        const totalStandardHoursForMonth = workingDaysInMonth * (user.standardDailyHours || 8);
-        const perHourRate = user.baseSalary / totalStandardHoursForMonth;
-        todaysEarnings = hoursWorkedToday * perHourRate;
-      }
-    }
+    // Use the payroll calculation logic for earnings
+    const payroll = calculateMonthlyPayrollDetails(user, today.getFullYear(), today.getMonth(), user.attendanceLog, []);
+    const todaysEarnings = (payroll.finalNetPayable / payroll.totalWorkingDaysInMonth) || 0; // Simplified daily average
 
     // Attendance Calculation
     const monthStart = startOfMonth(today);
     const totalDaysInMonth = getDaysInMonth(today);
     const uniqueDaysAttended = new Set(
-      attendanceLog
+      user.attendanceLog
         .filter(event => {
           const eventDate = parseISO(event.timestamp);
-          return isSameDay(eventDate, today) || (eventDate >= monthStart && eventDate < today);
+          return eventDate >= monthStart && eventDate <= today;
         })
         .map(event => format(parseISO(event.timestamp), 'yyyy-MM-dd'))
     ).size;
     const attendance = `${uniqueDaysAttended}/${totalDaysInMonth} Days`;
 
     // Pending Tasks Calculation
-    const pendingTasksCount = tasks.filter(task => task.assigneeId === user.employeeId && task.status !== 'Completed').length;
+    const pendingTasksCount = user.tasks.filter(task => task.status !== 'Completed').length;
     const pendingTasks = `${pendingTasksCount} Tasks`;
 
     // Leave Balance (assuming a standard entitlement for now)
-    const annualLeaveEntitlement = 20; // This can be made configurable later
+    const annualLeaveEntitlement = 20; 
     const leavesTaken = user.leaves?.filter(l => l.status === 'approved').length || 0;
     const leaveBalance = `${annualLeaveEntitlement - leavesTaken} Days`;
     
     // Next Payslip Calculation
-    const nextPayslipDate = format(today, 'MMMM do, yyyy');
+    const nextPayslipDate = format(endOfMonth(today), 'MMMM do, yyyy');
 
     return {
       attendance,
@@ -86,7 +82,7 @@ export default function EmployeeDashboardPage() {
       nextPayslip: nextPayslipDate,
       todaysEarnings,
     };
-  }, [user, attendanceLog, tasks, companySettings]);
+  }, [user, calculateMonthlyPayrollDetails]);
   
   if (authLoading || !user) {
     return (
@@ -126,7 +122,7 @@ export default function EmployeeDashboardPage() {
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">₹{dashboardStats.todaysEarnings.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">Based on hours worked today and monthly salary.</p>
+          <p className="text-xs text-muted-foreground">This is an estimated daily average for this month.</p>
         </CardContent>
       </Card>
 
