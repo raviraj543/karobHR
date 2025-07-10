@@ -44,13 +44,13 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    if (authLoading || !db || !user?.id || !user?.companyId) { // Changed dbFs to db
+    if (authLoading || !user?.id || !user?.companyId) {
       setAttendanceStatus('unknown');
       return;
     }
 
     const q = query(
-      collection(db, `companies/${user.companyId}/attendanceLog`), // Changed dbFs to db
+      collection(db, `companies/${user.companyId}/attendanceLog`),
       where('userId', '==', user.id),
       orderBy('timestamp', 'desc'),
       limit(1)
@@ -71,7 +71,7 @@ export default function AttendancePage() {
     });
 
     return () => unsubscribe();
-  }, [db, user?.id, user?.companyId, authLoading]); // Changed dbFs to db
+  }, [user?.id, user?.companyId, authLoading]); // FIX: Removed `db` from dependency array
 
   const handleFetchLocation = useCallback(async (forceLowAccuracy = false) => {
     if (!navigator.geolocation) {
@@ -231,7 +231,7 @@ export default function AttendancePage() {
 
                 const geofenceRadius = officeLocation.radius ?? 0;
                 const isInside = distance <= geofenceRadius;
-                const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
+                const friendlyDist = distance > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
 
                 return (
                   <div>
