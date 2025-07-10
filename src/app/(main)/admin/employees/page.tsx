@@ -52,6 +52,10 @@ export default function AdminEmployeesPage() {
   }, []);
 
   useEffect(() => {
+    if (!allUsers) {
+      setFilteredEmployees([]);
+      return;
+    }
     const displayableUsers = allUsers.filter(u => u.role !== 'admin'); 
     
     if (searchTerm.trim() === '') {
