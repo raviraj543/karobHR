@@ -24,8 +24,6 @@ export default function AttendancePage() {
   const { user, companySettings, addAttendanceEvent, completeCheckout, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  // const [dbFs, setDbFs] = useState<Firestore | null>(null); // Removed this state as db is directly imported
-
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('unknown');
   const [currentDayDocId, setCurrentDayDocId] = useState<string | null>(null);
   
@@ -39,8 +37,6 @@ export default function AttendancePage() {
 
   useEffect(() => {
     document.title = 'My Attendance - KarobHR';
-    // No need to setDbFs here, as db is directly imported and available.
-    // The try-catch block for getFirebaseInstances is also no longer needed.
   }, []);
 
   useEffect(() => {
@@ -68,6 +64,7 @@ export default function AttendancePage() {
     }, (errorObject: any) => {
       console.error("Firestore onSnapshot error:", errorObject);
       setInitializationError(`Database Error: ${errorObject.message}. Check console for details.`);
+      setAttendanceStatus('error');
     });
 
     return () => unsubscribe();
@@ -259,15 +256,6 @@ export default function AttendancePage() {
     }
   }
 
-  if (authLoading || attendanceStatus === 'unknown') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading attendance data...</p>
-      </div>
-    );
-  }
-
   if (attendanceStatus === 'error') { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
@@ -276,6 +264,12 @@ export default function AttendancePage() {
         <p className="text-muted-foreground max-w-md">{initializationError}</p>
       </div>
     );
+  }
+
+  // The main layout now handles the primary loading state.
+  // We only show the error state here if something goes wrong after loading.
+  if (authLoading || attendanceStatus === 'unknown') {
+    return null; // Rely on the layout's loading spinner
   }
 
   return (
