@@ -11,9 +11,8 @@ import { LogIn, LogOut, FileText, Loader2, AlertCircle, MapPin, LocateFixed } fr
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { db } from '@/lib/firebase/firebase'; // Corrected import
+import { db } from '@/lib/firebase/firebase'; 
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import type { Firestore } from 'firebase/firestore';
 import { calculateDistance } from '@/lib/locationUtils';
 import { Label } from '@/components/ui/label';
 
@@ -21,7 +20,7 @@ type AttendanceStatus = 'checked-out' | 'checked-in' | 'processing-check-in' | '
 type LocationStatus = 'idle' | 'fetching' | 'success' | 'error';
 
 export default function AttendancePage() {
-  const { user, companySettings, addAttendanceEvent, completeCheckout, loading: authLoading } = useAuth();
+  const { user, companySettings, addAttendanceEvent, completeCheckout, loading: authLoading, karobUser } = useAuth(); // Added karobUser
   const { toast } = useToast();
 
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('unknown');
@@ -40,14 +39,16 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    if (authLoading || !user?.id || !user?.companyId) {
+    // Ensure user, karobUser, and companyId are available before attempting Firestore query
+    if (authLoading || !user?.uid || !karobUser?.companyId) { // Check for user.uid and karobUser.companyId
       setAttendanceStatus('unknown');
-      return;
+      setInitializationError(null); // Clear previous errors
+      return; // Exit if not ready
     }
 
     const q = query(
-      collection(db, `companies/${user.companyId}/attendanceLog`),
-      where('userId', '==', user.id),
+      collection(db, `companies/${karobUser.companyId}/attendanceLog`), // Use karobUser.companyId
+      where('userId', '==', user.uid), // Use user.uid
       orderBy('timestamp', 'desc'),
       limit(1)
     );
@@ -61,18 +62,35 @@ export default function AttendancePage() {
         setCurrentDayDocId(latestDoc.id);
         setAttendanceStatus(data.status === 'Checked In' ? 'checked-in' : 'checked-out');
       }
+      setInitializationError(null); // Clear error on successful snapshot
     }, (errorObject: any) => {
       console.error("Firestore onSnapshot error:", errorObject);
-      setInitializationError(`Database Error: ${errorObject.message}. Check console for details.`);
+      // More detailed error messages for common issues
+      let errorMessage = errorObject.message;
+      if (errorObject.code === 'permission-denied') {
+        errorMessage = "Permission Denied: Check Firestore rules for 'attendanceLog' or ensure you are logged in.";
+      } else if (errorObject.code === 'failed-precondition' && errorMessage.includes('The query requires an index')) {
+        errorMessage = `Missing Firestore Index: ${errorMessage}. Please create the required index in Firebase Console.`;
+      }
+      setInitializationError(`Error loading attendance: ${errorMessage}`);
       setAttendanceStatus('error');
     });
 
     return () => unsubscribe();
-  }, [user?.id, user?.companyId, authLoading]);
+  }, [user?.uid, karobUser?.companyId, authLoading]); // Depend on user.uid and karobUser.companyId
 
   const handleFetchLocation = useCallback((forceLowAccuracy = false) => {
     if (!navigator.geolocation) {
         toast({ variant: "destructive", title: "Unsupported Browser", description: "Geolocation is not supported." });
+        return;
+    }
+    // Ensure companySettings is loaded for geofence check
+    if (!companySettings) {
+        toast({
+            variant: "destructive",
+            title: "Company Settings Not Loaded",
+            description: "Cannot fetch location for geofence check because company settings are missing. Please ensure your company has been set up."
+        });
         return;
     }
 
@@ -120,17 +138,15 @@ export default function AttendancePage() {
         console.error(`Geolocation Error (High Accuracy: ${isHighAccuracyAttempt}): Code ${error.code} - ${error.message}`);
 
         if (isHighAccuracyAttempt && error.code === error.TIMEOUT) {
-            // If high accuracy times out, try low accuracy
             toast({ title: "Location accuracy timeout", description: "Trying to get location with lower accuracy..."});
             navigator.geolocation.getCurrentPosition(
                 processPosition, 
-                (err) => handleError(err, false), // Second attempt, now with isHighAccuracyAttempt = false
+                (err) => handleError(err, false), 
                 { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
             );
             return;
         }
 
-        // Final error handling for both attempts
         setLocationStatus('error');
         setCurrentLocation(null);
         setDistance(null);
@@ -152,7 +168,6 @@ export default function AttendancePage() {
             { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 }
         );
     } else {
-        // First attempt: High Accuracy (8 seconds timeout)
         navigator.geolocation.getCurrentPosition(
             processPosition,
             (err) => handleError(err, true),
@@ -166,6 +181,16 @@ export default function AttendancePage() {
       toast({ title: "Location Needed", description: "Please fetch your location before checking in.", variant: "destructive" });
       return;
     }
+    // Ensure company settings are available for geofence check before checking in
+    if (!companySettings || !companySettings.officeLocation) {
+        toast({
+            title: "Missing Geofence Configuration",
+            description: "The company office location is not set up by the admin. Cannot check in.",
+            variant: "destructive"
+        });
+        return;
+    }
+
     setAttendanceStatus('processing-check-in');
     try {
       const newDocId = await addAttendanceEvent(currentLocation);
@@ -183,6 +208,15 @@ export default function AttendancePage() {
      if (!currentLocation) {
       toast({ title: "Location Needed", description: "Please fetch your location before checking out.", variant: "destructive" });
       return;
+    }
+    // Ensure company settings are available for geofence check before checking out
+    if (!companySettings || !companySettings.officeLocation) {
+        toast({
+            title: "Missing Geofence Configuration",
+            description: "The company office location is not set up by the admin. Cannot check out.",
+            variant: "destructive"
+        });
+        return;
     }
     setIsReportModalOpen(true);
   };
@@ -256,7 +290,7 @@ export default function AttendancePage() {
     }
   }
 
-  if (attendanceStatus === 'unknown' || authLoading) {
+  if (attendanceStatus === 'unknown' || authLoading || !karobUser) { // Added !karobUser to loading check
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
             <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
@@ -284,11 +318,11 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="space-y-4">
             {renderLocationStatus()}
-            <Button className="w-full" variant="secondary" onClick={() => handleFetchLocation()}>
+            <Button className="w-full" variant="secondary" onClick={() => handleFetchLocation()} disabled={locationStatus === 'fetching'}>
                 {locationStatus === 'fetching' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LocateFixed className="mr-2 h-4 w-4"/>}
                 Refresh My Location
             </Button>
-            <Button className="w-full" variant="outline" onClick={() => handleFetchLocation(true)}>
+            <Button className="w-full" variant="outline" onClick={() => handleFetchLocation(true)} disabled={locationStatus === 'fetching'}>
                 {locationStatus === 'fetching' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LocateFixed className="mr-2 h-4 w-4"/>}
                 Force Low Accuracy Refresh
             </Button>

@@ -80,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            setLoading(true);
             if (firebaseUser) {
                 const userDocRef = doc(db, 'users', firebaseUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -90,10 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setKarobUser(userData);
 
                     if (userData.companyId) {
-                        // Set up listeners for company-wide data
                         const companyDocRef = doc(db, 'companies', userData.companyId);
-                        onSnapshot(companyDocRef, (snap) => {
-                             setCompanySettings(snap.exists() ? (snap.data() as CompanySettings) : null);
+                        
+                        // Set up a listener for real-time updates on company settings.
+                        // The onSnapshot will also provide the initial data.
+                        const companyUnsubscribe = onSnapshot(companyDocRef, (companySnap) => {
+                            const settings = companySnap.exists() ? (companySnap.data() as CompanySettings) : null;
+                            setCompanySettings(settings);
+                            // Set loading to false only after we get the first snapshot of company data
+                            setLoading(false); 
                         });
 
                         const announcementsRef = collection(db, `companies/${userData.companyId}/announcements`);
@@ -106,7 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                              setHolidays(snap.docs.map(d => ({ ...d.data(), id: d.id, date: (d.data().date as any).toDate() } as Holiday)));
                         });
 
-                        // If user is admin, set up listeners for all company data
                         if (userData.role === 'admin') {
                             const usersRef = collection(db, 'users');
                             onSnapshot(query(usersRef, where('companyId', '==', userData.companyId)), (snap) => {
@@ -123,13 +128,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                                 setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
                             });
                         }
+                        
+                        // Return a cleanup function for the company listener
+                        return () => companyUnsubscribe();
+                    } else {
+                        setCompanySettings(null);
+                        setLoading(false); // No companyId, so we can stop loading.
                     }
                 } else {
-                    // This case might happen if user is deleted from Firestore but not Auth
-                    await signOut(auth);
+                    await signOut(auth); // User in Auth but not Firestore, sign out.
+                    setLoading(false);
                 }
             } else {
-                // No user logged in, reset all state
                 setUser(null);
                 setKarobUser(null);
                 setCompanySettings(null);
@@ -138,8 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setAllUsers([]);
                 setAllAttendance([]);
                 setAllTasks([]);
+                setLoading(false);
             }
-            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -167,21 +177,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const addNewEmployee = async (employeeData: NewEmployeePayload, password: string): Promise<User | null> => {
-        const { email, employeeId, companyId } = employeeData;
-        const finalEmail = email || `${employeeId}@${companyId}.karobhr.com`;
-    
-        // Ensure company settings are loaded before proceeding.
-        let currentCompanySettings = companySettings;
-        if (!currentCompanySettings || currentCompanySettings.companyId !== companyId) {
+        const { email, employeeId, companyId, role, companyName } = employeeData;
+        
+        // Ensure we have the company name, fetching if necessary
+        let finalCompanyName = companyName;
+        if (!finalCompanyName && companyId) {
             const companyDocRef = doc(db, "companies", companyId);
             const companyDocSnap = await getDoc(companyDocRef);
             if (companyDocSnap.exists()) {
-                currentCompanySettings = companyDocSnap.data() as CompanySettings;
-            } else if (employeeData.role !== 'admin') {
-                // Only throw error if not creating the first admin
-                 throw new Error("Could not find the specified company to add an employee to.");
+                finalCompanyName = companyDocSnap.data().companyName;
+            } else if (role !== 'admin') {
+                 throw new Error("Cannot add employee: Company does not exist.");
             }
         }
+
+        const finalEmail = email || `${employeeId}@${companyId}.karobhr.com`;
     
         const userCredential = await createUserWithEmailAndPassword(auth, finalEmail, password);
         const newUser = userCredential.user;
@@ -206,12 +216,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const userDocRef = doc(db, 'users', newUser.uid);
             batch.set(userDocRef, newUserDocument);
     
-            // If this is the very first admin, create the company document
-            if (newUserDocument.role === 'admin' && !currentCompanySettings) {
-                const companyDocRefToCreate = doc(db, "companies", newUserDocument.companyId);
-                batch.set(companyDocRefToCreate, {
-                    companyId: newUserDocument.companyId,
-                    companyName: employeeData.companyName,
+            const companyDocRef = doc(db, "companies", companyId);
+            const companyDocSnap = await getDoc(companyDocRef);
+            if (!companyDocSnap.exists() && role === 'admin') {
+                batch.set(companyDocRef, {
+                    companyId: companyId,
+                    companyName: finalCompanyName,
                     adminUid: newUser.uid,
                     createdAt: new Date().toISOString(),
                     salaryCalculationMode: 'hourly_deduction',
@@ -240,7 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!karobUser || !karobUser.companyId || !companySettings) return null;
         
         let isWithin = null;
-        if(companySettings.officeLocation) {
+        if(companySettings.officeLocation && companySettings.officeLocation.latitude && companySettings.officeLocation.longitude) {
             const dist = Math.sqrt(
                 Math.pow(location.latitude - companySettings.officeLocation.latitude, 2) +
                 Math.pow(location.longitude - companySettings.officeLocation.longitude, 2)
@@ -280,7 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const totalHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
 
         let isWithin = null;
-        if (companySettings.officeLocation) {
+        if (companySettings.officeLocation && companySettings.officeLocation.latitude && companySettings.officeLocation.longitude) {
              const dist = Math.sqrt(
                 Math.pow(location.latitude - companySettings.officeLocation.latitude, 2) +
                 Math.pow(location.longitude - companySettings.officeLocation.longitude, 2)
@@ -496,5 +506,3 @@ export const useAuth = (): AuthContextType => {
     return context;
 };
 
-
-    
