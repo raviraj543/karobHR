@@ -6,19 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2, LocateFixed, Wallet, Settings } from 'lucide-react';
+import { MapPin, Loader2, LocateFixed, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { CompanySettings, LocationInfo, SalaryCalculationMode } from '@/lib/types';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function AdminSettingsPage() {
-  const { companySettings, updateCompanySettings, companyId, loading: authLoading, user } = useAuth();
+  const { companySettings, updateCompanySettings, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  // Local state for form values, initialized from companySettings
   const [formState, setFormState] = useState<Partial<CompanySettings>>({});
-  
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
@@ -26,7 +24,6 @@ export default function AdminSettingsPage() {
     document.title = 'Company Settings - Admin - KarobHR';
   }, []);
 
-  // When companySettings load from context, update the local form state
   useEffect(() => {
     if (companySettings) {
       setFormState(companySettings);
@@ -37,10 +34,10 @@ export default function AdminSettingsPage() {
     setFormState(prevState => ({
         ...prevState,
         officeLocation: {
-            ...prevState.officeLocation,
             latitude: prevState.officeLocation?.latitude || 0,
             longitude: prevState.officeLocation?.longitude || 0,
-            radius: prevState.officeLocation?.radius || 0,
+            radius: prevState.officeLocation?.radius || 100, // Default radius if not set
+            name: prevState.officeLocation?.name || "Main Office",
             [field]: value,
         },
     }));
@@ -53,11 +50,14 @@ export default function AdminSettingsPage() {
     }));
   }
 
-  const getCurrentLocationForGeofence = useCallback(async (): Promise<LocationInfo> => {
+  const getCurrentLocationForGeofence = useCallback((): Promise<GeolocationCoordinates> => {
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) reject(new Error("Geolocation is not supported."));
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported."));
+        return;
+      }
       navigator.geolocation.getCurrentPosition(
-        (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }),
+        (position) => resolve(position.coords),
         (error) => reject(new Error(`Geolocation error: ${error.message}`)),
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
@@ -68,14 +68,15 @@ export default function AdminSettingsPage() {
     setIsFetchingLocation(true);
     toast({ title: "Fetching Your Location..." });
     try {
-      const location = await getCurrentLocationForGeofence();
+      const coords = await getCurrentLocationForGeofence();
       setFormState(prevState => ({
         ...prevState,
         officeLocation: {
             ...prevState.officeLocation,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            radius: prevState.officeLocation?.radius || 100, // Keep existing radius or default
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            radius: prevState.officeLocation?.radius || 100,
+            name: prevState.officeLocation?.name || "Main Office",
         }
       }));
       toast({ title: "Location Set!", description: "Latitude and longitude have been updated. Please save." });
@@ -87,16 +88,17 @@ export default function AdminSettingsPage() {
   };
 
   const handleSaveSettings = async () => {
+    if (!companySettings) {
+      toast({ title: "Error Saving", description: "Company context is missing.", variant: "destructive" });
+      return;
+    }
+
     const lat = Number(formState.officeLocation?.latitude);
     const lon = Number(formState.officeLocation?.longitude);
     const radius = Number(formState.officeLocation?.radius);
 
     if (isNaN(lat) || isNaN(lon) || isNaN(radius) || radius <= 0) {
       toast({ title: "Invalid Input", description: "Please enter valid numbers for geofence.", variant: "destructive" });
-      return;
-    }
-    if (!companyId) {
-      toast({ title: "Error Saving", description: "Company context is missing.", variant: "destructive" });
       return;
     }
 
@@ -120,7 +122,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const isActionDisabled = isSaving || authLoading || !companyId || !user || user.role !== 'admin';
+  const isActionDisabled = isSaving || authLoading || isFetchingLocation;
 
   if (authLoading && !companySettings) {
     return (
@@ -174,7 +176,7 @@ export default function AdminSettingsPage() {
               <Label htmlFor="officeLon">Office Longitude</Label>
               <Input id="officeLon" type="number" value={formState.officeLocation?.longitude || ''} onChange={(e) => handleInputChange('longitude', e.target.value)} placeholder="e.g., -122.4194" disabled={isActionDisabled}/>
             </div>
-            <Button variant="outline" className="w-full sm:w-auto" onClick={handleFetchAndSetLocation} disabled={isActionDisabled || isFetchingLocation}>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={handleFetchAndSetLocation} disabled={isActionDisabled}>
                 {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
                 Use My Current Location
             </Button>
@@ -220,3 +222,4 @@ export default function AdminSettingsPage() {
   );
 }
 
+    
