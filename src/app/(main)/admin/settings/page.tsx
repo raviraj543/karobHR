@@ -13,7 +13,7 @@ import type { CompanySettings, LocationInfo, SalaryCalculationMode } from '@/lib
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function AdminSettingsPage() {
-  const { companySettings, updateCompanySettings, loading: authLoading } = useAuth();
+  const { karobUser, companySettings, updateCompanySettings, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const [formState, setFormState] = useState<Partial<CompanySettings>>({});
@@ -36,7 +36,7 @@ export default function AdminSettingsPage() {
         officeLocation: {
             latitude: prevState.officeLocation?.latitude || 0,
             longitude: prevState.officeLocation?.longitude || 0,
-            radius: prevState.officeLocation?.radius || 100, // Default radius if not set
+            radius: prevState.officeLocation?.radius || 100,
             name: prevState.officeLocation?.name || "Main Office",
             [field]: value,
         },
@@ -88,7 +88,7 @@ export default function AdminSettingsPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!companySettings) {
+    if (!karobUser?.companyId) {
       toast({ title: "Error Saving", description: "Company context is missing.", variant: "destructive" });
       return;
     }
@@ -221,5 +221,3 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
-
-    
