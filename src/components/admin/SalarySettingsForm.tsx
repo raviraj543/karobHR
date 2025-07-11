@@ -8,10 +8,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { SalaryCalculationMode } from '@/lib/types';
+import type { SalaryCalculationMode, CompanySettings } from '@/lib/types';
 
-export function SalarySettingsForm() {
-    const { companySettings, updateCompanySettings, loading: authLoading } = useAuth();
+interface SalarySettingsFormProps {
+    companySettings: CompanySettings | null;
+}
+
+export function SalarySettingsForm({ companySettings }: SalarySettingsFormProps) {
+    const { updateCompanySettings, loading: authLoading } = useAuth();
     const { toast } = useToast();
     const [selectedMode, setSelectedMode] = useState<SalaryCalculationMode | undefined>(companySettings?.salaryCalculationMode);
 
@@ -27,7 +31,7 @@ export function SalarySettingsForm() {
             await updateCompanySettings({ salaryCalculationMode: newMode });
             toast({
                 title: "Salary Calculation Mode Updated",
-                description: `Payroll will now be calculated using the ${newMode.replace('_', ' ')} method.`,
+                description: `Payroll will now be calculated using the ${newMode.replace(/_/g, ' ')} method.`,
             });
         } catch (error: any) {
             toast({
@@ -43,7 +47,7 @@ export function SalarySettingsForm() {
     // Show loading or a message if settings are not loaded yet
     if (authLoading || companySettings === null) {
         return (
-             <Card className="shadow-lg">
+             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" />Salary Calculation</CardTitle>
                     <CardDescription>Configure how employee salaries are calculated.</CardDescription>
@@ -56,7 +60,7 @@ export function SalarySettingsForm() {
     }
 
     return (
-         <Card className="shadow-lg">
+         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" />Salary Calculation</CardTitle>
                 <CardDescription>Configure how employee salaries are calculated.</CardDescription>

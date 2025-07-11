@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2, LocateFixed, Wallet } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -26,20 +24,13 @@ export default function AdminSettingsPage() {
   
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
-  const [formInitialized, setFormInitialized] = useState(false);
 
   useEffect(() => {
     document.title = 'Company Settings - Admin - KarobHR';
   }, []);
 
   useEffect(() => {
-    if (authLoading || companySettings === undefined) {
-      setFormInitialized(false);
-      return;
-    }
-
-    if (companyId) {
-      if (companySettings) {
+    if (companySettings) {
         const { officeLocation } = companySettings;
         if (officeLocation) {
           setOfficeName(officeLocation.name || 'Main Office');
@@ -52,15 +43,8 @@ export default function AdminSettingsPage() {
           setOfficeLon('0');
           setOfficeRadius('100');
         }
-      } else {
-        setOfficeName('Main Office');
-        setOfficeLat('0');
-        setOfficeLon('0');
-        setOfficeRadius('100');
-      }
     }
-    setFormInitialized(true);
-  }, [companySettings, authLoading, companyId]);
+  }, [companySettings]);
 
   const getCurrentLocationForGeofence = useCallback(async (): Promise<LocationInfo> => {
     return new Promise((resolve, reject) => {
@@ -121,7 +105,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const isActionDisabled = !formInitialized || isSaving || authLoading || !companyId || !user || user.role !== 'admin';
+  const isActionDisabled = isSaving || authLoading || !companyId || !user || user.role !== 'admin';
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -160,7 +144,7 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
       
-      <SalarySettingsForm />
+      <SalarySettingsForm companySettings={companySettings} />
 
       <div className="flex justify-end">
         <Button onClick={handleSaveSettings} disabled={isActionDisabled}>
