@@ -6,21 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2, LocateFixed, Wallet } from 'lucide-react';
+import { Building2, Clock, Palette, BellDot, MapPin, CalendarCheck2, Loader2, LocateFixed, Wallet, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import type { CompanySettings, LocationInfo } from '@/lib/types';
+import type { CompanySettings, LocationInfo, SalaryCalculationMode } from '@/lib/types';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { SalarySettingsForm } from '@/components/admin/SalarySettingsForm';
 
 export default function AdminSettingsPage() {
   const { companySettings, updateCompanySettings, companyId, loading: authLoading, user } = useAuth();
   const { toast } = useToast();
 
-  const [officeName, setOfficeName] = useState('');
-  const [officeLat, setOfficeLat] = useState('');
-  const [officeLon, setOfficeLon] = useState('');
-  const [officeRadius, setOfficeRadius] = useState('');
+  // Local state for form values, initialized from companySettings
+  const [formState, setFormState] = useState<Partial<CompanySettings>>({});
   
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
@@ -29,22 +26,32 @@ export default function AdminSettingsPage() {
     document.title = 'Company Settings - Admin - KarobHR';
   }, []);
 
+  // When companySettings load from context, update the local form state
   useEffect(() => {
     if (companySettings) {
-        const { officeLocation } = companySettings;
-        if (officeLocation) {
-          setOfficeName(officeLocation.name || 'Main Office');
-          setOfficeLat(String(officeLocation.latitude));
-          setOfficeLon(String(officeLocation.longitude));
-          setOfficeRadius(String(officeLocation.radius));
-        } else {
-          setOfficeName('Main Office');
-          setOfficeLat('0');
-          setOfficeLon('0');
-          setOfficeRadius('100');
-        }
+      setFormState(companySettings);
     }
   }, [companySettings]);
+
+  const handleInputChange = (field: keyof LocationInfo, value: string) => {
+    setFormState(prevState => ({
+        ...prevState,
+        officeLocation: {
+            ...prevState.officeLocation,
+            latitude: prevState.officeLocation?.latitude || 0,
+            longitude: prevState.officeLocation?.longitude || 0,
+            radius: prevState.officeLocation?.radius || 0,
+            [field]: value,
+        },
+    }));
+  };
+
+  const handleSalaryModeChange = (value: SalaryCalculationMode) => {
+     setFormState(prevState => ({
+        ...prevState,
+        salaryCalculationMode: value,
+    }));
+  }
 
   const getCurrentLocationForGeofence = useCallback(async (): Promise<LocationInfo> => {
     return new Promise((resolve, reject) => {
@@ -62,8 +69,15 @@ export default function AdminSettingsPage() {
     toast({ title: "Fetching Your Location..." });
     try {
       const location = await getCurrentLocationForGeofence();
-      setOfficeLat(String(location.latitude));
-      setOfficeLon(String(location.longitude));
+      setFormState(prevState => ({
+        ...prevState,
+        officeLocation: {
+            ...prevState.officeLocation,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            radius: prevState.officeLocation?.radius || 100, // Keep existing radius or default
+        }
+      }));
       toast({ title: "Location Set!", description: "Latitude and longitude have been updated. Please save." });
     } catch (error: any) {
       toast({ variant: 'destructive', title: "Failed to Fetch Location", description: error.message });
@@ -73,9 +87,9 @@ export default function AdminSettingsPage() {
   };
 
   const handleSaveSettings = async () => {
-    const lat = parseFloat(officeLat);
-    const lon = parseFloat(officeLon);
-    const radius = parseInt(officeRadius, 10);
+    const lat = Number(formState.officeLocation?.latitude);
+    const lon = Number(formState.officeLocation?.longitude);
+    const radius = Number(formState.officeLocation?.radius);
 
     if (isNaN(lat) || isNaN(lon) || isNaN(radius) || radius <= 0) {
       toast({ title: "Invalid Input", description: "Please enter valid numbers for geofence.", variant: "destructive" });
@@ -88,13 +102,14 @@ export default function AdminSettingsPage() {
 
     setIsSaving(true);
     try {
-      const settingsToSave: Partial<CompanySettings> = {
+       const settingsToSave: Partial<CompanySettings> = {
         officeLocation: {
-          name: officeName.trim() || "Main Office",
-          latitude: Number(lat),
-          longitude: Number(lon),
-          radius: Number(radius),
+          name: formState.officeLocation?.name?.trim() || "Main Office",
+          latitude: lat,
+          longitude: lon,
+          radius: radius,
         },
+        salaryCalculationMode: formState.salaryCalculationMode,
       };
       await updateCompanySettings(settingsToSave);
       toast({ title: "Settings Saved", description: "Your company settings have been updated successfully." });
@@ -106,6 +121,33 @@ export default function AdminSettingsPage() {
   };
 
   const isActionDisabled = isSaving || authLoading || !companyId || !user || user.role !== 'admin';
+
+  if (authLoading && !companySettings) {
+    return (
+         <div className="space-y-8 max-w-3xl mx-auto">
+            <div>
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">Company Settings</h1>
+                <p className="text-muted-foreground">Manage general settings for your organization.</p>
+            </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><MapPin className="mr-2 h-5 w-5 text-primary" /> Primary Office Geofence</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="animate-spin" /> Loading geofence settings...
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" />Salary Calculation</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="animate-spin" /> Loading salary settings...
+                </CardContent>
+            </Card>
+        </div>
+    )
+  }
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -121,16 +163,16 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
            <div className="space-y-1">
             <Label htmlFor="officeName">Office Location Name</Label>
-            <Input id="officeName" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="e.g., Headquarters" disabled={isActionDisabled}/>
+            <Input id="officeName" value={formState.officeLocation?.name || ''} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Headquarters" disabled={isActionDisabled}/>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
             <div>
               <Label htmlFor="officeLat">Office Latitude</Label>
-              <Input id="officeLat" type="number" value={officeLat} onChange={(e) => setOfficeLat(e.target.value)} placeholder="e.g., 37.7749" disabled={isActionDisabled}/>
+              <Input id="officeLat" type="number" value={formState.officeLocation?.latitude || ''} onChange={(e) => handleInputChange('latitude', e.target.value)} placeholder="e.g., 37.7749" disabled={isActionDisabled}/>
             </div>
             <div>
               <Label htmlFor="officeLon">Office Longitude</Label>
-              <Input id="officeLon" type="number" value={officeLon} onChange={(e) => setOfficeLon(e.target.value)} placeholder="e.g., -122.4194" disabled={isActionDisabled}/>
+              <Input id="officeLon" type="number" value={formState.officeLocation?.longitude || ''} onChange={(e) => handleInputChange('longitude', e.target.value)} placeholder="e.g., -122.4194" disabled={isActionDisabled}/>
             </div>
             <Button variant="outline" className="w-full sm:w-auto" onClick={handleFetchAndSetLocation} disabled={isActionDisabled || isFetchingLocation}>
                 {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
@@ -139,12 +181,34 @@ export default function AdminSettingsPage() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="geofenceRadius">Geofence Radius (meters)</Label>
-            <Input id="geofenceRadius" type="number" value={officeRadius} onChange={(e) => setOfficeRadius(e.target.value)} placeholder="e.g., 100" disabled={isActionDisabled}/>
+            <Input id="geofenceRadius" type="number" value={formState.officeLocation?.radius || ''} onChange={(e) => handleInputChange('radius', e.target.value)} placeholder="e.g., 100" disabled={isActionDisabled}/>
           </div>
         </CardContent>
       </Card>
       
-      <SalarySettingsForm companySettings={companySettings} />
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" />Salary Calculation</CardTitle>
+            <CardDescription>Configure how employee salaries are calculated.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <Label className="text-base">Select Calculation Mode:</Label>
+            <RadioGroup
+                value={formState.salaryCalculationMode}
+                onValueChange={(v) => handleSalaryModeChange(v as SalaryCalculationMode)}
+                disabled={isActionDisabled}
+            >
+                <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="hourly_deduction" id="hourly_deduction" />
+                    <Label htmlFor="hourly_deduction">Hourly Deduction (Based on actual hours worked vs standard hours)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="check_in_out" id="check_in_out" />
+                    <Label htmlFor="check_in_out">Check-in/Checkout Based Full-Day (Full day pay if checked in and out)</Label>
+                </div>
+            </RadioGroup>
+        </CardContent>
+    </Card>
 
       <div className="flex justify-end">
         <Button onClick={handleSaveSettings} disabled={isActionDisabled}>
@@ -155,3 +219,4 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+
