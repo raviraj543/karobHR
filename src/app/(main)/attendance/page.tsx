@@ -70,7 +70,7 @@ export default function AttendancePage() {
     return () => unsubscribe();
   }, [user?.id, user?.companyId, authLoading]);
 
-  const handleFetchLocation = useCallback(async (forceLowAccuracy = false) => {
+  const handleFetchLocation = useCallback((forceLowAccuracy = false) => {
     if (!navigator.geolocation) {
         toast({ variant: "destructive", title: "Unsupported Browser", description: "Geolocation is not supported." });
         return;
