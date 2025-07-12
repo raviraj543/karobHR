@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { Employee, LeaveRequest, Advance, Task, AttendanceEvent, Holiday, CompanySettings } from '@/lib/types';
 import EmployeeDetailsClient from '@/components/employees/EmployeeDetailsClient';
@@ -24,6 +24,7 @@ export default function EmployeeDetailPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unsubscribers, setUnsubscribers] = useState<(() => void)[]>([]);
 
   useEffect(() => {
     if (!employeeId || !companyId) {
@@ -45,39 +46,36 @@ export default function EmployeeDetailPage() {
           const employeeData = { id: docSnap.id, ...docSnap.data() } as Employee;
           setEmployee(employeeData);
           
+          const subs: (() => void)[] = [];
+
           // Now set up listeners
           const tasksQuery = query(collection(db, `companies/${companyId}/tasks`), where('assigneeId', '==', employeeId), orderBy('dueDate', 'desc'));
-          const unsubTasks = onSnapshot(tasksQuery, (snapshot) => {
+          subs.push(onSnapshot(tasksQuery, (snapshot) => {
             setEmployeeTasks(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Task)));
-          });
+          }));
 
-          const attendanceQuery = query(collection(db, `companies/${companyId}/attendanceLog`), where('userId', '==', employeeData.id), orderBy('timestamp', 'desc'));
-          const unsubAttendance = onSnapshot(attendanceQuery, (snapshot) => {
+          const attendanceQuery = query(collection(db, `companies/${companyId}/attendanceLog`), where('employeeId', '==', employeeData.employeeId), orderBy('timestamp', 'desc'));
+           subs.push(onSnapshot(attendanceQuery, (snapshot) => {
             setEmployeeAttendance(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AttendanceEvent)));
-          });
+          }));
 
           const holidaysQuery = query(collection(db, `companies/${companyId}/holidays`));
-          const unsubHolidays = onSnapshot(holidaysQuery, (snapshot) => {
+          subs.push(onSnapshot(holidaysQuery, (snapshot) => {
             setHolidays(snapshot.docs.map(doc => ({...doc.data(), id: doc.id, date: doc.data().date.toDate() } as Holiday)));
-          });
+          }));
           
           const companySettingsRef = doc(db, `companies/${companyId}`);
-          const unsubSettings = onSnapshot(companySettingsRef, (doc) => {
+          subs.push(onSnapshot(companySettingsRef, (doc) => {
              setCompanySettings(doc.data() as CompanySettings);
-          });
-
+          }));
+          
+          setUnsubscribers(subs);
           setLoading(false);
-
-          return () => {
-            unsubTasks();
-            unsubAttendance();
-            unsubHolidays();
-            unsubSettings();
-          };
 
         } else {
           toast({ title: 'Error', description: 'Employee not found in the database.', variant: 'destructive' });
           router.push('/admin/employees');
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error fetching employee:', error);
@@ -87,6 +85,10 @@ export default function EmployeeDetailPage() {
     };
 
     fetchInitialData();
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    }
   }, [employeeId, companyId, router, toast]);
 
   if (loading) {
