@@ -119,9 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             onSnapshot(query(usersRef, where('companyId', '==', userData.companyId)), (snap) => {
                                 const usersData = snap.docs.map(d => ({ ...d.data(), id: d.id } as User));
                                 setAllUsers(usersData);
-                                // Consolidate leave requests from all users
-                                const leaves = usersData.flatMap(u => (u.leaves || []).map(leave => ({...leave, userName: u.name, userId: u.id})));
-                                setAllLeaveRequests(leaves);
+                                // Consolidate ALL leave requests from all users for admin view
+                                const allLeaves = usersData.flatMap(u => (u.leaves || []).map(leave => ({...leave, userName: u.name, userId: u.id})));
+                                setAllLeaveRequests(allLeaves);
                             });
                             
                             // Fetch all attendance for the company
@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                                 setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
                             });
 
-                            // Fetch all advance requests for the company
+                            // Fetch all advance requests for the company (no filtering, done on page)
                             const advancesRef = collection(db, `companies/${userData.companyId}/advances`);
                             onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => {
                                 setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)));
