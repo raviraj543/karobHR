@@ -1,48 +1,41 @@
 
-'use client'; // Required for useState, useEffect, useAuth
+'use client'; 
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity, Megaphone, Send, Loader2 } from 'lucide-react';
+import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity, Megaphone, Send, Loader2, HandCoins } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
-import { useToast } from '@/hooks/use-toast'; // Import useToast
-import type { Announcement } from '@/lib/types'; // Import Announcement type
+import { useAuth } from '@/hooks/useAuth'; 
+import { useToast } from '@/hooks/use-toast'; 
+import type { Announcement } from '@/lib/types'; 
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useState } from 'react';
+
 
 export default function AdminDashboardPage() {
-  // Correctly destructure `allUsers`, `leaveRequests`, and `advanceRequests` from useAuth
   const { allUsers, announcements, addAnnouncement, user, tasks, loading, leaveRequests, advanceRequests } = useAuth(); 
   const { toast } = useToast();
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
   const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
 
-  useEffect(() => {
-    document.title = 'Admin Dashboard - KarobHR';
-  }, []);
-
   const adminStats = useMemo(() => {
-    // Safely access arrays by defaulting to empty arrays if they are null/undefined
-    const safeEmployees = allUsers || [];
-    const safeTasks = tasks || [];
-    const safeLeaveRequests = leaveRequests || [];
-
-    const totalEmployees = safeEmployees.filter(u => u.role === 'employee' || u.role === 'manager').length;
-    const pendingLeaves = safeLeaveRequests.filter(l => l.status === 'pending').length; // Use safeLeaveRequests
-    const tasksInProgress = safeTasks.filter(t => t.status === 'In Progress').length;
+    const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;
+    const pendingLeaves = leaveRequests.filter(l => l.status === 'pending').length;
+    const pendingAdvances = advanceRequests.filter(a => a.status === 'pending').length;
+    const tasksInProgress = tasks.filter(t => t.status === 'In Progress').length;
 
     return [
       { title: "Total Employees", value: totalEmployees.toString(), icon: Users, link: "/admin/employees" },
       { title: "Pending Leave Approvals", value: pendingLeaves.toString(), icon: CalendarOff, link: "/admin/leave-approvals" },
+      { title: "Pending Advance Approvals", value: pendingAdvances.toString(), icon: HandCoins, link: "/admin/advance-approvals" },
       { title: "Tasks In Progress", value: tasksInProgress.toString(), icon: ListChecks, link: "/admin/tasks" },
-      { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
     ];
-  }, [allUsers, tasks, leaveRequests]); // Add leaveRequests to dependencies
+  }, [allUsers, tasks, leaveRequests, advanceRequests]); 
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();

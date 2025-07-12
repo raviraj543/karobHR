@@ -55,10 +55,12 @@ export interface AuthContextType {
     ) => MonthlyPayrollReport;
     // Admin-specific data
     allUsers: User[];
-    attendanceLog: AttendanceEvent[]; // For admin view
-    tasks: Task[]; // For admin view
+    attendanceLog: AttendanceEvent[]; 
+    tasks: Task[]; 
     announcements: Announcement[];
     holidays: Holiday[];
+    leaveRequests: LeaveApplication[];
+    advanceRequests: Advance[];
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -77,6 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [allAttendance, setAllAttendance] = useState<AttendanceEvent[]>([]);
     const [allTasks, setAllTasks] = useState<Task[]>([]);
+    const [allLeaveRequests, setAllLeaveRequests] = useState<LeaveApplication[]>([]);
+    const [allAdvanceRequests, setAllAdvanceRequests] = useState<Advance[]>([]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -93,12 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     if (userData.companyId) {
                         const companyDocRef = doc(db, 'companies', userData.companyId);
                         
-                        // Set up a listener for real-time updates on company settings.
-                        // The onSnapshot will also provide the initial data.
                         const companyUnsubscribe = onSnapshot(companyDocRef, (companySnap) => {
                             const settings = companySnap.exists() ? (companySnap.data() as CompanySettings) : null;
                             setCompanySettings(settings);
-                            // Set loading to false only after we get the first snapshot of company data
                             setLoading(false); 
                         });
 
@@ -113,30 +114,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         });
 
                         if (userData.role === 'admin') {
+                            // Fetch all users for the company
                             const usersRef = collection(db, 'users');
                             onSnapshot(query(usersRef, where('companyId', '==', userData.companyId)), (snap) => {
-                                setAllUsers(snap.docs.map(d => ({ ...d.data(), id: d.id } as User)));
+                                const usersData = snap.docs.map(d => ({ ...d.data(), id: d.id } as User));
+                                setAllUsers(usersData);
+                                // Consolidate leave requests from all users
+                                const leaves = usersData.flatMap(u => (u.leaves || []).map(leave => ({...leave, userName: u.name, userId: u.id})));
+                                setAllLeaveRequests(leaves);
                             });
                             
+                            // Fetch all attendance for the company
                             const attendanceRef = collection(db, `companies/${userData.companyId}/attendanceLog`);
                             onSnapshot(query(attendanceRef, orderBy('timestamp', 'desc')), (snap) => {
                                 setAllAttendance(snap.docs.map(d => ({ ...d.data(), id: d.id } as AttendanceEvent)));
                             });
                             
+                            // Fetch all tasks for the company
                             const tasksRef = collection(db, `companies/${userData.companyId}/tasks`);
                             onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snap) => {
                                 setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
                             });
+
+                            // Fetch all advance requests for the company
+                            const advancesRef = collection(db, `companies/${userData.companyId}/advances`);
+                            onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => {
+                                setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)));
+                            });
                         }
                         
-                        // Return a cleanup function for the company listener
                         return () => companyUnsubscribe();
                     } else {
                         setCompanySettings(null);
-                        setLoading(false); // No companyId, so we can stop loading.
+                        setLoading(false); 
                     }
                 } else {
-                    await signOut(auth); // User in Auth but not Firestore, sign out.
+                    await signOut(auth); 
                     setLoading(false);
                 }
             } else {
@@ -148,6 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setAllUsers([]);
                 setAllAttendance([]);
                 setAllTasks([]);
+                setAllLeaveRequests([]);
+                setAllAdvanceRequests([]);
                 setLoading(false);
             }
         });
@@ -179,7 +194,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const addNewEmployee = async (employeeData: NewEmployeePayload, password: string): Promise<User | null> => {
         const { email, employeeId, companyId, role } = employeeData;
         
-        // Ensure we have the company name, fetching if necessary
         let finalCompanyName = employeeData.companyName;
         if (!finalCompanyName && companyId) {
             const companyDocRef = doc(db, "companies", companyId);
@@ -489,6 +503,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         holidays,
         attendanceLog: allAttendance,
         tasks: allTasks,
+        leaveRequests: allLeaveRequests,
+        advanceRequests: allAdvanceRequests,
     };
 
     return (
