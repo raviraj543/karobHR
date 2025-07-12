@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppLogo } from './AppLogo';
 import { UserNav } from './UserNav';
@@ -150,6 +150,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex flex-col p-0">
+               <SheetHeader>
+                <SheetTitle>
+                    <Link href="/" className="flex items-center gap-2 font-semibold" onClick={handleLinkClick}>
+                        <AppLogo />
+                        <span className="">BizFlow</span>
+                    </Link>
+                </SheetTitle>
+                <SheetDescription className="sr-only">
+                    This is the main navigation menu for the application.
+                </SheetDescription>
+               </SheetHeader>
               <SidebarContent onLinkClick={handleLinkClick} />
             </SheetContent>
           </Sheet>
