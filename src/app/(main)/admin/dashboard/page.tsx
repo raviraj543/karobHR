@@ -15,8 +15,8 @@ import type { Announcement } from '@/lib/types'; // Import Announcement type
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function AdminDashboardPage() {
-  // Correctly destructure `employees`, `leaveRequests`, and `advanceRequests` from useAuth
-  const { employees, announcements, addAnnouncement, user, tasks, loading, leaveRequests, advanceRequests } = useAuth(); 
+  // Correctly destructure `allUsers`, `leaveRequests`, and `advanceRequests` from useAuth
+  const { allUsers, announcements, addAnnouncement, user, tasks, loading, leaveRequests, advanceRequests } = useAuth(); 
   const { toast } = useToast();
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
@@ -28,7 +28,7 @@ export default function AdminDashboardPage() {
 
   const adminStats = useMemo(() => {
     // Safely access arrays by defaulting to empty arrays if they are null/undefined
-    const safeEmployees = employees || [];
+    const safeEmployees = allUsers || [];
     const safeTasks = tasks || [];
     const safeLeaveRequests = leaveRequests || [];
 
@@ -42,7 +42,7 @@ export default function AdminDashboardPage() {
       { title: "Tasks In Progress", value: tasksInProgress.toString(), icon: ListChecks, link: "/admin/tasks" },
       { title: "System Health", value: "Optimal", icon: Activity, color: "text-green-500" },
     ];
-  }, [employees, tasks, leaveRequests]); // Add leaveRequests to dependencies
+  }, [allUsers, tasks, leaveRequests]); // Add leaveRequests to dependencies
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
