@@ -36,7 +36,7 @@ export interface AuthContextType {
     addAnnouncement: (title: string, content: string) => Promise<void>;
     addAttendanceEvent: (location: LocationInfo) => Promise<string | null>;
     completeCheckout: (docId: string, workReport: string, location: LocationInfo) => Promise<void>;
-    updateCompanySettings: (settings: Partial<CompanySettings>) => Promise<void>;
+    updateCompanySettings: (settings: Partial<CompanySettings>, companyId: string) => Promise<void>;
     addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
     updateTask: (task: Task) => Promise<void>;
     addLeaveApplication: (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => Promise<void>;
@@ -309,10 +309,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
     };
 
-    const updateCompanySettings = async (settings: Partial<CompanySettings>) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const companyRef = doc(db, 'companies', karobUser.companyId);
-        // Use set with merge:true to create the doc if it doesn't exist, or update it if it does.
+    const updateCompanySettings = async (settings: Partial<CompanySettings>, companyId: string) => {
+        if (!companyId) throw new Error("No company ID provided to update settings.");
+        const companyRef = doc(db, 'companies', companyId);
         await setDoc(companyRef, settings, { merge: true });
     };
 

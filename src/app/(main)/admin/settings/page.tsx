@@ -113,7 +113,7 @@ export default function AdminSettingsPage() {
         },
         salaryCalculationMode: formState.salaryCalculationMode,
       };
-      await updateCompanySettings(settingsToSave);
+      await updateCompanySettings(settingsToSave, karobUser.companyId);
       toast({ title: "Settings Saved", description: "Your company settings have been updated successfully." });
     } catch (error: any) {
       toast({ title: "Error Saving Settings", description: error.message, variant: "destructive" });
