@@ -51,30 +51,10 @@ interface EmployeeDetailsClientProps {
 
 export default function EmployeeDetailsClient({ initialEmployeeData, initialHolidays, initialCompanySettings }: EmployeeDetailsClientProps) {
   const params = useParams();
-  // We'll still use useAuth for real-time updates and other global data if needed
-  // But initial data will come from props
-  const { allUsers, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails, companySettings, loading: authLoading } = useAuth();
+  const { calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
   const employeeId = params.employeeId as string;
 
-  // Use initial data from props, and then potentially update with real-time data from useAuth
-  const employeeData = useMemo(() => {
-    if (initialEmployeeData && initialEmployeeData.employee.employeeId === employeeId) {
-      return initialEmployeeData;
-    }
-    // Fallback to useAuth data if initial data doesn't match or isn't provided
-    if (!employeeId || allUsers.length === 0) {
-      return null;
-    }
-    const employee = allUsers.find(u => u.employeeId === employeeId) || null;
-    if (!employee) return null;
-
-    const employeeAttendance = attendanceLog.filter(a => a.userId === employee.id);
-    const employeeTasks = tasks.filter(t => t.assigneeId === employee.employeeId);
-
-    return { employee, employeeAttendance, employeeTasks };
-  }, [employeeId, allUsers, attendanceLog, tasks, initialEmployeeData]);
-
-  const { employee, employeeAttendance, employeeTasks } = employeeData || {};
+  const { employee, employeeAttendance, employeeTasks } = initialEmployeeData || {};
   
   const monthlyAttendance = useMemo(() => {
       const now = new Date();
@@ -83,15 +63,12 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   }, [employeeAttendance]);
 
   const payrollReport = useMemo(() => {
-    // Use initialCompanySettings if companySettings from useAuth is not yet loaded
-    const currentCompanySettings = companySettings || initialCompanySettings;
-
-    if (employee && employeeAttendance && currentCompanySettings) {
+    if (employee && employeeAttendance && initialCompanySettings) {
       const now = new Date();
-      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, holidays || initialHolidays);
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays);
     }
     return null;
-  }, [employee, employeeAttendance, companySettings, calculateMonthlyPayrollDetails, holidays, initialCompanySettings, initialHolidays]);
+  }, [employee, employeeAttendance, initialCompanySettings, calculateMonthlyPayrollDetails, initialHolidays]);
 
   const geofenceStats = useMemo(() => {
     const stats = { checkInInside: 0, checkOutInside: 0, checkInOutside: 0, checkOutOutside: 0 };
@@ -150,22 +127,20 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   }, [employeeAttendance, liveDuration]);
 
   const dailyEarnings = useMemo(() => {
-    const currentCompanySettings = companySettings || initialCompanySettings;
-
-    if (!employee?.baseSalary || !currentCompanySettings || !employee.standardDailyHours) {
+    if (!employee?.baseSalary || !initialCompanySettings || !employee.standardDailyHours) {
         return 0;
     }
 
     const isCheckedIn = liveAttendanceEvent != null;
     const hasWorkedToday = isCheckedIn || (employeeAttendance?.some(e => isToday(safeParseISO(e.timestamp)!) && e.status === 'Checked Out'));
 
-    if (currentCompanySettings.salaryCalculationMode === 'check_in_out') {
+    if (initialCompanySettings.salaryCalculationMode === 'check_in_out') {
         return hasWorkedToday ? employee.baseSalary / 30 : 0;
     } else {
         const perMinuteRate = employee.baseSalary / (30 * employee.standardDailyHours * 60);
         return todayWorkMinutes * perMinuteRate;
     }
-  }, [employee, todayWorkMinutes, companySettings, liveAttendanceEvent, employeeAttendance, initialCompanySettings]);
+  }, [employee, todayWorkMinutes, initialCompanySettings, liveAttendanceEvent, employeeAttendance]);
 
 
   const [aiSummary, setAiSummary] = useState<string>('');
@@ -201,7 +176,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
     }
   };
 
-  if (authLoading && !initialEmployeeData) { // Only show loading if no initial data is provided and auth is still loading
+  if (authLoading && !initialEmployeeData) { 
     return (
       <div className="flex items-center justify-center h-full py-10">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
