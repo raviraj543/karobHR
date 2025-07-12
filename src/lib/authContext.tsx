@@ -177,10 +177,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const addNewEmployee = async (employeeData: NewEmployeePayload, password: string): Promise<User | null> => {
-        const { email, employeeId, companyId, role, companyName } = employeeData;
+        const { email, employeeId, companyId, role } = employeeData;
         
         // Ensure we have the company name, fetching if necessary
-        let finalCompanyName = companyName;
+        let finalCompanyName = employeeData.companyName;
         if (!finalCompanyName && companyId) {
             const companyDocRef = doc(db, "companies", companyId);
             const companyDocSnap = await getDoc(companyDocRef);
@@ -225,7 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     adminUid: newUser.uid,
                     createdAt: new Date().toISOString(),
                     salaryCalculationMode: 'hourly_deduction',
-                } as CompanySettings);
+                });
             }
     
             await batch.commit();
@@ -312,7 +312,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updateCompanySettings = async (settings: Partial<CompanySettings>) => {
         if (!karobUser?.companyId) throw new Error("No company associated with user.");
         const companyRef = doc(db, 'companies', karobUser.companyId);
-        await updateDoc(companyRef, settings);
+        // Use set with merge:true to create the doc if it doesn't exist, or update it if it does.
+        await setDoc(companyRef, settings, { merge: true });
     };
 
     const addTask = async (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -505,4 +506,3 @@ export const useAuth = (): AuthContextType => {
     }
     return context;
 };
-
