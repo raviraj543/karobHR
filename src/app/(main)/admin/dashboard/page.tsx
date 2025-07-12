@@ -17,7 +17,7 @@ import { useState } from 'react';
 
 
 export default function AdminDashboardPage() {
-  const { allUsers, announcements, addAnnouncement, user, tasks, loading, leaveRequests, advanceRequests } = useAuth(); 
+  const { allUsers, announcements, addAnnouncement, karobUser, tasks, loading, leaveRequests, advanceRequests } = useAuth(); 
   const { toast } = useToast();
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
@@ -39,7 +39,7 @@ export default function AdminDashboardPage() {
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || user.role !== 'admin') {
+    if (!karobUser || karobUser.role !== 'admin') {
       toast({
         title: "Permission Denied",
         description: "You do not have permission to post announcements.",
@@ -175,7 +175,7 @@ export default function AdminDashboardPage() {
                 disabled={isPostingAnnouncement}
               />
             </div>
-            <Button type="submit" disabled={isPostingAnnouncement || !user || user.role !== 'admin'}>
+            <Button type="submit" disabled={isPostingAnnouncement || !karobUser || karobUser.role !== 'admin'}>
               {isPostingAnnouncement ? 'Posting...' : <><Send className="mr-2 h-4 w-4"/> Post Announcement</>}
             </Button>
           </form>
