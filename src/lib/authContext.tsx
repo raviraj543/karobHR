@@ -8,6 +8,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orde
 import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, NewEmployeeData, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration } from '@/lib/dateUtils';
+import { calculateDistance } from './locationUtils';
 
 
 // Redefined NewEmployeeData to be more specific for clarity
@@ -265,9 +266,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         let isWithin = null;
         if(companySettings.officeLocation && companySettings.officeLocation.latitude && companySettings.officeLocation.longitude) {
-            const dist = Math.sqrt(
-                Math.pow(location.latitude - companySettings.officeLocation.latitude, 2) +
-                Math.pow(location.longitude - companySettings.officeLocation.longitude, 2)
+            const dist = calculateDistance(
+                location.latitude,
+                location.longitude,
+                companySettings.officeLocation.latitude,
+                companySettings.officeLocation.longitude
             );
             isWithin = dist <= (companySettings.officeLocation.radius || 100);
         }
@@ -305,9 +308,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         let isWithin = null;
         if (companySettings.officeLocation && companySettings.officeLocation.latitude && companySettings.officeLocation.longitude) {
-             const dist = Math.sqrt(
-                Math.pow(location.latitude - companySettings.officeLocation.latitude, 2) +
-                Math.pow(location.longitude - companySettings.officeLocation.longitude, 2)
+             const dist = calculateDistance(
+                location.latitude,
+                location.longitude,
+                companySettings.officeLocation.latitude,
+                companySettings.officeLocation.longitude
             );
             isWithin = dist <= (companySettings.officeLocation.radius || 100);
         }

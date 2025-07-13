@@ -112,14 +112,14 @@ export default function AttendancePage() {
         console.log("Office Location for Geofence:", officeLocation);
 
         if (officeLocation?.latitude && officeLocation?.longitude) {
-            const dist = calculateDistance(
+            const calculatedDist = calculateDistance(
                 userLocation.latitude,
                 userLocation.longitude,
                 officeLocation.latitude,
                 officeLocation.longitude
             );
-            setDistance(dist);
-            const friendlyDist = dist > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${dist.toFixed(0)} m`;
+            setDistance(calculatedDist);
+            const friendlyDist = calculatedDist > 1000 ? `${(calculatedDist / 1000).toFixed(2)} km` : `${calculatedDist.toFixed(0)} m`;
             toast({
                 title: "Location Updated",
                 description: `You are approx. ${friendlyDist} from the office geofence.`,
@@ -273,7 +273,7 @@ export default function AttendancePage() {
                         </AlertDescription>
                     </Alert>
                     <div className="text-xs text-muted-foreground mt-2 text-center space-y-1">
-                        <p><b>Your Location:</b> {currentLocation?.latitude.toFixed(5)}, {currentLocation?.longitude.toFixed(5)} (Accuracy: {currentLocation?.accuracy.toFixed(0)}m)</p>
+                        <p><b>Your Location:</b> {currentLocation?.latitude.toFixed(5)}, {currentLocation?.longitude.toFixed(5)} (Accuracy: {currentLocation?.accuracy?.toFixed(0)}m)</p>
                         <p><b>Company Office:</b> {officeLocation.latitude.toFixed(5)}, {officeLocation.longitude.toFixed(5)}</p>
                     </div>
                   </div>
