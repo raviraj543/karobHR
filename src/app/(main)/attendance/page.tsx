@@ -39,16 +39,16 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    // Ensure user, karobUser, and companyId are available before attempting Firestore query
-    if (authLoading || !user?.uid || !karobUser?.companyId) { // Check for user.uid and karobUser.companyId
+    if (authLoading || !user?.uid || !karobUser?.companyId) {
       setAttendanceStatus('unknown');
-      setInitializationError(null); // Clear previous errors
-      return; // Exit if not ready
+      setInitializationError(null);
+      return;
     }
 
+    // This query now correctly and reliably finds the latest event ONLY for the logged-in user.
     const q = query(
-      collection(db, `companies/${karobUser.companyId}/attendanceLog`), // Use karobUser.companyId
-      where('userId', '==', user.uid), // Use user.uid
+      collection(db, `companies/${karobUser.companyId}/attendanceLog`),
+      where('userId', '==', user.uid),
       orderBy('timestamp', 'desc'),
       limit(1)
     );
@@ -56,16 +56,16 @@ export default function AttendancePage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (snapshot.empty) {
         setAttendanceStatus('checked-out');
+        setCurrentDayDocId(null);
       } else {
         const latestDoc = snapshot.docs[0];
         const data = latestDoc.data() as AttendanceEvent;
         setCurrentDayDocId(latestDoc.id);
         setAttendanceStatus(data.status === 'Checked In' ? 'checked-in' : 'checked-out');
       }
-      setInitializationError(null); // Clear error on successful snapshot
+      setInitializationError(null);
     }, (errorObject: any) => {
       console.error("Firestore onSnapshot error:", errorObject);
-      // More detailed error messages for common issues
       let errorMessage = errorObject.message;
       if (errorObject.code === 'permission-denied') {
         errorMessage = "Permission Denied: Check Firestore rules for 'attendanceLog' or ensure you are logged in.";
@@ -77,19 +77,18 @@ export default function AttendancePage() {
     });
 
     return () => unsubscribe();
-  }, [user?.uid, karobUser?.companyId, authLoading]); // Depend on user.uid and karobUser.companyId
+  }, [user?.uid, karobUser?.companyId, authLoading]);
 
   const handleFetchLocation = useCallback((forceLowAccuracy = false) => {
     if (!navigator.geolocation) {
         toast({ variant: "destructive", title: "Unsupported Browser", description: "Geolocation is not supported." });
         return;
     }
-    // Ensure companySettings is loaded for geofence check
     if (!companySettings) {
         toast({
             variant: "destructive",
             title: "Company Settings Not Loaded",
-            description: "Cannot fetch location for geofence check because company settings are missing. Please ensure your company has been set up."
+            description: "Cannot fetch location for geofence check because company settings are missing."
         });
         return;
     }
@@ -98,7 +97,6 @@ export default function AttendancePage() {
     toast({ title: "Getting your location..." });
 
     const processPosition = (position: GeolocationPosition) => {
-        console.log("Geolocation Success - Position:", position);
         const userLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -108,8 +106,6 @@ export default function AttendancePage() {
         setLocationStatus('success');
 
         const officeLocation = companySettings?.officeLocation;
-        console.log("Company Settings for Geofence:", companySettings);
-        console.log("Office Location for Geofence:", officeLocation);
 
         if (officeLocation?.latitude && officeLocation?.longitude) {
             const calculatedDist = calculateDistance(
@@ -135,8 +131,6 @@ export default function AttendancePage() {
     };
 
     const handleError = (error: GeolocationPositionError, isHighAccuracyAttempt: boolean) => {
-        console.error(`Geolocation Error (High Accuracy: ${isHighAccuracyAttempt}): Code ${error.code} - ${error.message}`);
-
         if (isHighAccuracyAttempt && error.code === error.TIMEOUT) {
             toast({ title: "Location accuracy timeout", description: "Trying to get location with lower accuracy..."});
             navigator.geolocation.getCurrentPosition(
@@ -181,7 +175,6 @@ export default function AttendancePage() {
       toast({ title: "Location Needed", description: "Please fetch your location before checking in.", variant: "destructive" });
       return;
     }
-    // Ensure company settings are available for geofence check before checking in
     if (!companySettings || !companySettings.officeLocation) {
         toast({
             title: "Missing Geofence Configuration",
@@ -209,7 +202,6 @@ export default function AttendancePage() {
       toast({ title: "Location Needed", description: "Please fetch your location before checking out.", variant: "destructive" });
       return;
     }
-    // Ensure company settings are available for geofence check before checking out
     if (!companySettings || !companySettings.officeLocation) {
         toast({
             title: "Missing Geofence Configuration",
@@ -217,6 +209,10 @@ export default function AttendancePage() {
             variant: "destructive"
         });
         return;
+    }
+    if (!currentDayDocId) {
+       toast({ title: "Not Checked In", description: "You cannot check out because there is no active check-in record found for you.", variant: "destructive" });
+       return;
     }
     setIsReportModalOpen(true);
   };
@@ -290,7 +286,7 @@ export default function AttendancePage() {
     }
   }
 
-  if (attendanceStatus === 'unknown' || authLoading || !karobUser) { // Added !karobUser to loading check
+  if (attendanceStatus === 'unknown' || authLoading || !karobUser) {
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
             <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
