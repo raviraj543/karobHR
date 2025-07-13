@@ -36,7 +36,7 @@ const getStatusBadgeVariant = (status?: TaskType['status']) => {
 
 
 export default function MyTasksPage() {
-  const { user, tasks: allTasks, updateTask, loading: authLoading } = useAuth();
+  const { user, tasks, updateTask, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [filter, setFilter] = useState<'all' | 'pending' | 'in progress' | 'completed'>('all');
 
@@ -45,19 +45,18 @@ export default function MyTasksPage() {
     document.title = 'My Tasks - KarobHR';
   }, []);
 
-  const myTasks = useMemo(() => {
-    if (!user || !allTasks || authLoading) return [];
-    return allTasks.filter(task => task.assigneeId === user.employeeId)
-                   .sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [user, allTasks, authLoading]);
+  const sortedTasks = useMemo(() => {
+    if (!tasks || authLoading) return [];
+    return [...tasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [tasks, authLoading]);
 
   const filteredTasks = useMemo(() => {
-    if (filter === 'all') return myTasks;
-    return myTasks.filter(task => task.status.toLowerCase().replace(' ', '') === filter.replace(' ', ''));
-  }, [myTasks, filter]);
+    if (filter === 'all') return sortedTasks;
+    return sortedTasks.filter(task => task.status.toLowerCase().replace(' ', '') === filter.replace(' ', ''));
+  }, [sortedTasks, filter]);
 
   const handleTaskStatusChange = async (taskId: string, currentStatus: TaskType['status']) => {
-    const taskToUpdate = myTasks.find(t => t.id === taskId);
+    const taskToUpdate = tasks.find(t => t.id === taskId);
     if (!taskToUpdate) return;
 
     const newStatus: TaskType['status'] = currentStatus === 'Completed' ? 'In Progress' : 'Completed';
@@ -126,7 +125,7 @@ export default function MyTasksPage() {
             </div>
           ) : (
             <p className="text-muted-foreground text-center py-8">
-                {myTasks.length === 0 ? "You have no tasks assigned. Great job, or check with your manager!" : "No tasks match the current filter."}
+                {tasks.length === 0 ? "You have no tasks assigned. Great job, or check with your manager!" : "No tasks match the current filter."}
             </p>
           )}
         </CardContent>

@@ -75,11 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // App-wide data slices
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]); // Unified tasks state
     
     // Admin-specific data slices
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [allAttendance, setAllAttendance] = useState<AttendanceEvent[]>([]);
-    const [allTasks, setAllTasks] = useState<Task[]>([]);
     const [allLeaveRequests, setAllLeaveRequests] = useState<LeaveApplication[]>([]);
     const [allAdvanceRequests, setAllAdvanceRequests] = useState<Advance[]>([]);
 
@@ -114,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                              setHolidays(snap.docs.map(d => ({ ...d.data(), id: d.id, date: (d.data().date as any).toDate() } as Holiday)));
                         });
 
+                        // Role-based data fetching
                         if (userData.role === 'admin') {
                             // Fetch all users for the company
                             const usersRef = collection(db, 'users');
@@ -131,16 +132,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                                 setAllAttendance(snap.docs.map(d => ({ ...d.data(), id: d.id } as AttendanceEvent)));
                             });
                             
-                            // Fetch all tasks for the company
+                            // ADMIN: Fetch all tasks for the company
                             const tasksRef = collection(db, `companies/${userData.companyId}/tasks`);
                             onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snap) => {
-                                setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
+                                setTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
                             });
 
                             // Fetch all advance requests for the company (no filtering, done on page)
                             const advancesRef = collection(db, `companies/${userData.companyId}/advances`);
                             onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => {
                                 setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)));
+                            });
+                        } else {
+                            // EMPLOYEE/MANAGER: Fetch only their own tasks
+                            const tasksRef = collection(db, `companies/${userData.companyId}/tasks`);
+                            const userTasksQuery = query(tasksRef, where('assigneeId', '==', userData.employeeId), orderBy('createdAt', 'desc'));
+                            onSnapshot(userTasksQuery, (snap) => {
+                                setTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
                             });
                         }
                         
@@ -161,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setHolidays([]);
                 setAllUsers([]);
                 setAllAttendance([]);
-                setAllTasks([]);
+                setTasks([]);
                 setAllLeaveRequests([]);
                 setAllAdvanceRequests([]);
                 setLoading(false);
@@ -507,7 +515,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         announcements,
         holidays,
         attendanceLog: allAttendance,
-        tasks: allTasks,
+        tasks,
         leaveRequests: allLeaveRequests,
         advanceRequests: allAdvanceRequests,
     };
