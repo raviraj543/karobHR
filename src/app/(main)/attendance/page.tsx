@@ -262,7 +262,7 @@ export default function AttendancePage() {
 
                 const geofenceRadius = officeLocation.radius ?? 0;
                 const isInside = distance <= geofenceRadius;
-                const friendlyDist = distance > 1000 ? `${(dist / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
+                const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
 
                 return (
                   <div>
