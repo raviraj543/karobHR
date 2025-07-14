@@ -155,7 +155,7 @@ export default function AdminHolidaysPage() {
               </TableHeader>
               <TableBody>
                 {allHolidays.map(holiday => {
-                    const holidayIsPast = isPast(holiday.date, new Date());
+                    const holidayIsPast = isPast(holiday.date);
                     const isDefaultSunday = holiday.id.startsWith('sunday-');
 
                     return (
