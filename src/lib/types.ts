@@ -12,14 +12,8 @@ export interface CompanySettings {
     latitude: number;
     longitude: number;
     radius: number; // in meters
-    export type LocationInfo = {
-      name: string;
-      latitude: number;
-      longitude: number;
-      radius: number; // <-- ADD THIS LINE HERE
-      // ...other fields
   };
-  salaryCalculationMode?: SalaryCalculationMode;
+  salaryCalculationMode?: SalaryCalculationMode; // Confirmed: This property exists
 }
 
 export interface Advance {
@@ -37,7 +31,7 @@ export interface LocationInfo {
   longitude: number;
   accuracy?: number;
   name?: string;
-  radius?: number;
+  radius?: number; // Confirmed: This property exists
 }
 
 export interface AttendanceEvent {
