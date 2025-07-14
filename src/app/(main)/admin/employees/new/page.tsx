@@ -16,8 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft, IndianRupee, AlertTriangle, Clock4 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import type { NewEmployeePayload } from '@/lib/authContext'; // Corrected import
-import type { UserRole } from '@/lib/types';
+import type { NewEmployeePayload } from '@/lib/authContext';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const newEmployeeSchema = z.object({
@@ -90,12 +89,12 @@ export default function AddNewEmployeePage() {
         return;
     }
 
-    const employeeDataForContext: NewEmployeePayload = { // Corrected type usage
+    const employeeDataForContext: NewEmployeePayload = {
       name: data.name,
       employeeId: data.employeeId,
       email: data.email,
       department: data.department,
-      role: data.role as UserRole,
+      role: data.role,
       companyId: adminCompanyId,
       companyName: companySettings.companyName,
       joiningDate: data.joiningDate,
