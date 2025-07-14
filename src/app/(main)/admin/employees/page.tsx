@@ -35,13 +35,16 @@ const getRoleBadgeVariant = (role: User['role']) => {
 }
 
 const getRoleDisplayName = (role: User['role']): string => {
-    if (role === 'admin') return 'Administrator';
-    if (role === 'manager') return 'Manager';
-    if (role === 'employee') return 'Employee';
-    if (typeof role === 'string' && role.length > 0) {
-        return role.charAt(0).toUpperCase() + role.slice(1);
+    if (role === 'admin') {
+        return 'Administrator';
+    } else if (role === 'manager') {
+        return 'Manager';
+    } else if (role === 'employee') {
+        return 'Employee';
+    } else { // At this point, 'role' must be 'null' due to UserRole type definition
+        // Another attempt to force Vercel cache bust for this file
+        return 'N/A';
     }
-    return 'N/A'; // Fallback for null or other unexpected cases
 }
 
 export default function AdminEmployeesPage() {
