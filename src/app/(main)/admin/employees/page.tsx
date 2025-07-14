@@ -24,7 +24,9 @@ const getStatusBadgeVariant = (status?: string) => {
 
 const getRoleBadgeVariant = (role: User['role']) => {
   if (!role) return 'default';
-  switch (role.toLowerCase()) {
+  // Ensure role is a string before calling toLowerCase
+  const lowercasedRole = typeof role === 'string' ? role.toLowerCase() : '';
+  switch (lowercasedRole) {
     case 'admin': return 'destructive'; 
     case 'manager': return 'secondary';
     case 'employee': return 'outline'; 
@@ -34,11 +36,17 @@ const getRoleBadgeVariant = (role: User['role']) => {
 
 const getRoleDisplayName = (role: User['role']) => {
     if (!role) return 'N/A';
+    // The default case now safely handles any unexpected string values
     switch (role) {
         case 'admin': return 'Administrator';
         case 'manager': return 'Manager';
         case 'employee': return 'Employee';
-        default: return role.charAt(0).toUpperCase() + role.slice(1);
+        default: 
+          // Ensure role is a string before trying to use string methods
+          if (typeof role === 'string' && role.length > 0) {
+            return role.charAt(0).toUpperCase() + role.slice(1);
+          }
+          return 'Unknown Role'; // Fallback for unexpected types
     }
 }
 
@@ -66,7 +74,8 @@ export default function AdminEmployeesPage() {
           employee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           employee.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           employee.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          employee.role?.toLowerCase().includes(searchTerm.toLowerCase())
+          // Ensure employee.role is a string before calling includes
+          (typeof employee.role === 'string' && employee.role.toLowerCase().includes(searchTerm.toLowerCase()))
         )
       );
     }
