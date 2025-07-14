@@ -13,7 +13,7 @@ import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, 
 import { getMonth, getYear } from 'date-fns';
 
 export default function AdminPayrollPage() {
-  const { allUsers, holidays, processAdvance, loading: authLoading, attendanceLog, calculateMonthlyPayrollDetails } = useAuth();
+  const { allUsers, holidays, loading: authLoading, attendanceLog, calculateMonthlyPayrollDetails, approveAdvance, rejectAdvance } = useAuth();
   const [isProcessingAdvance, setIsProcessingAdvance] = useState(false);
   const { toast } = useToast();
   const [payrollData, setPayrollData] = useState<MonthlyPayrollReport[]>([]);
@@ -52,19 +52,23 @@ export default function AdminPayrollPage() {
     );
   }, [allUsers, authLoading]);
 
-  const handleProcessAdvance = async (employeeUid: string, advanceId: string, newStatus: 'approved' | 'rejected') => {
+  const handleProcessAdvance = async (advanceId: string, newStatus: 'approved' | 'rejected') => {
     setIsProcessingAdvance(true);
     try {
-      await processAdvance(employeeUid, advanceId, newStatus);
+      if (newStatus === 'approved') {
+        await approveAdvance(advanceId);
+      } else {
+        await rejectAdvance(advanceId);
+      }
       toast({
         title: `Advance ${newStatus}`,
         description: `The advance request has been ${newStatus}. Payroll data will refresh.`,
       });
-      // Trigger re-calculation of payroll data as advances affect net payable
+      // Trigger re-calculation of payroll data as advances affect net payable - Vercel cache bust attempt
       if (calculateMonthlyPayrollDetails && attendanceLog) {
           const nonAdminUsers = allUsers.filter(u => u.role !== 'admin');
           const reports = nonAdminUsers.map(user => {
-            const userAttendanceForMonth = attendanceLog.filter(log => log.employeeId === user.employeeId);
+            const userAttendanceForMonth = attendanceLog.filter(log => log.employeeId === user.id);
             return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, holidays);
           });
           setPayrollData(reports);
@@ -184,7 +188,7 @@ export default function AdminPayrollPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleProcessAdvance(advance.userUid, advance.id, 'approved')}
+                        onClick={() => handleProcessAdvance(advance.id, 'approved')}
                         disabled={isProcessingAdvance}
                         className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700"
                       >
@@ -194,7 +198,7 @@ export default function AdminPayrollPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleProcessAdvance(advance.userUid, advance.id, 'rejected')}
+                        onClick={() => handleProcessAdvance(advance.id, 'rejected')}
                         disabled={isProcessingAdvance}
                         className="text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700"
                       >
