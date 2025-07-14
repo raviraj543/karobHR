@@ -438,7 +438,7 @@ export default function AdminTasksPage() {
                   placeholder="Search tasks by title, assignee, status..."
                   className="pl-8 sm:w-[350px]"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target._value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
           </div>
