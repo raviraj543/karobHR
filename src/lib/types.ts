@@ -31,6 +31,7 @@ export interface LocationInfo {
   longitude: number;
   accuracy?: number;
   name?: string; // Added to resolve type error in settings/page.tsx
+  radius?: number; // Added to resolve type error in settings/page.tsx
 }
 
 export interface AttendanceEvent {
