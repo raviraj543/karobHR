@@ -12,6 +12,12 @@ export interface CompanySettings {
     latitude: number;
     longitude: number;
     radius: number; // in meters
+    export type LocationInfo = {
+      name: string;
+      latitude: number;
+      longitude: number;
+      radius: number; // <-- ADD THIS LINE HERE
+      // ...other fields
   };
   salaryCalculationMode?: SalaryCalculationMode;
 }
@@ -30,8 +36,8 @@ export interface LocationInfo {
   latitude: number;
   longitude: number;
   accuracy?: number;
-  name?: string; // Added to resolve type error in settings/page.tsx
-  radius?: number; // Added to resolve type error in settings/page.tsx
+  name?: string;
+  radius?: number;
 }
 
 export interface AttendanceEvent {
