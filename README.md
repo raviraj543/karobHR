@@ -17,4 +17,4 @@ This project includes a category-based link management system that allows authen
 *   **Filtering by Category:** The system allows users to filter their links by category, making it easy to find specific links.
 *   **Secure and Private:** All links and categories are tied to a user's account, ensuring that they are private and only accessible to the user who created them.
 
-<!-- Forced re-build trigger: Fri Jul 12 2024 16:53:36 GMT+0000 (Coordinated Universal Time) -->
+<!-- Forced re-build trigger: Fri Jul 12 2024 17:00:00 GMT+0000 (Coordinated Universal Time) -->
