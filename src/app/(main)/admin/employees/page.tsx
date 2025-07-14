@@ -27,7 +27,7 @@ const getRoleBadgeVariant = (role: User['role']) => {
   
   // Refactored to use if/else if for robust type narrowing and to fix 'never' type issue
   if (role === 'admin') return 'destructive'; 
-  else if (role === 'manager') return 'secondary'; // Added missing semicolon
+  else if (role === 'manager') return 'secondary'; // Corrected: Added missing semicolon
   else if (role === 'employee') return 'outline'; 
   
   // Fallback for any other string role not explicitly handled, or unexpected types
