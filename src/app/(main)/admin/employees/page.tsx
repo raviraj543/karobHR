@@ -24,21 +24,21 @@ const getStatusBadgeVariant = (status?: string) => {
 
 const getRoleBadgeVariant = (role: User['role']) => {
   if (!role) return 'default';
-  // Ensure role is a string before calling toLowerCase
-  const lowercasedRole = typeof role === 'string' ? role.toLowerCase() : '';
-  switch (lowercasedRole) {
-    case 'admin': return 'destructive'; 
-    case 'manager': return 'secondary';
-    case 'employee': return 'outline'; 
-    default: return 'default';
-  }
+  
+  // Refactored to use if/else if for robust type narrowing
+  if (role === 'admin') return 'destructive'; 
+  else if (role === 'manager') return 'secondary';
+  else if (role === 'employee') return 'outline'; 
+  
+  // Fallback for any other string role not explicitly handled, or unexpected types
+  return 'default';
 }
 
 const getRoleDisplayName = (role: User['role']): string => {
     if (role === 'admin') return 'Administrator';
-    if (role === 'manager') return 'Manager';
-    if (role === 'employee') return 'Employee';
-    if (typeof role === 'string' && role.length > 0) {
+    else if (role === 'manager') return 'Manager';
+    else if (role === 'employee') return 'Employee';
+    else if (typeof role === 'string' && role.length > 0) {
         return role.charAt(0).toUpperCase() + role.slice(1);
     }
     return 'N/A'; // Fallback for null or other unexpected cases
@@ -57,7 +57,7 @@ export default function AdminEmployeesPage() {
     if (!allUsers) {
       setFilteredEmployees([]);
       return;
-    }
+    ;
     const displayableUsers = allUsers.filter(u => u.role !== 'admin'); 
     
     if (searchTerm.trim() === '') {
