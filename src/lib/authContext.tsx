@@ -57,7 +57,8 @@ export interface AuthContextType {
     // Admin-specific data
     allUsers: User[];
     attendanceLog: AttendanceEvent[]; 
-    tasks: Task[]; 
+    allTasks: Task[]; // Renamed for clarity, all tasks for admin
+    userTasks: Task[]; // Tasks specific to the logged-in user
     announcements: Announcement[];
     holidays: Holiday[];
     leaveRequests: LeaveApplication[];
@@ -75,11 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // App-wide data slices
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
-    const [tasks, setTasks] = useState<Task[]>([]); // Unified tasks state
+    const [userTasks, setUserTasks] = useState<Task[]>([]); // New state for user-specific tasks
     
     // Admin-specific data slices
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [allAttendance, setAllAttendance] = useState<AttendanceEvent[]>([]);
+    const [allTasks, setAllTasks] = useState<Task[]>([]); // Renamed for clarity
     const [allLeaveRequests, setAllLeaveRequests] = useState<LeaveApplication[]>([]);
     const [allAdvanceRequests, setAllAdvanceRequests] = useState<Advance[]>([]);
 
@@ -108,7 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setHolidays([]);
                 setAllUsers([]);
                 setAllAttendance([]);
-                setTasks([]);
+                setAllTasks([]); // Reset allTasks on logout
+                setUserTasks([]); // Reset userTasks on logout
                 setAllLeaveRequests([]);
                 setAllAdvanceRequests([]);
                 setLoading(false);
@@ -121,7 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!karobUser || !karobUser.companyId) {
             if (!loading) { // If not loading and still no user, we're done
-                 setTasks([]);
+                 setAllTasks([]); // Clear allTasks
+                 setUserTasks([]); // Clear userTasks
                  setCompanySettings(null);
             }
             return;
@@ -146,7 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
              setHolidays(snap.docs.map(d => ({ ...d.data(), id: d.id, date: (d.data().date as any).toDate() } as Holiday)));
         });
 
-        let tasksUnsubscribe: () => void;
+        let allTasksUnsubscribe: () => void;
+        let userTasksUnsubscribe: () => void; // New unsubscribe for user tasks
         let allUsersUnsubscribe: () => void;
         let allAttendanceUnsubscribe: () => void;
         let allAdvancesUnsubscribe: () => void;
@@ -168,8 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             
             const tasksRef = collection(db, `companies/${companyId}/tasks`);
-            tasksUnsubscribe = onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snap) => {
-                setTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
+            allTasksUnsubscribe = onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snap) => {
+                setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
             });
 
             const advancesRef = collection(db, `companies/${companyId}/advances`);
@@ -177,17 +182,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)));
             });
 
-        } else { // Employee or Manager
-            const tasksRef = collection(db, `companies/${companyId}/tasks`);
-            const userTasksQuery = query(tasksRef, where('assigneeId', '==', karobUser.employeeId), orderBy('createdAt', 'desc'));
-            tasksUnsubscribe = onSnapshot(userTasksQuery, (snap) => {
-                setTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
-            });
+        } 
+        
+        // Always fetch user-specific tasks if karobUser is available
+        const tasksRef = collection(db, `companies/${companyId}/tasks`);
+        const userTasksQuery = query(tasksRef, where('assigneeId', '==', karobUser.employeeId || ''), orderBy('createdAt', 'desc'));
+        userTasksUnsubscribe = onSnapshot(userTasksQuery, (snap) => {
+            setUserTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
+        });
+
+        // Clear admin-specific states for non-admins
+        if (karobUser.role !== 'admin') {
              setAllUsers([]);
              setAllAttendance([]);
              setAllLeaveRequests([]);
              setAllAdvanceRequests([]);
+             setAllTasks([]); // Clear allTasks for non-admins
         }
+
 
         setLoading(false);
 
@@ -195,14 +207,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             companyUnsubscribe();
             announcementsUnsubscribe();
             holidaysUnsubscribe();
-            if (tasksUnsubscribe) tasksUnsubscribe();
+            if (allTasksUnsubscribe) allTasksUnsubscribe();
+            if (userTasksUnsubscribe) userTasksUnsubscribe(); // Cleanup for user tasks
             if (allUsersUnsubscribe) allUsersUnsubscribe();
             if (allAttendanceUnsubscribe) allAttendanceUnsubscribe();
             if (allAdvancesUnsubscribe) allAdvancesUnsubscribe();
         };
 
-    }, [karobUser]);
-
+    }, [karobUser, loading]); // Added loading to dependency array to re-run effect when loading state changes
 
     const login = async (loginId: string, password: string): Promise<User> => {
         const usersRef = collection(db, "users");
@@ -541,7 +553,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         announcements,
         holidays,
         attendanceLog: allAttendance,
-        tasks,
+        allTasks, // Expose all tasks for admin
+        userTasks, // Expose user-specific tasks
         leaveRequests: allLeaveRequests,
         advanceRequests: allAdvanceRequests,
     };

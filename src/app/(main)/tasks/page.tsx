@@ -1,146 +1,165 @@
 
-'use client'; // Required for hooks
+'use client';
 
+import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import type { Task } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { ListChecks, Filter } from 'lucide-react';
-import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
-import type { Task as TaskType } from '@/lib/types';
-import { useEffect, useState, useMemo } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { Loader2, Search, ListChecks, Calendar, AlertCircle } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TruncatedText } from '@/components/ui/truncated-text';
 
-
-const getPriorityBadgeVariant = (priority?: TaskType['priority']) => {
-  if (!priority) return 'default';
-  switch (priority.toLowerCase()) {
-    case 'high': return 'destructive';
-    case 'critical': return 'destructive';
-    case 'medium': return 'secondary';
-    case 'low': return 'outline';
-    default: return 'default';
-  }
-};
-const getStatusBadgeVariant = (status?: TaskType['status']) => {
-  if(!status) return 'default';
-  switch (status.toLowerCase()) {
-    case 'completed': return 'default';
-    case 'in progress': return 'secondary';
-    case 'pending': return 'outline';
-    case 'blocked': return 'destructive';
+const getStatusVariant = (status: Task['status']) => {
+  switch (status) {
+    case 'Completed': return 'success';
+    case 'In Progress': return 'default';
+    case 'Blocked': return 'destructive';
+    case 'Pending': return 'secondary';
     default: return 'default';
   }
 };
 
+const getPriorityVariant = (priority: Task['priority']) => {
+  switch (priority) {
+    case 'Critical': return 'destructive';
+    case 'High': return 'orange';
+    case 'Medium': return 'default';
+    case 'Low': return 'secondary';
+    default: return 'default';
+  }
+};
 
 export default function MyTasksPage() {
-  const { user, tasks, updateTask, loading: authLoading } = useAuth();
-  const { toast } = useToast();
-  const [filter, setFilter] = useState<'all' | 'pending' | 'in progress' | 'completed'>('all');
-
+  const { userTasks: tasks, loading: authLoading } = useAuth(); // Correctly destructure userTasks
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
 
   useEffect(() => {
     document.title = 'My Tasks - KarobHR';
   }, []);
 
-  const sortedTasks = useMemo(() => {
-    if (!tasks || authLoading) return [];
-    return [...tasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  }, [tasks, authLoading]);
-
   const filteredTasks = useMemo(() => {
-    if (filter === 'all') return sortedTasks;
-    return sortedTasks.filter(task => task.status.toLowerCase().replace(' ', '') === filter.replace(' ', ''));
-  }, [sortedTasks, filter]);
+    if (!tasks) return []; // Ensure tasks is not undefined
 
-  const handleTaskStatusChange = async (taskId: string, currentStatus: TaskType['status']) => {
-    const taskToUpdate = tasks.find(t => t.id === taskId);
-    if (!taskToUpdate) return;
+    return tasks.filter(task => {
+      const matchesSearch = searchTerm === '' ||
+        task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.description.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const newStatus: TaskType['status'] = currentStatus === 'Completed' ? 'In Progress' : 'Completed';
-    try {
-      await updateTask({ ...taskToUpdate, status: newStatus });
-      toast({
-        title: `Task ${newStatus === 'Completed' ? 'Completed' : 'Marked In Progress'}`,
-        description: `Task "${taskToUpdate.title}" status updated.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error updating task",
-        description: (error as Error).message,
-        variant: "destructive",
-      });
-    }
-  };
+      const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
+      const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
 
+      return matchesSearch && matchesStatus && matchesPriority;
+    });
+  }, [tasks, searchTerm, filterStatus, filterPriority]);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-full py-10">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-muted-foreground">Loading your tasks...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">My Tasks</h1>
-          <p className="text-muted-foreground">Stay organized and track your progress.</p>
-        </div>
-        <div className="flex gap-2">
-            {/* TODO: Implement actual filtering UI if needed */}
-            {/* <Button variant="outline" disabled>
-                <Filter className="mr-2 h-4 w-4" /> Filter Tasks (WIP)
-            </Button> */}
+          <p className="text-muted-foreground">View and manage your assigned tasks.</p>
         </div>
       </div>
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Assigned Tasks</CardTitle>
-          <CardDescription>All tasks assigned to you. Check them off as you complete them.</CardDescription>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Your Tasks</CardTitle>
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search tasks..."
+                  className="pl-8 w-full"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filter Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="In Progress">In Progress</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                  <SelectItem value="Blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filter Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
+                  <SelectItem value="Critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <CardDescription>
+            Tasks assigned to you will appear here. Mark them as complete as you finish them.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {authLoading ? (
-             <p className="text-muted-foreground text-center py-8">Loading tasks...</p>
-          ) : filteredTasks.length > 0 ? (
-            <div className="space-y-4">
-              {filteredTasks.map(task => (
-                <div key={task.id} className={`flex items-start space-x-3 p-4 bg-muted/30 rounded-lg shadow-sm hover:shadow-md transition-shadow ${task.status === 'Completed' ? 'opacity-70' : ''}`}>
-                  <Checkbox
-                    id={`task-${task.id}`}
-                    className="mt-1"
-                    checked={task.status === 'Completed'}
-                    onCheckedChange={() => handleTaskStatusChange(task.id, task.status)}
-                  />
-                  <div className="flex-1">
-                    <label htmlFor={`task-${task.id}`} className={`font-semibold text-foreground cursor-pointer hover:text-primary ${task.status === 'Completed' ? 'line-through text-muted-foreground' : ''}`}>
-                      {task.title}
-                    </label>
-                    <p className="text-sm text-muted-foreground">Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</p>
-                     <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
-                    <div className="mt-2 flex items-center gap-2">
-                        <Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge>
-                        <Badge variant={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {filteredTasks.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Task Title</TableHead>
+                  <TableHead className="hidden md:table-cell">Description</TableHead>
+                  <TableHead className="hidden sm:table-cell">Due Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Priority</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTasks.map(task => (
+                  <TableRow key={task.id}>
+                    <TableCell className="font-medium">{task.title}</TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      <TruncatedText text={task.description} maxLength={100} />
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        {format(parseISO(task.dueDate), 'PPP')}
+                      </div>
+                    </TableCell>
+                    <TableCell><Badge variant={getStatusVariant(task.status)}>{task.status}</Badge></TableCell>
+                    <TableCell><Badge variant={getPriorityVariant(task.priority)}>{task.priority}</Badge></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
             <p className="text-muted-foreground text-center py-8">
-                {tasks.length === 0 ? "You have no tasks assigned. Great job, or check with your manager!" : "No tasks match the current filter."}
+                {(tasks && tasks.length === 0) ? "You have no tasks assigned. Great job, or check with your manager!" : "No tasks match the current filter."}
             </p>
           )}
         </CardContent>
       </Card>
-
-      <Card className="shadow-sm">
-        <CardHeader>
-            <CardTitle>Daily Task Report</CardTitle>
-            <CardDescription>Use the dashboard to submit your daily task report and checkout.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <p className="text-muted-foreground">The task summarization tool is available on your <Button variant="link" asChild className="p-0 h-auto"><Link href="/dashboard">main dashboard</Link></Button>.</p>
-        </CardContent>
-      </Card>
-
     </div>
   );
 }

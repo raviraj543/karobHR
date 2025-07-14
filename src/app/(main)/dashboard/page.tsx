@@ -12,30 +12,23 @@ import { useEffect, useMemo } from 'react';
 import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO, eachDayOfInterval, isSunday, endOfMonth } from 'date-fns';
 
 export default function EmployeeDashboardPage() {
-  const { user: firebaseUser, karobUser, announcements, loading: authLoading, companySettings, calculateMonthlyPayrollDetails, allUsers } = useAuth(); 
-
-  const user = useMemo(() => {
-    if (!karobUser) return null;
-    // For regular users, find their own tasks, attendance, etc.
-    // This logic assumes `allUsers` is populated for admins, and for regular users, their own data is on `karobUser`
-    // A better approach is to have dedicated state slices in AuthContext for the current user's data
-    // For now, we'll work with what we have.
-    const myAttendance = allUsers.flatMap(u => u.attendanceLog || []).filter(a => a.userId === karobUser.id);
-    const myTasks = allUsers.flatMap(u => u.tasks || []).filter(t => t.assigneeId === karobUser.employeeId);
-    
-    return {
-        ...karobUser,
-        attendanceLog: myAttendance,
-        tasks: myTasks
-    }
-  }, [karobUser, allUsers]);
+  // Directly use real-time data from AuthContext
+  const { 
+    karobUser: user, 
+    announcements, 
+    loading: authLoading, 
+    calculateMonthlyPayrollDetails, 
+    attendanceLog, // User-specific attendance
+    userTasks: tasks, // User-specific tasks
+    holidays 
+  } = useAuth(); 
 
   useEffect(() => {
     document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
   }, [user?.name]);
 
   const dashboardStats = useMemo(() => {
-    if (!user || !user.attendanceLog || !user.tasks) {
+    if (!user || !attendanceLog || !tasks) {
       return {
         attendance: 'N/A',
         pendingTasks: 'N/A',
@@ -47,14 +40,14 @@ export default function EmployeeDashboardPage() {
     const today = new Date();
 
     // Use the payroll calculation logic for earnings
-    const payroll = calculateMonthlyPayrollDetails(user, today.getFullYear(), today.getMonth(), user.attendanceLog, []);
-    const todaysEarnings = (payroll.finalNetPayable / payroll.totalWorkingDaysInMonth) || 0; // Simplified daily average
+    const payroll = calculateMonthlyPayrollDetails(user, today.getFullYear(), today.getMonth(), attendanceLog, holidays || []);
+    const todaysEarnings = (payroll.finalNetPayable / (payroll.totalWorkingDaysInMonth || 1)); // Simplified daily average, prevent divide by zero
 
     // Attendance Calculation
     const monthStart = startOfMonth(today);
     const totalDaysInMonth = getDaysInMonth(today);
     const uniqueDaysAttended = new Set(
-      user.attendanceLog
+      attendanceLog
         .filter(event => {
           const eventDate = parseISO(event.timestamp);
           return eventDate >= monthStart && eventDate <= today;
@@ -64,7 +57,7 @@ export default function EmployeeDashboardPage() {
     const attendance = `${uniqueDaysAttended}/${totalDaysInMonth} Days`;
 
     // Pending Tasks Calculation
-    const pendingTasksCount = user.tasks.filter(task => task.status !== 'Completed').length;
+    const pendingTasksCount = tasks.filter(task => task.status !== 'Completed').length;
     const pendingTasks = `${pendingTasksCount} Tasks`;
 
     // Leave Balance (assuming a standard entitlement for now)
@@ -82,7 +75,7 @@ export default function EmployeeDashboardPage() {
       nextPayslip: nextPayslipDate,
       todaysEarnings,
     };
-  }, [user, calculateMonthlyPayrollDetails]);
+  }, [user, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails]); // Added real-time dependencies
   
   if (authLoading || !user) {
     return (
@@ -189,4 +182,3 @@ export default function EmployeeDashboardPage() {
     </div>
   );
 }
-    

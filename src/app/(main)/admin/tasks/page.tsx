@@ -70,7 +70,7 @@ const getStatusBadgeVariant = (status: TaskType['status']) => {
 
 export default function AdminTasksPage() {
   const { toast } = useToast();
-  const { allUsers, loading: authLoading, tasks, addTask, updateTask } = useAuth();
+  const { allUsers = [], loading: authLoading, allTasks: tasks = [], addTask, updateTask } = useAuth(); // Correctly use allTasks and default to []
   const [isAssignTaskDialogOpen, setIsAssignTaskDialogOpen] = useState(false);
   const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskType | null>(null);
@@ -113,8 +113,7 @@ export default function AdminTasksPage() {
         return;
     }
 
-    const newTask: TaskType = {
-      id: uuidv4(),
+    const newTask: Omit<TaskType, 'id'> = {
       title: data.title,
       description: data.description,
       assigneeId: data.assigneeId,
@@ -122,7 +121,7 @@ export default function AdminTasksPage() {
       dueDate: data.dueDate,
       priority: data.priority,
       status: 'Pending',
-      createdAt: new Date().toISOString(), // Or use serverTimestamp from Firestore if preferred
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     await addTask(newTask);
@@ -439,7 +438,7 @@ export default function AdminTasksPage() {
                   placeholder="Search tasks by title, assignee, status..."
                   className="pl-8 sm:w-[350px]"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target._value)}
                 />
             </div>
           </div>
