@@ -30,6 +30,7 @@ export interface LocationInfo {
   latitude: number;
   longitude: number;
   accuracy?: number;
+  name?: string; // Added to resolve type error in settings/page.tsx
 }
 
 export interface AttendanceEvent {
