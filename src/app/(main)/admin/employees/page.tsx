@@ -25,9 +25,9 @@ const getStatusBadgeVariant = (status?: string) => {
 const getRoleBadgeVariant = (role: User['role']) => {
   if (!role) return 'default';
   
-  // Refactored to use if/else if for robust type narrowing
+  // Refactored to use if/else if for robust type narrowing and to fix 'never' type issue
   if (role === 'admin') return 'destructive'; 
-  else if (role === 'manager') return 'secondary';
+  else if (role === 'manager') return 'secondary
   else if (role === 'employee') return 'outline'; 
   
   // Fallback for any other string role not explicitly handled, or unexpected types
@@ -57,7 +57,7 @@ export default function AdminEmployeesPage() {
     if (!allUsers) {
       setFilteredEmployees([]);
       return;
-    ;
+    }
     const displayableUsers = allUsers.filter(u => u.role !== 'admin'); 
     
     if (searchTerm.trim() === '') {
