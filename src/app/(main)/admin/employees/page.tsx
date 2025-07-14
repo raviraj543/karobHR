@@ -34,20 +34,14 @@ const getRoleBadgeVariant = (role: User['role']) => {
   }
 }
 
-const getRoleDisplayName = (role: User['role']) => {
-    if (!role) return 'N/A';
-    // The default case now safely handles any unexpected string values
-    switch (role) {
-        case 'admin': return 'Administrator';
-        case 'manager': return 'Manager';
-        case 'employee': return 'Employee';
-        default: 
-          // Ensure role is a string before trying to use string methods
-          if (typeof role === 'string' && role.length > 0) {
-            return role.charAt(0).toUpperCase() + role.slice(1);
-          }
-          return 'Unknown Role'; // Fallback for unexpected types
+const getRoleDisplayName = (role: User['role']): string => {
+    if (role === 'admin') return 'Administrator';
+    if (role === 'manager') return 'Manager';
+    if (role === 'employee') return 'Employee';
+    if (typeof role === 'string' && role.length > 0) {
+        return role.charAt(0).toUpperCase() + role.slice(1);
     }
+    return 'N/A'; // Fallback for null or other unexpected cases
 }
 
 export default function AdminEmployeesPage() {
