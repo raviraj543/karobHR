@@ -17,13 +17,12 @@ import { useState } from 'react';
 
 
 export default function AdminDashboardPage() {
-  // Use `allTasks` for the admin dashboard, and provide default empty arrays
   const { 
     allUsers = [], 
     announcements = [], 
     addAnnouncement, 
     karobUser, 
-    allTasks: tasks = [], // Correctly use allTasks and default to []
+    allTasks: tasks = [], 
     loading, 
     leaveRequests = [], 
     advanceRequests = [] 
@@ -38,7 +37,6 @@ export default function AdminDashboardPage() {
     const totalEmployees = allUsers.filter(u => u.role === 'employee' || u.role === 'manager').length;
     const pendingLeaves = leaveRequests.filter(l => l.status === 'pending').length;
     const pendingAdvances = advanceRequests.filter(a => a.status === 'pending').length;
-    // The `tasks` variable now correctly refers to `allTasks`
     const tasksInProgress = tasks.filter(t => t.status === 'In Progress').length;
 
     return [
@@ -115,7 +113,7 @@ export default function AdminDashboardPage() {
           <Card key={stat.title} className="shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className={`h-5 w-5 text-muted-foreground ${stat.color || ''}`} />
+              <stat.icon className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
