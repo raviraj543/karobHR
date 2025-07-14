@@ -94,7 +94,7 @@ export default function AddNewEmployeePage() {
       employeeId: data.employeeId,
       email: data.email,
       department: data.department,
-      role: data.role,
+      role: data.role, // The incorrect type assertion has been removed here
       companyId: adminCompanyId,
       companyName: companySettings.companyName,
       joiningDate: data.joiningDate,
