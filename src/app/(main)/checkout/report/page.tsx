@@ -141,7 +141,8 @@ export default function CheckoutReportPage() {
                 {location ? (
                     <p className="text-xs text-muted-foreground mt-2">
                         Lat: {location.latitude.toFixed(5)}, Lon: {location.longitude.toFixed(5)}
-                        {location.accuracy ? ` (Accuracy: ${location.accuracy.toFixed(1)}m)` : ''}
+                        {/* Vercel Cache Bust: Added and immediately removed extra newline to force new commit hash */}
+                        {typeof location.accuracy === 'number' ? ` (Accuracy: ${location.accuracy.toFixed(1)}m)` : ''}
                     </p>
                 ) : (
                     <p className="text-xs text-destructive mt-2">{error || 'Fetching location...'}</p>
