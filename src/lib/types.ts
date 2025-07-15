@@ -160,7 +160,7 @@ export interface User {
     longitude: number;
     radius: number;
   } | null;
-  leaves?: LeaveApplication[];
+  leaves?: LeaveApplication[]; // Added to resolve type error in leave/page.tsx
   advances?: Advance[];
   mockAttendanceFactor?: number;
 }
