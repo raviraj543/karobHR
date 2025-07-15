@@ -11,7 +11,7 @@ import { Loader2, Check, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase'; // Corrected import
-import type { Advance } from '@/lib/types';
+import type { Advance } from '@/lib/app-types';
 
 export default function AdvanceApprovalsPage() {
   const { companyId, loading, approveAdvance, rejectAdvance } = useAuth();
