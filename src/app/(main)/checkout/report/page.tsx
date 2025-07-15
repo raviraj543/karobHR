@@ -140,7 +140,8 @@ export default function CheckoutReportPage() {
                 </div>
                 {location ? (
                     <p className="text-xs text-muted-foreground mt-2">
-                        Lat: {location.latitude.toFixed(5)}, Lon: {location.longitude.toFixed(5)} (Accuracy: {location.accuracy.toFixed(1)}m)
+                        Lat: {location.latitude.toFixed(5)}, Lon: {location.longitude.toFixed(5)}
+                        {location.accuracy ? ` (Accuracy: ${location.accuracy.toFixed(1)}m)` : ''}
                     </p>
                 ) : (
                     <p className="text-xs text-destructive mt-2">{error || 'Fetching location...'}</p>
