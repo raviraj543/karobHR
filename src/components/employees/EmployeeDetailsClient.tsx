@@ -4,7 +4,7 @@
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect, useMemo } from 'react';
-import type { User, AttendanceEvent, Task, MonthlyPayrollReport, Holiday } from '@/lib/types';
+import type { User, AttendanceEvent, Task, MonthlyPayrollReport, Holiday } from '@/lib/app-types.ts';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -319,6 +319,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                             <TableRow>
                                 <TableHead>Leave Type</TableHead>
                                 <TableHead>Start Date</TableHead>
+
                                 <TableHead>End Date</TableHead>
                                 <TableHead>Reason</TableHead>
                                 <TableHead>Status</TableHead>

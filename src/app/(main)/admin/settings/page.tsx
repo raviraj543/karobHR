@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { MapPin, Loader2, LocateFixed, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import type { CompanySettings, LocationInfo, SalaryCalculationMode } from '@/lib/types';
+import type { CompanySettings, LocationInfo, SalaryCalculationMode } from '@/lib/app-types.ts';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function AdminSettingsPage() {

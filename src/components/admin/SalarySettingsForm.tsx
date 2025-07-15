@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { SalaryCalculationMode, CompanySettings } from '@/lib/types';
+import type { SalaryCalculationMode, CompanySettings } from '@/lib/app-types.ts';
 
 interface SalarySettingsFormProps {
     companySettings: CompanySettings | null;

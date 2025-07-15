@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileText, MapPin, Send } from 'lucide-react';
-import type { LocationInfo } from '@/lib/types';
+import type { LocationInfo } from '@/lib/app-types.ts';
 
 export default function CheckoutReportPage() {
   const router = useRouter();

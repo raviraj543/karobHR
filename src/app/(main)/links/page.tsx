@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Category, Link as LinkType } from '@/lib/types';
+import { Category, Link as LinkType } from '@/lib/app-types.ts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { X, Globe, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';

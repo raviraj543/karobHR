@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { collection, query, where, getDocs, onSnapshot, orderBy, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
-import { Employee, LeaveRequest, Advance, Task, AttendanceEvent, Holiday, CompanySettings } from '@/lib/types';
+import { Employee, LeaveRequest, Advance, Task, AttendanceEvent, Holiday, CompanySettings } from '@/lib/app-types.ts';
 import EmployeeDetailsClient from '@/components/employees/EmployeeDetailsClient';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -119,4 +119,4 @@ export default function EmployeeDetailPage() {
       />
     </div>
   );
-};
+}

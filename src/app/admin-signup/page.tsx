@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import type { NewEmployeeData } from '@/lib/authContext';
-import type { UserRole } from '@/lib/types';
+import type { UserRole } from '@/lib/app-types.ts';
 import { v4 as uuidv4 } from 'uuid';
 // Removed all Firebase Firestore/Functions imports that were used for admin check
 

@@ -16,7 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Eye, EyeOff, LogInIcon, UserPlus, Shield, UserCog, User, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '../ui/separator';
-import type { User as KarobUser } from '@/lib/types';
+import type { User as KarobUser } from '@/lib/app-types.ts';
 
 const loginSchema = z.object({
   employeeId: z.string().min(1, { message: 'User ID is required.' }),
