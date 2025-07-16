@@ -5,14 +5,14 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { auth, db } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, writeBatch } from 'firebase/firestore';
-import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, NewEmployeeData, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/app-types';
+import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/app-types';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration } from '@/lib/dateUtils';
 import { calculateDistance } from './locationUtils';
 
 
 // Redefined NewEmployeeData to be more specific for clarity
-export interface NewEmployeePayload {
+export interface NewEmployeePayload { // Added export here
     name: string;
     employeeId: string;
     email?: string;

@@ -15,7 +15,7 @@ interface SalarySettingsFormProps {
 }
 
 export function SalarySettingsForm({ companySettings }: SalarySettingsFormProps) {
-    const { updateCompanySettings, loading: authLoading } = useAuth();
+    const { updateCompanySettings, loading: authLoading, companyId } = useAuth(); // Destructure companyId
     const { toast } = useToast();
     const [selectedMode, setSelectedMode] = useState<SalaryCalculationMode | undefined>(companySettings?.salaryCalculationMode);
 
@@ -25,10 +25,18 @@ export function SalarySettingsForm({ companySettings }: SalarySettingsFormProps)
     }, [companySettings?.salaryCalculationMode]);
 
     const handleModeChange = async (value: string) => {
+        if (!companyId) {
+            toast({
+                title: "Error",
+                description: "Company ID is missing. Cannot update settings.",
+                variant: "destructive",
+            });
+            return;
+        }
         const newMode = value as SalaryCalculationMode;
         setSelectedMode(newMode); // Optimistic update
         try {
-            await updateCompanySettings({ salaryCalculationMode: newMode });
+            await updateCompanySettings({ salaryCalculationMode: newMode }, companyId); // Pass companyId
             toast({
                 title: "Salary Calculation Mode Updated",
                 description: `Payroll will now be calculated using the ${newMode.replace(/_/g, ' ')} method.`,

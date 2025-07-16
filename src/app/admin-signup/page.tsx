@@ -10,22 +10,19 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
-import { ShieldPlus, ArrowLeft, Loader2 } from 'lucide-react'; // Removed AlertTriangle
+import { ShieldPlus, ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import type { NewEmployeeData } from '@/lib/authContext';
-import type { UserRole } from '@/lib/app-types.ts';
+import type { NewEmployeePayload } from '@/lib/authContext';
 import { v4 as uuidv4 } from 'uuid';
-// Removed all Firebase Firestore/Functions imports that were used for admin check
-
 
 const adminSignupSchema = z.object({
   companyName: z.string().min(2, {message: 'Company name must be at least 2 characters.'}),
   adminName: z.string().min(2, { message: 'Admin name must be at least 2 characters.' }),
   adminId: z.string().min(3, { message: 'Admin Login ID must be at least 3 characters.' })
     .regex(/^[a-zA-Z0-9_.-]*$/, { message: 'Admin Login ID can only contain letters, numbers, and _ . -' }),
-  adminEmail: z.string().email({ message: 'Invalid email address.' }), // Made mandatory
+  adminEmail: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
 }).refine(data => data.password === data.confirmPassword, {
@@ -39,28 +36,28 @@ export default function AdminSignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { user: authenticatedUser, addNewEmployee, loading: authContextLoading } = useAuth();
-
-  // Removed checkingAdminStatus and adminAccountsExist states
+  const { karobUser: authenticatedUser, addNewEmployee, loading: authContextLoading } = useAuth();
 
   useEffect(() => {
     document.title = 'Create Admin Account - KarobHR';
 
     if (authContextLoading) {
-      return; // Wait for auth context to finish loading
+      return;
     }
 
     if (authenticatedUser) {
       toast({
           title: "Already Logged In",
-          description: `You are logged in as ${authenticatedUser.displayName || authenticatedUser.email}. To create a new company & admin, please log out first.`,
+          description: `You are logged in as ${authenticatedUser.name || authenticatedUser.email}. To create a new company & admin, please log out first.`,
           variant: "default",
           duration: 7000,
       });
-      // Ensure authenticatedUser.role exists before using it for redirect
-      router.replace(authenticatedUser.role === 'admin' ? '/admin/dashboard' : '/dashboard'); 
+      if (authenticatedUser.role) {
+        router.replace(authenticatedUser.role === 'admin' ? '/admin/dashboard' : '/dashboard'); 
+      } else {
+        router.replace('/dashboard');
+      }
     }
-    // Removed the admin existence check via Cloud Function or Firestore
   }, [authContextLoading, authenticatedUser, router, toast]);
 
 
@@ -69,12 +66,12 @@ export default function AdminSignupPage() {
     
     const newCompanyId = uuidv4();
 
-    const adminDataForContext: NewEmployeeData = {
+    const adminDataForContext: NewEmployeePayload = {
       name: data.adminName,
       employeeId: data.adminId,
       email: data.adminEmail, 
       department: 'Administration',
-      role: 'admin' as UserRole,
+      role: 'admin',
       companyId: newCompanyId,
       companyName: data.companyName, 
       joiningDate: new Date().toISOString().split('T')[0],
@@ -114,7 +111,6 @@ export default function AdminSignupPage() {
     },
   });
 
-  // Simplified isPageLoading as checkingAdminStatus is removed
   const isPageLoading = authContextLoading;
 
   if (isPageLoading && !authenticatedUser) {
@@ -149,7 +145,6 @@ export default function AdminSignupPage() {
           <CardDescription>
             Register a new company and create its first administrator account for KarobHR.
           </CardDescription>
-          {/* Removed the Alert for adminAccountsExist */}
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -204,7 +199,6 @@ export default function AdminSignupPage() {
                       <FormControl>
                         <Input type="email" placeholder="e.g., admin@company.com" {...field} />
                       </FormControl>
-                      {/* <FormDescription>If blank, one may be auto-generated.</FormDescription> */}
                       <FormMessage />
                     </FormItem>
                   )}

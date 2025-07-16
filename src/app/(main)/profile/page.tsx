@@ -12,7 +12,7 @@ import { Edit3, Mail, Phone, Briefcase, User as UserIcon, ShieldCheck, UserCog, 
 import { useEffect } from 'react';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { karobUser: user } = useAuth();
 
   useEffect(() => {
     if (user?.name) {

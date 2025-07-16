@@ -21,7 +21,7 @@ import * as z from 'zod';
 
 const getStatusVariant = (status: Task['status']) => {
   switch (status) {
-    case 'Completed': return 'success';
+    case 'Completed': return 'default';
     case 'In Progress': return 'default';
     case 'Blocked': return 'destructive';
     case 'Pending': return 'secondary';
@@ -32,7 +32,7 @@ const getStatusVariant = (status: Task['status']) => {
 const getPriorityVariant = (priority: Task['priority']) => {
   switch (priority) {
     case 'Critical': return 'destructive';
-    case 'High': return 'orange';
+    case 'High': return 'destructive'; // Changed from 'orange' to 'destructive'
     case 'Medium': return 'default';
     case 'Low': return 'secondary';
     default: return 'default';
@@ -181,7 +181,7 @@ export default function MyTasksPage() {
                   <TableRow key={task.id}>
                     <TableCell className="font-medium">{task.title}</TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">
-                      <TruncatedText text={task.description} maxLength={100} />
+                      <TruncatedText text={task.description} wordLimit={20} />
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground">
                       <div className="flex items-center gap-1">

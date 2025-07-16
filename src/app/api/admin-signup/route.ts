@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { authAdmin, firestoreAdmin } from '@/lib/firebase/firebaseAdmin';
-import type { NewEmployeeData } from '@/lib/authContext';
+import type { NewEmployeePayload } from '@/lib/authContext';
 
 export async function POST(request: Request) {
   try {
     console.log("API Route: /api/admin-signup received request.");
     
-    const { employeeData, password }: { employeeData: NewEmployeeData; password?: string } = await request.json();
+    const { employeeData, password }: { employeeData: NewEmployeePayload; password?: string } = await request.json();
 
     console.log("Signup - Received employeeData:", employeeData);
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       console.log(`Signup - Checking for company document with ID: ${employeeData.companyId}`);
       const companyDocSnap = await companyDocRef.get();
 
-      if (!companyDocSnap.exists()) {
+      if (!companyDocSnap.exists) {
         console.log(`Signup - Company document for ID ${employeeData.companyId} does NOT exist. Preparing to create it.`);
         const newCompanyData = {
           companyId: employeeData.companyId,
