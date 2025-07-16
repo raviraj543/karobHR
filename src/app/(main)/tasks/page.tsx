@@ -9,10 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, ListChecks, Calendar, AlertCircle } from 'lucide-react';
+import { Loader2, Search, ListChecks, Calendar, AlertCircle, Edit2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TruncatedText } from '@/components/ui/truncated-text';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 
 const getStatusVariant = (status: Task['status']) => {
   switch (status) {
@@ -34,18 +39,54 @@ const getPriorityVariant = (priority: Task['priority']) => {
   }
 };
 
+const editTaskSchema = z.object({
+  status: z.enum(['Pending', 'In Progress', 'Completed', 'Blocked']),
+});
+
+type EditTaskFormValues = z.infer<typeof editTaskSchema>;
+
 export default function MyTasksPage() {
-  const { userTasks: tasks, loading: authLoading } = useAuth(); // Correctly destructure userTasks
+  const { userTasks: tasks, loading: authLoading, updateTask } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [isEditTaskDialogOpen, setIsEditTaskDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   useEffect(() => {
     document.title = 'My Tasks - KarobHR';
   }, []);
 
+  const editForm = useForm<EditTaskFormValues>({
+    resolver: zodResolver(editTaskSchema),
+    defaultValues: {
+      status: 'Pending',
+    },
+  });
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    editForm.reset({
+      status: task.status,
+    });
+    setIsEditTaskDialogOpen(true);
+  };
+
+  const onEditTaskSubmit = async (data: EditTaskFormValues) => {
+    if (!editingTask) return;
+
+    const updatedTaskData: Task = {
+      ...editingTask,
+      status: data.status,
+      updatedAt: new Date().toISOString(),
+    };
+    await updateTask(updatedTaskData);
+    setIsEditTaskDialogOpen(false);
+    setEditingTask(null);
+  };
+
   const filteredTasks = useMemo(() => {
-    if (!tasks) return []; // Ensure tasks is not undefined
+    if (!tasks) return [];
 
     return tasks.filter(task => {
       const matchesSearch = searchTerm === '' ||
@@ -132,6 +173,7 @@ export default function MyTasksPage() {
                   <TableHead className="hidden sm:table-cell">Due Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
+                  <TableHead>Actions</TableHead> {/* Added for the Edit button */}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -149,6 +191,11 @@ export default function MyTasksPage() {
                     </TableCell>
                     <TableCell><Badge variant={getStatusVariant(task.status)}>{task.status}</Badge></TableCell>
                     <TableCell><Badge variant={getPriorityVariant(task.priority)}>{task.priority}</Badge></TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" onClick={() => handleEditTask(task)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -160,6 +207,50 @@ export default function MyTasksPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Task Dialog */}
+      <Dialog open={isEditTaskDialogOpen} onOpenChange={setIsEditTaskDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center"><Edit2 className="mr-2 h-5 w-5 text-primary"/>Edit Task Status</DialogTitle>
+            <DialogDescription>Update the status of your assigned task.</DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditTaskSubmit)} className="space-y-4 py-2">
+              <FormField
+                control={editForm.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="In Progress">In Progress</SelectItem>
+                        <SelectItem value="Completed">Completed</SelectItem>
+                        <SelectItem value="Blocked">Blocked</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsEditTaskDialogOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={editForm.formState.isSubmitting}>
+                  {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

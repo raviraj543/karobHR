@@ -133,10 +133,8 @@ export function LoginForm() {
                 <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Password</FormLabel>
-                    <Link href="/forgot-password" legacyBehavior>
-                      <a className="text-sm text-primary hover:underline">
-                        Forgot password?
-                      </a>
+                    <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+                      Forgot password?
                     </Link>
                   </div>
                   <FormControl>
@@ -181,10 +179,8 @@ export function LoginForm() {
           </form>
         </Form>
         <div className="mt-6 text-center">
-          <Link href="/admin-signup" legacyBehavior>
-            <a className="text-sm text-primary hover:underline inline-flex items-center">
-              <UserPlus className="mr-1 h-4 w-4" /> First time? Create Company & Admin Account
-            </a>
+          <Link href="/admin-signup" className="text-sm text-primary hover:underline inline-flex items-center">
+            <UserPlus className="mr-1 h-4 w-4" /> First time? Create Company & Admin Account
           </Link>
         </div>
       </CardContent>

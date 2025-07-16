@@ -20,7 +20,8 @@ export default function EmployeeDashboardPage() {
     calculateMonthlyPayrollDetails, 
     attendanceLog, // User-specific attendance
     userTasks: tasks, // User-specific tasks
-    holidays 
+    holidays,
+    leaveRequests
   } = useAuth(); 
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export default function EmployeeDashboardPage() {
 
     // Leave Balance (assuming a standard entitlement for now)
     const annualLeaveEntitlement = 20; 
-    const leavesTaken = user.leaves?.filter(l => l.status === 'approved').length || 0;
+    const leavesTaken = leaveRequests.filter(l => l.status === 'approved' && l.userId === user.id).length || 0;
     const leaveBalance = `${annualLeaveEntitlement - leavesTaken} Days`;
     
     // Next Payslip Calculation
@@ -75,7 +76,7 @@ export default function EmployeeDashboardPage() {
       nextPayslip: nextPayslipDate,
       todaysEarnings,
     };
-  }, [user, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails]); // Added real-time dependencies
+  }, [user, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails, leaveRequests]); // Added real-time dependencies
   
   if (authLoading || !user) {
     return (

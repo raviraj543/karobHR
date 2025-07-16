@@ -1,4 +1,3 @@
-
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
@@ -76,7 +75,7 @@ const TableRow = React.forwardRef<
         "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
         className
       )}
-      {...restProps} // Spread only the rest of the props
+      {...restProps}
     />
   );
 })

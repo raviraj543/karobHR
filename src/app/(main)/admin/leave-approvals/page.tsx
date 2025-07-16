@@ -11,11 +11,9 @@ import { format } from 'date-fns';
 import type { LeaveApplication } from '@/lib/app-types'; // Ensure this is imported for explicit typing
 
 export default function LeaveApprovalsPage() {
-  const { allUsers, loading, approveLeaveApplication, rejectLeaveApplication } = useAuth();
+  const { leaveRequests, loading, approveLeaveApplication, rejectLeaveApplication } = useAuth();
 
-  const pendingApplications = allUsers
-    .flatMap(user => (user.leaves || []).map((leave: LeaveApplication) => ({ ...leave, userName: user.name, userEmployeeId: user.employeeId })))
-    .filter(leave => leave.status === 'pending');
+  const pendingApplications = leaveRequests.filter(leave => leave.status === 'pending');
 
   if (loading) {
     return <div className="flex justify-center items-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -44,7 +42,7 @@ export default function LeaveApprovalsPage() {
               {pendingApplications.length > 0 ? (
                 pendingApplications.map(app => (
                   <TableRow key={app.id}>
-                    <TableCell>{app.userName} ({app.userEmployeeId})</TableCell>
+                    <TableCell>{app.userId}</TableCell>
                     <TableCell>{app.leaveType}</TableCell>
                     <TableCell>{format(new Date(app.startDate), 'PPP')} - {format(new Date(app.endDate), 'PPP')}</TableCell>
                     <TableCell>{app.reason}</TableCell>

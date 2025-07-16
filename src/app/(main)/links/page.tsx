@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Category, Link as LinkType } from '@/lib/app-types.ts';
+import { Category, Link as LinkType } from '@/lib/app-types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { X, Globe, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,23 +59,23 @@ const LinksPage = () => {
   // Removed the useEffect that was calling getFirebaseInstances and setting db state
   
   useEffect(() => {
-    if (user && user.id && db) {
+    if (user && user.uid && db) {
       fetchCategories();
       fetchLinks();
     }
   }, [user, selectedCategory]); // Removed db from dependency array as it's directly imported
 
   const fetchCategories = async () => {
-    if (!user || !user.id || !db) return;
-    const q = query(collection(db, 'categories'), where('userId', '==', user.id));
+    if (!user || !user.uid || !db) return;
+    const q = query(collection(db, 'categories'), where('userId', '==', user.uid));
     const querySnapshot = await getDocs(q);
     const userCategories = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
     setCategories(userCategories);
   };
 
   const fetchLinks = async () => {
-    if (!user || !user.id || !db) return;
-    let linksQuery = query(collection(db, 'links'), where('userId', '==', user.id));
+    if (!user || !user.uid || !db) return;
+    let linksQuery = query(collection(db, 'links'), where('userId', '==', user.uid));
     if (selectedCategory) {
       linksQuery = query(linksQuery, where('categoryId', '==', selectedCategory));
     }
@@ -85,13 +85,13 @@ const LinksPage = () => {
   };
 
   const handleAddCategory = async () => {
-    if (!user || !user.id || !newCategory.trim() || !db) {
+    if (!user || !user.uid || !newCategory.trim() || !db) {
       console.error("Pre-condition failed for adding category.");
       return;
     }
   
     try {
-      await addDoc(collection(db, 'categories'), { name: newCategory, userId: user.id });
+      await addDoc(collection(db, 'categories'), { name: newCategory, userId: user.uid });
       setNewCategory('');
       fetchCategories();
     } catch (error) {
@@ -100,12 +100,12 @@ const LinksPage = () => {
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!db || !user || !user.id) return;
+    if (!db || !user || !user.uid) return;
 
     try {
         const batch = writeBatch(db);
 
-        const linksQuery = query(collection(db, 'links'), where('userId', '==', user.id), where('categoryId', '==', categoryId));
+        const linksQuery = query(collection(db, 'links'), where('userId', '==', user.uid), where('categoryId', '==', categoryId));
         const linksSnapshot = await getDocs(linksQuery);
         linksSnapshot.forEach(doc => {
             batch.delete(doc.ref);
@@ -129,8 +129,8 @@ const LinksPage = () => {
   };
 
   const handleAddLink = async () => {
-    if (!user || !user.id || !newLink.url.trim() || !newLink.title.trim() || !newLink.categoryId || !db) return;
-    await addDoc(collection(db, 'links'), { ...newLink, userId: user.id });
+    if (!user || !user.uid || !newLink.url.trim() || !newLink.title.trim() || !newLink.categoryId || !db) return;
+    await addDoc(collection(db, 'links'), { ...newLink, userId: user.uid });
     setNewLink({ url: '', title: '', description: '', categoryId: '' });
     fetchLinks();
   };

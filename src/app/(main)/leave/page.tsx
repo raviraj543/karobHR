@@ -14,7 +14,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { LeaveApplication } from '@/lib/types';
+import type { LeaveApplication } from '@/lib/app-types';
 import { useAuth } from '@/hooks/useAuth';
 
 
@@ -35,12 +35,12 @@ const leaveApplicationSchema = z.object({
 type LeaveFormValues = z.infer<typeof leaveApplicationSchema>;
 
 export default function LeavePage() {
-  const { user, addLeaveApplication, loading: authLoading } = useAuth(); 
+  const { user, addLeaveApplication, loading: authLoading, leaveRequests } = useAuth(); 
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const recentApplications = user?.leaves || [];
+  const recentApplications = leaveRequests || [];
 
   useEffect(() => {
     document.title = 'Leave Management - KarobHR';

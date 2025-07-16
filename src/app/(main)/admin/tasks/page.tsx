@@ -17,9 +17,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import type { User as AuthUser } from '@/lib/types';
+import type { User as AuthUser } from '@/lib/app-types';
 import { v4 as uuidv4 } from 'uuid';
-import type { Task as TaskType } from '@/lib/types';
+import type { Task as TaskType } from '@/lib/app-types';
 
 const taskFormSchema = z.object({
   title: z.string().min(3, "Task title must be at least 3 characters."),
@@ -457,25 +457,26 @@ export default function AdminTasksPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTasks.map(task => (
-                <TableRow key={task.id} className="hover:bg-muted/50 transition-colors">
-                  <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
-                  <TableCell className="text-muted-foreground">{task.assigneeName || 'N/A'}</TableCell>
-                  <TableCell className="text-muted-foreground">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</TableCell>
-                  <TableCell>
-                    <Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Task" onClick={() => handleEditTask(task)}>
-                        <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredTasks.length === 0 && (
+              {filteredTasks.length > 0 ? (
+                filteredTasks.map(task => (
+                  <TableRow key={task.id} className="hover:bg-muted/50 transition-colors">
+                    <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
+                    <TableCell className="text-muted-foreground">{task.assigneeName || 'N/A'}</TableCell>
+                    <TableCell className="text-muted-foreground">{task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}</TableCell>
+                    <TableCell>
+                      <Badge variant={getPriorityBadgeVariant(task.priority)}>{task.priority}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Task" onClick={() => handleEditTask(task)}>
+                          <Edit2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
                  <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                         {tasks.length > 0 ? "No tasks match your search criteria." : "No tasks found. Start by assigning new tasks."}

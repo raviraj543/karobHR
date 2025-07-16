@@ -155,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let allUsersUnsubscribe: () => void;
         let allAttendanceUnsubscribe: () => void;
         let allAdvancesUnsubscribe: () => void;
+        let allLeaveRequestsUnsubscribe: () => void;
 
 
         // Role-based data fetching
@@ -163,8 +164,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             allUsersUnsubscribe = onSnapshot(query(usersRef, where('companyId', '==', companyId)), (snap) => {
                 const usersData = snap.docs.map(d => ({ ...d.data(), id: d.id } as User));
                 setAllUsers(usersData);
-                const allLeaves = usersData.flatMap(u => (u.leaves || []).map(leave => ({...leave, userName: u.name, userId: u.id})));
-                setAllLeaveRequests(allLeaves);
             });
             
             const attendanceRef = collection(db, `companies/${companyId}/attendanceLog`);
@@ -180,6 +179,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const advancesRef = collection(db, `companies/${companyId}/advances`);
             allAdvancesUnsubscribe = onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => {
                 setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)));
+            });
+
+            const leaveRequestsRef = collection(db, `companies/${companyId}/leaveApplications`);
+            allLeaveRequestsUnsubscribe = onSnapshot(query(leaveRequestsRef, orderBy('appliedAt', 'desc')), (snap) => {
+                setAllLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id } as LeaveApplication)));
             });
 
         } 
@@ -212,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (allUsersUnsubscribe) allUsersUnsubscribe();
             if (allAttendanceUnsubscribe) allAttendanceUnsubscribe();
             if (allAdvancesUnsubscribe) allAdvancesUnsubscribe();
+            if (allLeaveRequestsUnsubscribe) allLeaveRequestsUnsubscribe();
         };
 
     }, [karobUser, loading]); // Added loading to dependency array to re-run effect when loading state changes
@@ -270,7 +275,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 baseSalary: employeeData.baseSalary || 0,
                 standardDailyHours: employeeData.standardDailyHours || 8,
                 advances: [],
-                leaves: [],
             };
     
             const batch = writeBatch(db);
@@ -397,8 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     
     const addLeaveApplication = async (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => {
-        if (!karobUser) throw new Error("User not found.");
-        const userDocRef = doc(db, 'users', karobUser.id);
+        if (!karobUser || !karobUser.companyId) throw new Error("User or company not found.");
         const newLeave: Omit<LeaveApplication, 'id'> = {
             ...leaveData,
             userId: karobUser.id,
@@ -406,29 +409,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             status: 'pending',
             appliedAt: new Date().toISOString(),
         };
-        await updateDoc(userDocRef, {
-            leaves: [...(karobUser.leaves || []), { ...newLeave, id: uuidv4() }]
-        });
+        await addDoc(collection(db, `companies/${karobUser.companyId}/leaveApplications`), newLeave);
     };
 
     const approveLeaveApplication = async (applicantUid: string, leaveId: string) => {
-        const userRef = doc(db, 'users', applicantUid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-            const applicant = userSnap.data() as User;
-            const updatedLeaves = (applicant.leaves || []).map(l => l.id === leaveId ? { ...l, status: 'approved' } : l);
-            await updateDoc(userRef, { leaves: updatedLeaves });
-        }
+        if (!karobUser?.companyId) throw new Error("No company associated with user.");
+        const leaveRef = doc(db, `companies/${karobUser.companyId}/leaveApplications`, leaveId);
+        await updateDoc(leaveRef, { status: 'approved' });
     };
     
     const rejectLeaveApplication = async (applicantUid: string, leaveId: string) => {
-        const userRef = doc(db, 'users', applicantUid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-            const applicant = userSnap.data() as User;
-            const updatedLeaves = (applicant.leaves || []).map(l => l.id === leaveId ? { ...l, status: 'rejected' } : l);
-            await updateDoc(userRef, { leaves: updatedLeaves });
-        }
+        if (!karobUser?.companyId) throw new Error("No company associated with user.");
+        const leaveRef = doc(db, `companies/${karobUser.companyId}/leaveApplications`, leaveId);
+        await updateDoc(leaveRef, { status: 'rejected' });
     };
 
     const requestAdvance = async (employeeId: string, amount: number, reason: string) => {

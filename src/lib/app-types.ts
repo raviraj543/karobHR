@@ -48,8 +48,6 @@ export interface AttendanceEvent {
   checkOutLocation?: LocationInfo | null;
   isWithinGeofence: boolean | null; // For check-in
   isWithinGeofenceCheckout?: boolean | null; // For check-out
-  matchedGeofenceType?: 'office' | null; // For check-in
-  matchedGeofenceTypeCheckout?: 'office' | null; // For check-out
   status: 'Checked In' | 'Checked Out';
   workReport?: string | null;
   totalHours?: number; // Total hours for check-out events
@@ -97,7 +95,7 @@ export interface Holiday {
 }
 
 export interface LeaveApplication {
-  id: string;
+  id:string;
   userId: string;
   employeeId: string;
   leaveType: string;
@@ -160,7 +158,6 @@ export interface User {
     longitude: number;
     radius: number;
   } | null;
-  leaves?: LeaveApplication[]; // Added to resolve type error in leave/page.tsx
   advances?: Advance[];
   mockAttendanceFactor?: number;
 }

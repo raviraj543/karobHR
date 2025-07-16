@@ -48,7 +48,11 @@ export default function AdminPayrollPage() {
   const pendingAdvances = useMemo(() => {
     if (authLoading) return [];
     return allUsers.flatMap(user =>
-      (user.advances || []).filter(adv => adv.status === 'pending').map(adv => ({ ...adv, userName: user.name || user.employeeId, userUid: user.id }))
+      (user.advances || []).filter(adv => adv.status === 'pending').map(advance => ({
+        ...advance, 
+        userName: user.name || user.employeeId, 
+        userUid: user.id // Include userUid for actions
+      }))
     );
   }, [allUsers, authLoading]);
 
@@ -166,19 +170,19 @@ export default function AdminPayrollPage() {
           <CardDescription>Review and process outstanding advance requests from employees.</CardDescription>
         </CardHeader>
         <CardContent>
-          {pendingAdvances.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee Name</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Date Requested</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingAdvances.map(advance => (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee Name</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Date Requested</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingAdvances.length > 0 ? (
+                pendingAdvances.map(advance => (
                   <TableRow key={advance.id}>
                     <TableCell className="font-medium">{advance.userName}</TableCell>
                     <TableCell>₹{advance.amount.toLocaleString('en-IN')}</TableCell>
@@ -193,7 +197,7 @@ export default function AdminPayrollPage() {
                         className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700"
                       >
                         {isProcessingAdvance && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                        <CheckCircle className="mr-1 h-4 w-4" /> Approve
+                        Approve
                       </Button>
                       <Button
                         variant="outline"
@@ -203,11 +207,12 @@ export default function AdminPayrollPage() {
                         className="text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700"
                       >
                          {isProcessingAdvance && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                        <XCircle className="mr-1 h-4 w-4" /> Reject
+                        Reject
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))
+                /* Removed the erroneous '</', */
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">No pending advance requests.</TableCell>
