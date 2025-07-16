@@ -3,12 +3,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { AttendanceEvent } from '@/lib/types';
+import type { AttendanceEvent } from '@/lib/app-types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, isSameMonth, parseISO } from 'date-fns';
 import { TruncatedText } from '@/components/ui/truncated-text';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea }m '@/components/ui/scroll-area';
 import { Loader2, FileCheck } from 'lucide-react';
 
 export default function CheckoutReportsPage() {
