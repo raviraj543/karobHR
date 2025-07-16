@@ -8,12 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import type { LeaveApplication } from '@/lib/app-types'; // Ensure this is imported for explicit typing
 
 export default function LeaveApprovalsPage() {
   const { allUsers, loading, approveLeaveApplication, rejectLeaveApplication } = useAuth();
 
   const pendingApplications = allUsers
-    .flatMap(user => (user.leaves || []).map(leave => ({ ...leave, userName: user.name, userEmployeeId: user.employeeId })))
+    .flatMap(user => (user.leaves || []).map((leave: LeaveApplication) => ({ ...leave, userName: user.name, userEmployeeId: user.employeeId })))
     .filter(leave => leave.status === 'pending');
 
   if (loading) {
