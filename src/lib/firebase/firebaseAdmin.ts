@@ -19,6 +19,15 @@ if (!getApps().length) {
   
   const serviceAccount: ServiceAccount = JSON.parse(decodedServiceAccount);
 
+  // Handle private key newlines for Firebase Admin SDK initialization
+  if (serviceAccount.privateKey) {
+    // Replace literal 
+ with actual newline characters
+    serviceAccount.privateKey = serviceAccount.privateKey.replace(new RegExp('
+', 'g'), '
+');
+  }
+
   console.log("Firebase Admin - Service Account Check:");
   console.log("  Project ID:", serviceAccount.projectId);
   console.log("  Client Email:", serviceAccount.clientEmail);
