@@ -1,4 +1,4 @@
-
+ 
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { PlusCircle, Edit2, Trash2, CalendarDays as CalendarDaysIcon, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import type { Holiday } from '@/lib/types';
+import type { Holiday } from '@/lib/app-types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSunday, isPast } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
