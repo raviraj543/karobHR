@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { auth, db } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, writeBatch } from 'firebase/firestore';
-import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, NewEmployeeData, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/types';
+import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, NewEmployeeData, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/app-types';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration } from '@/lib/dateUtils';
 import { calculateDistance } from './locationUtils';
