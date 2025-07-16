@@ -5,14 +5,14 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea }m '@/components/ui/textarea';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Users, ListChecks, CalendarOff, Settings, BarChart3, Activity, Megaphone, Send, Loader2, HandCoins } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth'; 
 import { useToast } from '@/hooks/use-toast'; 
 import type { Announcement } from '@/lib/app-types'; 
-import { ScrollArea }m '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState } from 'react';
 
 
@@ -179,7 +179,7 @@ export default function AdminDashboardPage() {
               <Textarea
                 id="announcementContent"
                 value={announcementContent}
-                onChange={(e) => setAnnouncementContent(e.target.value)}\
+                onChange={(e) => setAnnouncementContent(e.target.value)}
                 placeholder="Enter the details of your announcement here..."
                 rows={4}
                 disabled={isPostingAnnouncement}
