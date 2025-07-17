@@ -160,6 +160,7 @@ export interface User {
   } | null;
   advances?: Advance[];
   mockAttendanceFactor?: number;
+  leaves?: LeaveApplication[];
 }
 
 export interface Link {

@@ -472,7 +472,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .filter(h => h.date.getFullYear() === year && h.date.getMonth() === month)
             .map(h => h.date.getDate());
         
-        const workingDaysInMonth = getWorkingDaysInMonth(year, month, holidaysForMonth);
+        // Pass only the Date objects from the holidaysForMonth array
+        const workingDaysInMonth = getWorkingDaysInMonth(year, month, holidaysForMonth.map(h => h.date));
+          
         const totalStandardHoursForMonth = workingDaysInMonth * standardDailyHours;
 
         let totalActualHoursWorked = 0;

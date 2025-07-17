@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export function UserNav() {
-  const { user, logout, role } = useAuth();
+  const { karobUser, logout, role } = useAuth(); // Destructure karobUser
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -26,24 +26,19 @@ export function UserNav() {
     router.push('/login');
   };
 
-  if (!user) {
+  if (!karobUser) { // Check karobUser for rendering
     return null;
   }
 
-  const initials = user.name
-    ? user.name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-    : user.email?.[0].toUpperCase() || '?';
+  // Safely access karobUser.name and karobUser.email using optional chaining
+  const initials = karobUser.name?.split(' ').map((n) => n[0]).join('').toUpperCase() || karobUser.email?.[0]?.toUpperCase() || '?';
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-9 w-9 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={user.profilePictureUrl || undefined} alt={user.name || user.email || 'User Avatar'} data-ai-hint="avatar person" />
+            <AvatarImage src={karobUser.profilePictureUrl || undefined} alt={karobUser.name || karobUser.email || 'User Avatar'} data-ai-hint="avatar person" />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </Button>
@@ -51,9 +46,9 @@ export function UserNav() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.name || 'User'}</p>
+            <p className="text-sm font-medium leading-none">{karobUser.name || 'User'}</p>
             <p className="text-xs leading-none text-muted-foreground">
-              {user.email}
+              {karobUser.email}
             </p>
           </div>
         </DropdownMenuLabel>

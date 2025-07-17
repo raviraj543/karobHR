@@ -15,6 +15,7 @@ export default function NotificationPermissionHandler() {
 
     useEffect(() => {
         // Ensure we are in a browser environment and service worker is supported
+        // And also ensure messaging is initialized
         if (typeof window !== 'undefined' && 'serviceWorker' in navigator && messaging && user) {
             const vapidKey = firebaseConfig.vapidKey; // Access vapidKey from imported config
 
@@ -36,22 +37,27 @@ export default function NotificationPermissionHandler() {
                         console.log('Notification permission granted.');
                         
                         // Get token using the imported messaging instance and vapidKey
-                        const currentToken = await getToken(messaging, { vapidKey: vapidKey });
-                        
-                        if (currentToken) {
-                            console.log('FCM Token:', currentToken);
-                            // Save the token to the user's profile in Firestore
-                            const userRef = doc(db, 'users', user.uid);
-                            await updateDoc(userRef, {
-                                fcmToken: currentToken,
-                            });
+                        // Add a check to ensure messaging is not null
+                        if (messaging) {
+                            const currentToken = await getToken(messaging, { vapidKey: vapidKey });
+                            
+                            if (currentToken) {
+                                console.log('FCM Token:', currentToken);
+                                // Save the token to the user's profile in Firestore
+                                const userRef = doc(db, 'users', user.uid);
+                                await updateDoc(userRef, {
+                                    fcmToken: currentToken,
+                                });
+                            } else {
+                                console.log('No registration token available. Request permission to generate one.');
+                                toast({
+                                    title: "Notification Error",
+                                    description: "Could not get notification token. Please ensure your browser supports push notifications.",
+                                    variant: "destructive",
+                                });
+                            }
                         } else {
-                            console.log('No registration token available. Request permission to generate one.');
-                            toast({
-                                title: "Notification Error",
-                                description: "Could not get notification token. Please ensure your browser supports push notifications.",
-                                variant: "destructive",
-                            });
+                            console.error('Firebase Messaging is not initialized.');
                         }
                     } else {
                         console.log('Unable to get permission to notify.');
@@ -74,13 +80,16 @@ export default function NotificationPermissionHandler() {
             requestPermission();
             
             // Handle foreground messages
-            onMessage(messaging, (payload) => {
-                console.log('Message received. ', payload);
-                toast({
-                    title: payload.notification?.title || 'New Notification',
-                    description: payload.notification?.body || '',
+            // Add a check to ensure messaging is not null
+            if (messaging) {
+                onMessage(messaging, (payload) => {
+                    console.log('Message received. ', payload);
+                    toast({
+                        title: payload.notification?.title || 'New Notification',
+                        description: payload.notification?.body || '',
+                    });
                 });
-            });
+            }
         }
     }, [user, toast]);
 

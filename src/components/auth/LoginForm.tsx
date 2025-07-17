@@ -14,6 +14,7 @@ import { ArrowRight, Loader2, KeyRound } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { Separator } from '@/components/ui/separator'; // Ensure this import is present and uncommented
 
 const loginSchema = z.object({
   loginId: z.string().min(1, 'Login ID is required.'),
