@@ -76,13 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // App-wide data slices
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
-    const [userTasks, setUserTasks] = useState<Task[]>([]); // New state for user tasks
+    const [userTasks, setUserTasks] = useState<Task[]>([]);
     const [userLeaveRequests, setUserLeaveRequests] = useState<LeaveApplication[]>([]);
+    const [userAdvances, setUserAdvances] = useState<Advance[]>([]);
+    const [userAttendance, setUserAttendance] = useState<AttendanceEvent[]>([]);
     
     // Admin-specific data slices
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [allAttendance, setAllAttendance] = useState<AttendanceEvent[]>([]);
-    const [allTasks, setAllTasks] = useState<Task[]>([]); // Renamed for clarity
+    const [allTasks, setAllTasks] = useState<Task[]>([]);
     const [allLeaveRequests, setAllLeaveRequests] = useState<LeaveApplication[]>([]);
     const [allAdvanceRequests, setAllAdvanceRequests] = useState<Advance[]>([]);
 
@@ -111,11 +113,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setHolidays([]);
                 setAllUsers([]);
                 setAllAttendance([]);
-                setAllTasks([]); // Reset allTasks on logout
-                setUserTasks([]); // Reset userTasks on logout
+                setAllTasks([]);
+                setUserTasks([]);
                 setAllLeaveRequests([]);
                 setUserLeaveRequests([]);
                 setAllAdvanceRequests([]);
+                setUserAdvances([]);
+                setUserAttendance([]);
                 setLoading(false);
             }
         });
@@ -125,9 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Effect to fetch company-wide and role-specific data *after* karobUser is set
     useEffect(() => {
         if (!karobUser || !karobUser.companyId) {
-            if (!loading) { // If not loading and still no user, we're done
-                 setAllTasks([]); // Clear allTasks
-                 setUserTasks([]); // Clear userTasks
+            if (!loading) {
+                 setAllTasks([]);
+                 setUserTasks([]);
                  setCompanySettings(null);
             }
             return;
@@ -136,68 +140,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(true);
 
         const companyId = karobUser.companyId;
-        const companyDocRef = doc(db, 'companies', companyId);
-        
         const unsubscribers: (() => void)[] = [];
-        
-        unsubscribers.push(onSnapshot(companyDocRef, (companySnap) => {
-            setCompanySettings(companySnap.exists() ? (companySnap.data() as CompanySettings) : null);
-        }));
 
+        // --- GLOBAL LISTENERS (for all roles) ---
+        const companyDocRef = doc(db, 'companies', companyId);
+        unsubscribers.push(onSnapshot(companyDocRef, (snap) => setCompanySettings(snap.exists() ? (snap.data() as CompanySettings) : null)));
+        
         const announcementsRef = collection(db, `companies/${companyId}/announcements`);
-        unsubscribers.push(onSnapshot(query(announcementsRef, orderBy('postedAt', 'desc')), (snap) => {
-            setAnnouncements(snap.docs.map(d => ({ ...d.data(), id: d.id } as Announcement)));
-        }));
+        unsubscribers.push(onSnapshot(query(announcementsRef, orderBy('postedAt', 'desc')), (snap) => setAnnouncements(snap.docs.map(d => ({ ...d.data(), id: d.id } as Announcement)))));
         
         const holidaysRef = collection(db, `companies/${companyId}/holidays`);
-        unsubscribers.push(onSnapshot(query(holidaysRef, orderBy('date', 'asc')), (snap) => {
-             setHolidays(snap.docs.map(d => ({ ...d.data(), id: d.id, date: (d.data().date as any).toDate() } as Holiday)));
-        }));
+        unsubscribers.push(onSnapshot(query(holidaysRef, orderBy('date', 'asc')), (snap) => setHolidays(snap.docs.map(d => ({ ...d.data(), id: d.id, date: (d.data().date as any).toDate() } as Holiday)))));
         
-        // Always fetch user-specific tasks
         const tasksRef = collection(db, `companies/${companyId}/tasks`);
-        const userTasksQuery = query(tasksRef, where('assigneeId', '==', karobUser.employeeId || ''), orderBy('createdAt', 'desc'));
-        unsubscribers.push(onSnapshot(userTasksQuery, (snap) => {
-            setUserTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
-        }));
+        const leaveRequestsRef = collection(db, `companies/${companyId}/leaveApplications`);
+        const advancesRef = collection(db, `companies/${companyId}/advances`);
+        const attendanceRef = collection(db, `companies/${companyId}/attendanceLog`);
 
-        // Role-based data fetching
+        // --- ROLE-BASED LISTENERS ---
         if (karobUser.role === 'admin') {
             const usersRef = collection(db, 'users');
-            unsubscribers.push(onSnapshot(query(usersRef, where('companyId', '==', companyId)), (snap) => {
-                const usersData = snap.docs.map(d => ({ ...d.data(), id: d.id } as User));
-                setAllUsers(usersData);
-            }));
+            unsubscribers.push(onSnapshot(query(usersRef, where('companyId', '==', companyId)), (snap) => setAllUsers(snap.docs.map(d => ({ ...d.data(), id: d.id } as User)))));
+            unsubscribers.push(onSnapshot(query(attendanceRef, orderBy('timestamp', 'desc')), (snap) => setAllAttendance(snap.docs.map(d => ({ ...d.data(), id: d.id } as AttendanceEvent)))));
+            unsubscribers.push(onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snap) => setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)))));
+            unsubscribers.push(onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)))));
+            unsubscribers.push(onSnapshot(query(leaveRequestsRef, orderBy('appliedAt', 'desc')), (snap) => setAllLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id } as LeaveApplication)))));
             
-            const attendanceRef = collection(db, `companies/${companyId}/attendanceLog`);
-            unsubscribers.push(onSnapshot(query(attendanceRef, orderBy('timestamp', 'desc')), (snap) => {
-                setAllAttendance(snap.docs.map(d => ({ ...d.data(), id: d.id } as AttendanceEvent)));
-            }));
-            
-            unsubscribers.push(onSnapshot(query(tasksRef, orderBy('createdAt', 'desc')), (snap) => {
-                setAllTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
-            }));
-
-            const advancesRef = collection(db, `companies/${companyId}/advances`);
-            unsubscribers.push(onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => {
-                setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)));
-            }));
-
-            const leaveRequestsRef = collection(db, `companies/${companyId}/leaveApplications`);
-            unsubscribers.push(onSnapshot(query(leaveRequestsRef, orderBy('appliedAt', 'desc')), (snap) => {
-                setAllLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id } as LeaveApplication)));
-            }));
-            setUserLeaveRequests([]); // Admins see all requests in a separate list
+            // Clear user-specific data for admin
+            setUserTasks([]); 
+            setUserLeaveRequests([]);
+            setUserAdvances([]);
+            setUserAttendance([]);
 
         } else { // For 'employee' and 'manager'
-             const userLeaveRequestsQuery = query(
-                collection(db, `companies/${companyId}/leaveApplications`),
-                where('userId', '==', karobUser.id)
-            );
-             unsubscribers.push(onSnapshot(userLeaveRequestsQuery, (snap) => {
-                setUserLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id} as LeaveApplication)))
-            }));
+            const userTasksQuery = query(tasksRef, where('assigneeId', '==', karobUser.employeeId || ''), orderBy('createdAt', 'desc'));
+            unsubscribers.push(onSnapshot(userTasksQuery, (snap) => setUserTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)))));
+
+            const userLeaveRequestsQuery = query(leaveRequestsRef, where('userId', '==', karobUser.id), orderBy('appliedAt', 'desc'));
+            unsubscribers.push(onSnapshot(userLeaveRequestsQuery, (snap) => setUserLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id} as LeaveApplication)))));
             
+            const userAdvancesQuery = query(advancesRef, where('employeeId', '==', karobUser.employeeId || ''), orderBy('dateRequested', 'desc'));
+            unsubscribers.push(onSnapshot(userAdvancesQuery, (snap) => setUserAdvances(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)))));
+
+            const userAttendanceQuery = query(attendanceRef, where('userId', '==', karobUser.id), orderBy('timestamp', 'desc'));
+            unsubscribers.push(onSnapshot(userAttendanceQuery, (snap) => setUserAttendance(snap.docs.map(d => ({...d.data(), id: d.id } as AttendanceEvent)))));
+
              // Clear admin-specific states for non-admins
              setAllUsers([]);
              setAllAttendance([]);
@@ -540,11 +527,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         allUsers,
         announcements,
         holidays,
-        attendanceLog: allAttendance,
-        allTasks, // Expose all tasks for admin
-        userTasks, // Expose user-specific tasks
+        attendanceLog: karobUser?.role === 'admin' ? allAttendance : userAttendance,
+        allTasks,
+        userTasks,
         leaveRequests: karobUser?.role === 'admin' ? allLeaveRequests : userLeaveRequests,
-        advanceRequests: allAdvanceRequests,
+        advanceRequests: karobUser?.role === 'admin' ? allAdvanceRequests : userAdvances,
     };
 
     return (
@@ -553,3 +540,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         </AuthContext.Provider>
     );
 }
+
+    

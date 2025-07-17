@@ -1,0 +1,8 @@
+[33m1d8a07e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m why missing
+[33m98d80c3[m I see this error with the app, reported by NextJS, please fix it. The er
+[33m8b4cbdf[m I see this error with the app, reported by NextJS, please fix it. The er
+[33me7afec4[m[33m ([m[1;31morigin/master[m[33m)[m Fix: Resolve various build and type errors across components, auth context, and Firebase Admin setup.
+[33mb854417[m Fix: Firebase Admin SDK initialization and private key parsing
+[33ma18ebea[m Fix: Firebase Admin private key parsing issue in firebaseAdmin.ts
+[33mbb6d286[m Fix: Resolve multiple build errors across components and API routes, including type mismatches and missing imports
+[33mba014b2[m Fix: Addressed multiple build errors and refactored leave management
