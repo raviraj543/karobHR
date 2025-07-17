@@ -1,9 +1,8 @@
 import * as admin from 'firebase-admin';
 import { initializeApp, getApps, ServiceAccount } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore'; // Corrected import from 'firebase-admin/firestore'
 
-// Initialize Firebase Admin SDK
 if (!getApps().length) {
   console.log("Firebase Admin: Initializing...");
 
@@ -17,21 +16,20 @@ if (!getApps().length) {
     'base64'
   ).toString('utf8');
   
-  const serviceAccount: ServiceAccount = JSON.parse(decodedServiceAccount);
+  const rawServiceAccount = JSON.parse(decodedServiceAccount);
 
-  // Handle private key newlines for Firebase Admin SDK initialization
+  // Map snake_case properties from raw JSON to camelCase for ServiceAccount
+  const serviceAccount: ServiceAccount = {
+    projectId: rawServiceAccount.project_id,
+    clientEmail: rawServiceAccount.client_email,
+    privateKey: rawServiceAccount.private_key, 
+  };
+
+  // This is crucial for Firebase Admin SDK to correctly parse the private key
+  // by converting literal '\\n' (backslash followed by n) to actual newline characters.
   if (serviceAccount.privateKey) {
-    // Replace literal 
- with actual newline characters
-    serviceAccount.privateKey = serviceAccount.privateKey.replace(new RegExp('
-', 'g'), '
-');
+    serviceAccount.privateKey = serviceAccount.privateKey.replace(/\\n/g, '\n');
   }
-
-  console.log("Firebase Admin - Service Account Check:");
-  console.log("  Project ID:", serviceAccount.projectId);
-  console.log("  Client Email:", serviceAccount.clientEmail);
-  console.log("  Private Key defined:", !!serviceAccount.privateKey);
 
   initializeApp({
     credential: admin.credential.cert(serviceAccount),
