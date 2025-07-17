@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -66,6 +67,12 @@ service cloud.firestore {
       match /advances/{advanceId} {
         allow create: if isCompanyMember(companyId) && request.resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId;
         // This rule fixes the advance approval permission error for admins.
+        allow read, update, delete: if isAdmin(companyId);
+      }
+      
+      // Leave Applications: Users create requests for themselves. Admins can manage all.
+      match /leaveApplications/{leaveId} {
+        allow create: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
         allow read, update, delete: if isAdmin(companyId);
       }
       

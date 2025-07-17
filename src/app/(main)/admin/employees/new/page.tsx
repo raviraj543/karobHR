@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import type { NewEmployeePayload } from '@/lib/authContext';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Loader2 } from 'lucide-react'; // Import Loader2
 
 const newEmployeeSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -69,24 +70,15 @@ export default function AddNewEmployeePage() {
   const onSubmit = async (data: NewEmployeeFormValues) => {
     setIsLoading(true);
 
-    if (!adminCompanyId) {
+    // Added robust checks for companyId and companySettings before proceeding
+    if (!adminCompanyId || !companySettings) {
       toast({
-        title: "Error: Admin Context Missing",
-        description: "The administrator's company information is not available. Cannot add employee.",
+        title: "Error: Admin Context Not Fully Loaded",
+        description: "The administrator's company information is not yet available. Please wait for the page to fully load before attempting to add an employee.",
         variant: "destructive",
       });
       setIsLoading(false);
       return;
-    }
-
-    if (!companySettings) {
-        toast({
-            title: "Error: Company Settings Missing",
-            description: "Could not load company settings, which are required to add an employee.",
-            variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
     }
 
     const employeeDataForContext: NewEmployeePayload = {
@@ -94,9 +86,9 @@ export default function AddNewEmployeePage() {
       employeeId: data.employeeId,
       email: data.email,
       department: data.department,
-      role: data.role, // The incorrect type assertion has been removed here
+      role: data.role,
       companyId: adminCompanyId,
-      companyName: companySettings.companyName,
+      companyName: companySettings.companyName, // Ensure companyName is explicitly passed
       joiningDate: data.joiningDate,
       baseSalary: data.baseSalary,
       standardDailyHours: data.standardDailyHours,
@@ -115,7 +107,7 @@ export default function AddNewEmployeePage() {
     } catch (error) {
         toast({
             title: "Error Adding Employee",
-            description: (error as Error).message || "Could not add employee.",
+            description: (error as Error).message || "Could not add employee. Please check your network and try again.",
             variant: "destructive",
         });
     } finally {
@@ -127,7 +119,8 @@ export default function AddNewEmployeePage() {
     document.title = 'Add New Employee - Admin - KarobHR';
   }, []);
 
-  const isSubmitDisabled = isLoading || authLoading || !adminCompanyId;
+  // Disable submit button if loading auth, or if adminCompanyId/companySettings are not yet available
+  const isSubmitDisabled = isLoading || authLoading || !adminCompanyId || !companySettings;
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -142,6 +135,18 @@ export default function AddNewEmployeePage() {
           </Link>
         </Button>
       </div>
+
+      {(authLoading || !adminCompanyId || !companySettings) && (
+        <Alert variant="default">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertTitle>Loading Administrator Context</AlertTitle>
+          <AlertDescription>
+            {authLoading ? "Authenticating administrator..." : "Fetching administrator's company details. Please wait...'"}
+            {!adminCompanyId && !authLoading && " Ensure you are logged in as an admin."
+            }
+          </AlertDescription>
+        </Alert>
+      )}
 
       {!authLoading && !adminCompanyId && (
         <Alert variant="destructive">
@@ -200,7 +205,7 @@ export default function AddNewEmployeePage() {
                     <FormControl>
                       <Input type="email" placeholder="e.g., john.doe@example.com" {...field} />
                     </FormControl>
-                     <FormDescription>If blank, one will be auto-generated based on Employee ID and Company.</FormDescription>
+                    <FormDescription>If blank, one will be auto-generated based on Employee ID and Company.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
