@@ -38,7 +38,7 @@ export default function EmployeeDashboardPage() {
 
   const todaysEarnings = useMemo(() => {
     if (!user || !todaysAttendance || !companySettings) return 0;
-    return calculateTodayEstimatedEarning(user, todaysAttendance, liveAttendanceEvent, companySettings);
+    return calculateTodayEstimatedEarning(user, todaysAttendance, liveAttendanceEvent || null, companySettings);
   }, [user, todaysAttendance, liveAttendanceEvent, companySettings, calculateTodayEstimatedEarning]);
 
 
