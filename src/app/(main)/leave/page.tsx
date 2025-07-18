@@ -35,7 +35,7 @@ const leaveApplicationSchema = z.object({
 type LeaveFormValues = z.infer<typeof leaveApplicationSchema>;
 
 export default function LeavePage() {
-  const { user, addLeaveApplication, loading: authLoading, leaveRequests } = useAuth(); 
+  const { user, karobUser, addLeaveApplication, loading: authLoading, leaveRequests } = useAuth(); 
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -208,6 +208,9 @@ export default function LeavePage() {
                 <li key={app.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-md shadow-sm border">
                   <div>
                     <p className="font-semibold">{app.leaveType}</p>
+                    <p className="text-sm text-muted-foreground">
+                      For: {karobUser?.name} ({karobUser?.employeeId})
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {new Date(app.startDate).toLocaleDateString()} - {new Date(app.endDate).toLocaleDateString()}
                     </p>
