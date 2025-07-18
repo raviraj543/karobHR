@@ -13,6 +13,7 @@ import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, 
 import { getMonth, getYear, startOfMonth, endOfMonth } from 'date-fns';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
+import { Separator } from '@/components/ui/separator';
 
 export default function EmployeePayrollPage() {
   const { 
