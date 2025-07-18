@@ -1,47 +1,29 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Check, X } from 'lucide-react';
+import { Loader2, Check, X, History } from 'lucide-react';
 import { format } from 'date-fns';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase/firebase'; // Corrected import
 import type { Advance } from '@/lib/app-types';
 
 export default function AdvanceApprovalsPage() {
-  const { companyId, loading, approveAdvance, rejectAdvance } = useAuth();
-  const [applications, setApplications] = useState<Advance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!companyId) {
-      setIsLoading(false);
-      return;
-    }
-
-    // const { db } = getFirebaseInstances(); // Removed this line
-    const q = query(
-      collection(db, `companies/${companyId}/advances`), 
-      where('status', '==', 'pending')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pendingAdvances = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Advance));
-      setApplications(pendingAdvances);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Error fetching advance applications:", error);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [companyId]);
+  const { advanceRequests, loading, approveAdvance, rejectAdvance } = useAuth();
   
+  const pendingApplications = useMemo(() => 
+    advanceRequests.filter(app => app.status === 'pending'), 
+    [advanceRequests]
+  );
+
+  const processedApplications = useMemo(() => 
+    advanceRequests.filter(app => app.status !== 'pending'),
+    [advanceRequests]
+  );
+
   const handleApprove = async (advanceId: string) => {
     await approveAdvance(advanceId);
   }
@@ -50,7 +32,18 @@ export default function AdvanceApprovalsPage() {
     await rejectAdvance(advanceId);
   }
 
-  if (loading || isLoading) {
+  const getStatusBadgeVariant = (status: Advance['status']) => {
+    switch (status) {
+      case 'approved':
+        return 'default';
+      case 'rejected':
+        return 'destructive';
+      default:
+        return 'secondary';
+    }
+  };
+
+  if (loading) {
     return <div className="flex justify-center items-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
@@ -74,8 +67,8 @@ export default function AdvanceApprovalsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {applications.length > 0 ? (
-                applications.map(app => (
+              {pendingApplications.length > 0 ? (
+                pendingApplications.map(app => (
                   <TableRow key={app.id}>
                     <TableCell className="font-medium">{app.employeeId}</TableCell>
                     <TableCell>₹{app.amount.toLocaleString('en-IN')}</TableCell>
@@ -94,6 +87,47 @@ export default function AdvanceApprovalsPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-10">No pending advance requests.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center"><History className="mr-2 h-5 w-5 text-primary"/>Approval History</CardTitle>
+          <CardDescription>A log of all processed advance requests.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee ID</TableHead>
+                <TableHead>Amount (₹)</TableHead>
+                <TableHead>Date Requested</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {processedApplications.length > 0 ? (
+                processedApplications.map(app => (
+                  <TableRow key={app.id}>
+                    <TableCell className="font-medium">{app.employeeId}</TableCell>
+                    <TableCell>₹{app.amount.toLocaleString('en-IN')}</TableCell>
+                    <TableCell>{format(new Date(app.dateRequested), 'PPP')}</TableCell>
+                    <TableCell className="max-w-[300px] truncate">{app.reason}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={getStatusBadgeVariant(app.status)} className="capitalize">
+                        {app.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-10">No processed advance requests found.</TableCell>
                 </TableRow>
               )}
             </TableBody>
