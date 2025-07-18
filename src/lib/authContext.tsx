@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -454,7 +455,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         employeeAttendanceForMonth: AttendanceEvent[],
         holidaysForMonth: Holiday[],
         approvedLeavesForMonth: LeaveApplication[] = [],
-        approvedAdvancesForMonth: Advance[] = []
+        allApprovedAdvances: Advance[] = []
     ): MonthlyPayrollReport => {
     
         const calculationMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
@@ -547,9 +548,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
         const salaryAfterDeductions = Math.min(calculatedSalary, baseSalary);
     
-        const totalApprovedAdvances = approvedAdvancesForMonth.reduce((sum, adv) => sum + adv.amount, 0);
+        const employeeApprovedAdvances = allApprovedAdvances
+            .filter(adv => adv.employeeId === employee.employeeId && adv.status === 'approved')
+            .reduce((sum, adv) => sum + adv.amount, 0);
     
-        const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
+        const finalNetPayable = salaryAfterDeductions - employeeApprovedAdvances;
     
         return {
             employeeId: employee.employeeId,
@@ -565,7 +568,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hourlyRate: totalStandardHoursForMonth > 0 ? baseSalary / totalStandardHoursForMonth : 0,
             calculatedDeductions: baseSalary - salaryAfterDeductions,
             salaryAfterDeductions,
-            totalApprovedAdvances,
+            totalApprovedAdvances: employeeApprovedAdvances,
             finalNetPayable: Math.max(0, finalNetPayable),
             totalDaysWorked,
             totalDaysInMonth: daysInMonth,
