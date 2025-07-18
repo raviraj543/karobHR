@@ -3,17 +3,19 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { User, Advance, MonthlyPayrollReport, Holiday } from '@/lib/app-types';
+import type { User, Advance, MonthlyPayrollReport, Holiday, LeaveApplication } from '@/lib/app-types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, Percent, Loader2, CalendarClock } from 'lucide-react';
-import { getMonth, getYear } from 'date-fns';
+import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, Percent, Loader2, CalendarClock, CalendarDays } from 'lucide-react';
+import { getMonth, getYear, startOfMonth, endOfMonth } from 'date-fns';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase/firebase';
 
 export default function AdminPayrollPage() {
-  const { allUsers, holidays, loading: authLoading, attendanceLog, calculateMonthlyPayrollDetails, approveAdvance, rejectAdvance } = useAuth();
+  const { allUsers, holidays, loading: authLoading, attendanceLog, calculateMonthlyPayrollDetails, approveAdvance, rejectAdvance, companySettings, companyId, advanceRequests } = useAuth();
   const [isProcessingAdvance, setIsProcessingAdvance] = useState(false);
   const { toast } = useToast();
   const [payrollData, setPayrollData] = useState<MonthlyPayrollReport[]>([]);
@@ -23,38 +25,77 @@ export default function AdminPayrollPage() {
     document.title = 'Manage Payroll - Admin - KarobHR';
   }, []);
 
-  const currentMonth = getMonth(new Date()); // 0-11
+  const currentMonth = getMonth(new Date());
   const currentYear = getYear(new Date());
 
   useEffect(() => {
-    if (!authLoading && allUsers.length > 0 && calculateMonthlyPayrollDetails && attendanceLog) {
-      setIsCalculatingPayroll(true);
-      const nonAdminUsers = allUsers.filter(u => u.role !== 'admin');
-      const reports = nonAdminUsers.map(user => {
-        const userAttendanceForMonth = attendanceLog.filter(
-          log => log.employeeId === user.employeeId
-        );
-        return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, holidays);
-      });
-      setPayrollData(reports);
-      setIsCalculatingPayroll(false);
-    } else if (!authLoading && allUsers.length === 0) {
-      setIsCalculatingPayroll(false);
-      setPayrollData([]);
-    }
-  }, [allUsers, authLoading, calculateMonthlyPayrollDetails, attendanceLog, holidays, currentMonth, currentYear]);
+    const calculateAllPayrolls = async () => {
+        if (authLoading || !companyId || allUsers.length === 0) {
+            if(!authLoading) setIsCalculatingPayroll(false);
+            return;
+        };
+
+        setIsCalculatingPayroll(true);
+
+        try {
+            const start = startOfMonth(new Date(currentYear, currentMonth));
+            const end = endOfMonth(new Date(currentYear, currentMonth));
+
+            // 1. Fetch all company-wide leaves and advances for the month in two efficient queries
+            const leavesQuery = query(
+                collection(db, `companies/${companyId}/leaveApplications`),
+                where('status', '==', 'approved'),
+                where('startDate', '>=', Timestamp.fromDate(start)),
+                where('startDate', '<=', Timestamp.fromDate(end))
+            );
+            const advancesQuery = query(
+                collection(db, `companies/${companyId}/advances`),
+                where('status', '==', 'approved'),
+                where('dateRequested', '>=', Timestamp.fromDate(start)),
+                where('dateRequested', '<=', Timestamp.fromDate(end))
+            );
+
+            const [leavesSnapshot, advancesSnapshot] = await Promise.all([
+                getDocs(leavesQuery),
+                getDocs(advancesQuery)
+            ]);
+
+            const allApprovedLeaves = leavesSnapshot.docs.map(doc => doc.data() as LeaveApplication);
+            const allApprovedAdvances = advancesSnapshot.docs.map(doc => doc.data() as Advance);
+            
+            // 2. Map over users and calculate payroll using the pre-fetched data
+            const nonAdminUsers = allUsers.filter(u => u.role !== 'admin');
+            const reports = nonAdminUsers.map(user => {
+                const userAttendanceForMonth = attendanceLog.filter(log => log.employeeId === user.employeeId);
+                const userApprovedLeaves = allApprovedLeaves.filter(l => l.employeeId === user.employeeId);
+                const userApprovedAdvances = allApprovedAdvances.filter(a => a.employeeId === user.employeeId);
+                
+                return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, holidays, userApprovedLeaves, userApprovedAdvances);
+            });
+
+            setPayrollData(reports);
+        } catch (error) {
+            console.error("Error calculating payroll:", error);
+            toast({ title: "Payroll Calculation Failed", description: "Could not fetch all necessary data to calculate payroll.", variant: "destructive"});
+        } finally {
+            setIsCalculatingPayroll(false);
+        }
+    };
+    
+    calculateAllPayrolls();
+
+  }, [allUsers, authLoading, calculateMonthlyPayrollDetails, attendanceLog, holidays, currentMonth, currentYear, companyId, advanceRequests]);
 
 
   const pendingAdvances = useMemo(() => {
-    if (authLoading) return [];
-    return allUsers.flatMap(user =>
-      (user.advances || []).filter(adv => adv.status === 'pending').map(advance => ({
-        ...advance, 
-        userName: user.name || user.employeeId, 
-        userUid: user.id // Include userUid for actions
-      }))
-    );
-  }, [allUsers, authLoading]);
+    return advanceRequests.filter(adv => adv.status === 'pending').map(advance => {
+        const user = allUsers.find(u => u.employeeId === advance.employeeId);
+        return {
+            ...advance, 
+            userName: user?.name || advance.employeeId, 
+        }
+    });
+  }, [advanceRequests, allUsers]);
 
   const handleProcessAdvance = async (advanceId: string, newStatus: 'approved' | 'rejected') => {
     setIsProcessingAdvance(true);
@@ -66,18 +107,8 @@ export default function AdminPayrollPage() {
       }
       toast({
         title: `Advance ${newStatus}`,
-        description: `The advance request has been ${newStatus}. Payroll data will refresh.`,
+        description: `The advance request has been ${newStatus}. Payroll data will refresh automatically.`,
       });
-      // Trigger re-calculation of payroll data as advances affect net payable - Vercel cache bust attempt
-      if (calculateMonthlyPayrollDetails && attendanceLog) {
-          const nonAdminUsers = allUsers.filter(u => u.role !== 'admin');
-          const reports = nonAdminUsers.map(user => {
-            const userAttendanceForMonth = attendanceLog.filter(log => log.employeeId === user.id);
-            return calculateMonthlyPayrollDetails(user, currentYear, currentMonth, userAttendanceForMonth, holidays);
-          });
-          setPayrollData(reports);
-      }
-
     } catch (error) {
       console.error(`Error processing advance:`, error);
       toast({
@@ -102,23 +133,24 @@ export default function AdminPayrollPage() {
     );
   }
 
+  const salaryMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Payroll Management</h1>
-          <p className="text-muted-foreground">Oversee employee salaries for the current month ({new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}) and process advance requests.</p>
+          <p className="text-muted-foreground">Oversee employee salaries for {new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}.</p>
         </div>
-        {/* <Button variant="outline"><ListFilter className="mr-2 h-4 w-4" /> Filter Period (Mock)</Button> */}
       </div>
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Employee Salary Overview (Current Month)</CardTitle>
+          <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Employee Salary Overview</CardTitle>
           <CardDescription>
-            Summary of employee salaries, including deductions for missed hours and approved advances.
+            Summary of employee salaries, including deductions and approved advances.
             <span className="block text-xs text-muted-foreground/80 italic mt-1">
-              Calculations based on attendance data for {new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}. Sundays are excluded from standard work hours.
+              Calculation Mode: <Badge variant="secondary">{salaryMode === 'hourly_deduction' ? 'Hourly Deduction' : 'Check-in/Checkout Based'}</Badge>
             </span>
           </CardDescription>
         </CardHeader>
@@ -126,11 +158,19 @@ export default function AdminPayrollPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Employee Name</TableHead>
-                <TableHead><UserCog className="inline-block mr-1 h-4 w-4"/>ID</TableHead>
+                <TableHead>Employee</TableHead>
                 <TableHead>Base Salary</TableHead>
-                <TableHead><CalendarClock className="inline-block mr-1 h-3 w-3"/>Std. Hours (Month)</TableHead>
-                <TableHead><CalendarClock className="inline-block mr-1 h-3 w-3"/>Actual Hours (Month)</TableHead>
+                {salaryMode === 'hourly_deduction' ? (
+                    <>
+                        <TableHead><CalendarClock className="inline-block mr-1 h-3 w-3"/>Std. Hours</TableHead>
+                        <TableHead><CalendarClock className="inline-block mr-1 h-3 w-3"/>Actual Hours</TableHead>
+                    </>
+                ) : (
+                    <>
+                        <TableHead><CalendarDays className="inline-block mr-1 h-3 w-3"/>Work Days</TableHead>
+                        <TableHead><CalendarDays className="inline-block mr-1 h-3 w-3"/>Total Days</TableHead>
+                    </>
+                )}
                 <TableHead>Deductions</TableHead>
                 <TableHead>Advances</TableHead>
                 <TableHead>Net Payable</TableHead>
@@ -139,20 +179,31 @@ export default function AdminPayrollPage() {
             <TableBody>
               {payrollData.length > 0 ? payrollData.map(report => (
                   <TableRow key={report.employeeId}>
-                    <TableCell className="font-medium">{report.employeeName}</TableCell>
-                    <TableCell className="font-mono text-xs">{report.employeeId}</TableCell>
-                    <TableCell>₹{report.baseSalary.toLocaleString('en-IN')}</TableCell>
-                    <TableCell>{report.totalStandardHoursForMonth.toFixed(1)}h</TableCell>
-                    <TableCell className={report.totalActualHoursWorked < report.totalStandardHoursForMonth ? 'text-orange-600' : 'text-green-600'}>
-                        {report.totalActualHoursWorked.toFixed(1)}h
+                    <TableCell>
+                        <div className="font-medium">{report.employeeName}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{report.employeeId}</div>
                     </TableCell>
+                    <TableCell>₹{report.baseSalary.toLocaleString('en-IN')}</TableCell>
+                    {salaryMode === 'hourly_deduction' ? (
+                        <>
+                            <TableCell>{report.totalStandardHoursForMonth.toFixed(1)}h</TableCell>
+                            <TableCell className={report.totalActualHoursWorked < report.totalStandardHoursForMonth ? 'text-orange-600' : 'text-green-600'}>
+                                {report.totalActualHoursWorked.toFixed(1)}h
+                            </TableCell>
+                        </>
+                    ) : (
+                        <>
+                            <TableCell>{report.totalDaysWorked}</TableCell>
+                            <TableCell>{report.totalDaysInMonth}</TableCell>
+                        </>
+                    )}
                     <TableCell className={report.calculatedDeductions > 0 ? 'text-destructive' : ''}>
-                        ₹{report.calculatedDeductions.toLocaleString('en-IN')}
+                        ₹{report.calculatedDeductions.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     </TableCell>
                     <TableCell className="text-red-600">
-                      (₹{report.totalApprovedAdvances.toLocaleString('en-IN')})
+                      -₹{report.totalApprovedAdvances.toLocaleString('en-IN')}
                     </TableCell>
-                    <TableCell className="font-semibold">₹{report.finalNetPayable.toLocaleString('en-IN')}</TableCell>
+                    <TableCell className="font-semibold">₹{report.finalNetPayable.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</TableCell>
                   </TableRow>
                 )) : (
                  <TableRow>
@@ -212,7 +263,6 @@ export default function AdminPayrollPage() {
                     </TableCell>
                   </TableRow>
                 ))
-                /* Removed the erroneous '</', */
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">No pending advance requests.</TableCell>

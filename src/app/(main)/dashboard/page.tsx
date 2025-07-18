@@ -9,24 +9,38 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect, useMemo } from 'react';
-import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO, eachDayOfInterval, isSunday, endOfMonth } from 'date-fns';
+import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO, eachDayOfInterval, isSunday, endOfMonth, isToday } from 'date-fns';
 
 export default function EmployeeDashboardPage() {
-  // Directly use real-time data from AuthContext
   const { 
     karobUser: user, 
     announcements, 
     loading: authLoading, 
-    calculateMonthlyPayrollDetails, 
-    attendanceLog, // User-specific attendance
-    userTasks: tasks, // User-specific tasks
+    attendanceLog,
+    userTasks: tasks,
     holidays,
-    leaveRequests
+    leaveRequests,
+    companySettings,
+    calculateTodayEstimatedEarning
   } = useAuth(); 
 
   useEffect(() => {
     document.title = user?.name ? `${user.name}'s Dashboard - KarobHR` : 'Dashboard - KarobHR';
   }, [user?.name]);
+
+  const liveAttendanceEvent = useMemo(() => 
+    attendanceLog?.find(e => e.status === 'Checked In' && e.timestamp && isToday(parseISO(e.timestamp))),
+  [attendanceLog]);
+
+  const todaysAttendance = useMemo(() => 
+    attendanceLog?.filter(e => e.timestamp && isToday(parseISO(e.timestamp))),
+  [attendanceLog]);
+
+  const todaysEarnings = useMemo(() => {
+    if (!user || !todaysAttendance || !companySettings) return 0;
+    return calculateTodayEstimatedEarning(user, todaysAttendance, liveAttendanceEvent, companySettings);
+  }, [user, todaysAttendance, liveAttendanceEvent, companySettings, calculateTodayEstimatedEarning]);
+
 
   const dashboardStats = useMemo(() => {
     if (!user || !attendanceLog || !tasks) {
@@ -35,14 +49,9 @@ export default function EmployeeDashboardPage() {
         pendingTasks: 'N/A',
         leaveBalance: 'N/A',
         nextPayslip: 'N/A',
-        todaysEarnings: 0,
       };
     }
     const today = new Date();
-
-    // Use the payroll calculation logic for earnings
-    const payroll = calculateMonthlyPayrollDetails(user, today.getFullYear(), today.getMonth(), attendanceLog, holidays || []);
-    const todaysEarnings = (payroll.finalNetPayable / (payroll.totalWorkingDaysInMonth || 1)); // Simplified daily average, prevent divide by zero
 
     // Attendance Calculation
     const monthStart = startOfMonth(today);
@@ -61,8 +70,8 @@ export default function EmployeeDashboardPage() {
     const pendingTasksCount = tasks.filter(task => task.status !== 'Completed').length;
     const pendingTasks = `${pendingTasksCount} Tasks`;
 
-    // Leave Balance (assuming a standard entitlement for now)
-    const annualLeaveEntitlement = 20; 
+    // Leave Balance
+    const annualLeaveEntitlement = companySettings?.annualLeaveEntitlement || 0;
     const leavesTaken = leaveRequests.filter(l => l.status === 'approved' && l.userId === user.id).length || 0;
     const leaveBalance = `${annualLeaveEntitlement - leavesTaken} Days`;
     
@@ -74,9 +83,8 @@ export default function EmployeeDashboardPage() {
       pendingTasks,
       leaveBalance,
       nextPayslip: nextPayslipDate,
-      todaysEarnings,
     };
-  }, [user, attendanceLog, tasks, holidays, calculateMonthlyPayrollDetails, leaveRequests]); // Added real-time dependencies
+  }, [user, attendanceLog, tasks, holidays, leaveRequests, companySettings]);
   
   if (authLoading || !user) {
     return (
@@ -92,7 +100,7 @@ export default function EmployeeDashboardPage() {
     { title: "Attendance This Month", value: dashboardStats.attendance, icon: CalendarDays, link: "/attendance" },
     { title: "Pending Tasks", value: dashboardStats.pendingTasks, icon: CheckSquare, link: "/tasks" },
     { title: "Leave Balance", value: dashboardStats.leaveBalance, icon: UserCircle, link: "/leave" },
-    { title: "Next Payslip", value: dashboardStats.nextPayslip, icon: DollarSign, link: "/payroll" },
+    { title: "My Payslip", value: "View Details", icon: DollarSign, link: "/payroll" },
   ];
 
   return (
@@ -115,8 +123,8 @@ export default function EmployeeDashboardPage() {
           <CardTitle>Today's Estimated Earnings</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold">₹{dashboardStats.todaysEarnings.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">This is an estimated daily average for this month.</p>
+          <p className="text-2xl font-bold">₹{todaysEarnings.toFixed(2)}</p>
+          <p className="text-xs text-muted-foreground">Based on your real-time activity and company salary mode.</p>
         </CardContent>
       </Card>
 
@@ -129,8 +137,8 @@ export default function EmployeeDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
-              <Link href={stat.link} className="text-xs text-muted-foreground hover:text-primary transition-colors">
-                View Details &rarr;
+               <Link href={stat.link} className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                {stat.title === "My Payslip" ? stat.value : "View Details"} &rarr;
               </Link>
             </CardContent>
           </Card>
@@ -147,7 +155,6 @@ export default function EmployeeDashboardPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">No recent activity to display yet.</p>
-            {/* Placeholder for activity feed */}
           </CardContent>
         </Card>
          <Card className="shadow-sm">

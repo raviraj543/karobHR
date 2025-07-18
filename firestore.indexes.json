@@ -46,6 +46,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "advances",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateRequested",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

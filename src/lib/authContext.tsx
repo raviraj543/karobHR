@@ -9,6 +9,7 @@ import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveA
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration } from '@/lib/dateUtils';
 import { calculateDistance } from './locationUtils';
+import { isToday, differenceInSeconds } from 'date-fns';
 
 
 // Redefined NewEmployeeData to be more specific for clarity
@@ -53,8 +54,15 @@ export interface AuthContextType {
         month: number,
         employeeAttendanceForMonth: AttendanceEvent[],
         holidaysForMonth: Holiday[],
-        approvedLeavesForMonth: LeaveApplication[]
+        approvedLeavesForMonth: LeaveApplication[],
+        approvedAdvancesForMonth: Advance[]
     ) => MonthlyPayrollReport;
+    calculateTodayEstimatedEarning: (
+        employee: User,
+        todaysAttendance: AttendanceEvent[],
+        liveAttendanceEvent: AttendanceEvent | null,
+        companySettings: CompanySettings | null
+      ) => number;
     // Admin-specific data
     allUsers: User[];
     attendanceLog: AttendanceEvent[]; 
@@ -271,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     adminUid: newUser.uid,
                     createdAt: new Date().toISOString(),
                     salaryCalculationMode: 'hourly_deduction',
+                    annualLeaveEntitlement: 20,
                 });
             }
     
@@ -444,7 +453,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         month: number, // 0-11
         employeeAttendanceForMonth: AttendanceEvent[],
         holidaysForMonth: Holiday[],
-        approvedLeavesForMonth: LeaveApplication[] = []
+        approvedLeavesForMonth: LeaveApplication[] = [],
+        approvedAdvancesForMonth: Advance[] = []
     ): MonthlyPayrollReport => {
     
         const calculationMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
@@ -537,13 +547,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
         const salaryAfterDeductions = Math.min(calculatedSalary, baseSalary);
     
-        const totalApprovedAdvances = (employee.advances || [])
-            .filter(adv => {
-                if (adv.status !== 'approved' || !adv.dateProcessed) return false;
-                const processedDate = new Date(adv.dateProcessed);
-                return processedDate.getFullYear() === year && processedDate.getMonth() === month;
-            })
-            .reduce((sum, adv) => sum + adv.amount, 0);
+        const totalApprovedAdvances = approvedAdvancesForMonth.reduce((sum, adv) => sum + adv.amount, 0);
     
         const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
     
@@ -568,6 +572,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     
     }, [companySettings]);
+
+    const calculateTodayEstimatedEarning = useCallback((
+        employee: User,
+        todaysAttendance: AttendanceEvent[],
+        liveAttendanceEvent: AttendanceEvent | null,
+        companySettings: CompanySettings | null
+      ): number => {
+        if (!employee?.baseSalary || !companySettings || !employee.standardDailyHours) {
+          return 0;
+        }
+      
+        const { salaryCalculationMode, annualLeaveEntitlement } = companySettings;
+        const baseSalary = employee.baseSalary;
+        const standardDailyHours = employee.standardDailyHours;
+      
+        const hasCheckedInOrOutToday = liveAttendanceEvent != null || todaysAttendance.some(e => e.status === 'Checked Out');
+      
+        if (salaryCalculationMode === 'check_in_out') {
+          return hasCheckedInOrOutToday ? baseSalary / 30 : 0;
+        } else { // hourly_deduction
+          const liveDurationSeconds = liveAttendanceEvent
+            ? differenceInSeconds(new Date(), new Date(liveAttendanceEvent.checkInTime!))
+            : 0;
+      
+          const completedMinutesToday = todaysAttendance
+            .filter(e => e.status === 'Checked Out' && e.totalHours)
+            .reduce((total, event) => total + (event.totalHours! * 60), 0);
+      
+          const totalMinutesWorkedToday = completedMinutesToday + (liveDurationSeconds / 60);
+          const perMinuteRate = baseSalary / (30 * standardDailyHours * 60);
+          
+          return totalMinutesWorkedToday * perMinuteRate;
+        }
+      }, []);
 
 
     const value: AuthContextType = {
@@ -594,6 +632,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         rejectAdvance,
         addHoliday,
         calculateMonthlyPayrollDetails,
+        calculateTodayEstimatedEarning,
         allUsers,
         announcements,
         holidays,

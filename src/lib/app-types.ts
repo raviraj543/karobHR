@@ -13,7 +13,8 @@ export interface CompanySettings {
     longitude: number;
     radius: number; // in meters
   };
-  salaryCalculationMode?: SalaryCalculationMode; // Confirmed: This property exists
+  salaryCalculationMode?: SalaryCalculationMode;
+  annualLeaveEntitlement?: number; // Added field for company-wide leave days
 }
 
 export interface Advance {

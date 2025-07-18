@@ -4,7 +4,7 @@
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect, useMemo } from 'react';
-import type { User, AttendanceEvent, Task, MonthlyPayrollReport, Holiday } from '@/lib/app-types.ts';
+import type { User, AttendanceEvent, Task, MonthlyPayrollReport, Holiday, Advance, LeaveApplication } from '@/lib/app-types.ts';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,9 +45,10 @@ interface EmployeeDetailsClientProps {
     employeeAttendance: AttendanceEvent[];
     employeeTasks: Task[];
     approvedLeaves: LeaveApplication[];
+    approvedAdvances: Advance[];
   } | null;
   initialHolidays: Holiday[];
-  initialCompanySettings: any; // Define a more specific type if possible
+  initialCompanySettings: any;
 }
 
 export default function EmployeeDetailsClient({ initialEmployeeData, initialHolidays, initialCompanySettings }: EmployeeDetailsClientProps) {
@@ -55,7 +56,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   const { calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
   const employeeId = params.employeeId as string;
 
-  const { employee, employeeAttendance, employeeTasks, approvedLeaves } = initialEmployeeData || {};
+  const { employee, employeeAttendance, employeeTasks, approvedLeaves, approvedAdvances } = initialEmployeeData || {};
   
   const monthlyAttendance = useMemo(() => {
       const now = new Date();
@@ -64,12 +65,12 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   }, [employeeAttendance]);
 
   const payrollReport = useMemo(() => {
-    if (employee && employeeAttendance && initialCompanySettings) {
+    if (employee && employeeAttendance && initialCompanySettings && approvedAdvances) {
       const now = new Date();
-      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays, approvedLeaves);
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays, approvedLeaves, approvedAdvances);
     }
     return null;
-  }, [employee, employeeAttendance, initialCompanySettings, calculateMonthlyPayrollDetails, initialHolidays, approvedLeaves]);
+  }, [employee, employeeAttendance, initialCompanySettings, calculateMonthlyPayrollDetails, initialHolidays, approvedLeaves, approvedAdvances]);
 
   const geofenceStats = useMemo(() => {
     const stats = { checkInInside: 0, checkOutInside: 0, checkInOutside: 0, checkOutOutside: 0 };
@@ -414,10 +415,10 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                             <TableRow><TableHead>Amount</TableHead><TableHead>Status</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
-                            {employee.advances?.map(adv => (
+                            {approvedAdvances?.map(adv => (
                                 <TableRow key={adv.id}><TableCell>₹{adv.amount}</TableCell><TableCell><Badge>{adv.status}</Badge></TableCell></TableRow>
                             ))}
-                            {!employee.advances?.length && <TableRow><TableCell colSpan={2} className="text-center">No advances taken.</TableCell></TableRow>}
+                            {!approvedAdvances?.length && <TableRow><TableCell colSpan={2} className="text-center">No advances taken.</TableCell></TableRow>}
                         </TableBody>
                      </Table>
                 </CardContent>

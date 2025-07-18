@@ -23,6 +23,7 @@ export default function EmployeeDetailPage() {
   const [employeeTasks, setEmployeeTasks] = useState<Task[]>([]);
   const [employeeAttendance, setEmployeeAttendance] = useState<AttendanceEvent[]>([]);
   const [approvedLeaves, setApprovedLeaves] = useState<LeaveApplication[]>([]);
+  const [approvedAdvances, setApprovedAdvances] = useState<Advance[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,17 @@ export default function EmployeeDetailPage() {
             setApprovedLeaves(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LeaveApplication)));
           }));
 
+          const advancesQuery = query(
+            collection(db, `companies/${companyId}/advances`),
+            where('employeeId', '==', employeeId),
+            where('status', '==', 'approved'),
+            where('dateRequested', '>=', Timestamp.fromDate(start)),
+            where('dateRequested', '<=', Timestamp.fromDate(end))
+          );
+          subs.push(onSnapshot(advancesQuery, (snapshot) => {
+            setApprovedAdvances(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Advance)));
+          }));
+
           const holidaysQuery = query(collection(db, `companies/${companyId}/holidays`));
           subs.push(onSnapshot(holidaysQuery, (snapshot) => {
             setHolidays(snapshot.docs.map(doc => ({...doc.data(), id: doc.id, date: doc.data().date.toDate() } as Holiday)));
@@ -125,6 +137,7 @@ export default function EmployeeDetailPage() {
       employeeAttendance: employeeAttendance,
       employeeTasks: employeeTasks,
       approvedLeaves: approvedLeaves,
+      approvedAdvances: approvedAdvances,
   };
 
   return (

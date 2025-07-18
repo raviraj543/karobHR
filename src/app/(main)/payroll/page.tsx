@@ -1,302 +1,153 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import type { Advance, MonthlyPayrollReport, AttendanceEvent } from '@/lib/app-types';
+import type { User, Advance, MonthlyPayrollReport, Holiday, LeaveApplication } from '@/lib/app-types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CreditCard, IndianRupee, Send, History, Loader2, AlertCircle } from 'lucide-react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Skeleton } from '@/components/ui/skeleton';
-import { onSnapshot, collection, query, where, orderBy } from 'firebase/firestore';
+import { IndianRupee, CheckCircle, XCircle, ListFilter, UserCog, AlertTriangle, Percent, Loader2, CalendarClock, CalendarDays } from 'lucide-react';
+import { getMonth, getYear, startOfMonth, endOfMonth } from 'date-fns';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 
-
-const advanceRequestSchema = z.object({
-  amount: z.preprocess(
-    (val) => Number(String(val).trim()),
-    z.number({ invalid_type_error: "Amount must be a number." }).positive({ message: "Amount must be positive." })
-  ),
-  reason: z.string().min(10, { message: "Reason must be at least 10 characters." }).max(200, { message: "Reason cannot exceed 200 characters."}),
-});
-
-type AdvanceRequestFormValues = z.infer<typeof advanceRequestSchema>;
-
 export default function EmployeePayrollPage() {
-  const { karobUser, requestAdvance, calculateMonthlyPayrollDetails, loading: authLoading, holidays } = useAuth();
-  const [isSubmittingAdvance, setIsSubmittingAdvance] = useState(false);
+  const { 
+      karobUser, 
+      holidays, 
+      loading: authLoading, 
+      attendanceLog, 
+      calculateMonthlyPayrollDetails, 
+      companySettings, 
+      companyId,
+      leaveRequests,
+      advanceRequests
+  } = useAuth();
   const { toast } = useToast();
-
-  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  
-  const [userAttendance, setUserAttendance] = useState<AttendanceEvent[]>([]);
-  const [userAdvances, setUserAdvances] = useState<Advance[]>([]);
-  const [payrollReport, setPayrollReport] = useState<MonthlyPayrollReport | null>(null);
-  const [reportLoading, setReportLoading] = useState(true);
-
-  const form = useForm<AdvanceRequestFormValues>({
-    resolver: zodResolver(advanceRequestSchema),
-    defaultValues: {
-      amount: undefined,
-      reason: '',
-    },
-  });
+  const [payrollData, setPayrollData] = useState<MonthlyPayrollReport | null>(null);
+  const [isCalculatingPayroll, setIsCalculatingPayroll] = useState(true);
 
   useEffect(() => {
     document.title = 'My Payslip - KarobHR';
   }, []);
-  
+
+  const currentMonth = getMonth(new Date()); // 0-11
+  const currentYear = getYear(new Date());
+
   useEffect(() => {
-    if (!karobUser || !karobUser.companyId) return;
+    const calculatePayroll = () => {
+        if (!authLoading && karobUser && calculateMonthlyPayrollDetails && attendanceLog) {
+            setIsCalculatingPayroll(true);
 
-    // Listener for this user's attendance
-    const attendanceQuery = query(
-        collection(db, `companies/${karobUser.companyId}/attendanceLog`),
-        where('userId', '==', karobUser.id)
-    );
-    const unsubAttendance = onSnapshot(attendanceQuery, (snapshot) => {
-        const attendanceData = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as AttendanceEvent));
-        setUserAttendance(attendanceData);
-    });
-
-    // Listener for this user's advances
-    const advancesQuery = query(
-        collection(db, `companies/${karobUser.companyId}/advances`),
-        where('employeeId', '==', karobUser.employeeId),
-        orderBy('dateRequested', 'desc')
-    );
-    const unsubAdvances = onSnapshot(advancesQuery, (snapshot) => {
-        const advancesData = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as Advance));
-        setUserAdvances(advancesData);
-    });
-
-    return () => {
-        unsubAttendance();
-        unsubAdvances();
+            const approvedLeaves = leaveRequests.filter(l => l.status === 'approved');
+            const approvedAdvances = advanceRequests.filter(a => a.status === 'approved');
+            
+            const report = calculateMonthlyPayrollDetails(karobUser, currentYear, currentMonth, attendanceLog, holidays, approvedLeaves, approvedAdvances);
+            
+            setPayrollData(report);
+            setIsCalculatingPayroll(false);
+        } else if (!authLoading && !karobUser) {
+            setIsCalculatingPayroll(false);
+            setPayrollData(null);
+        }
     };
-  }, [karobUser]);
-
-
-  useEffect(() => {
-    setReportLoading(true);
-    if (karobUser) {
-      const userWithAdvances = { ...karobUser, advances: userAdvances };
-      const report = calculateMonthlyPayrollDetails(userWithAdvances, currentYear, currentMonth, userAttendance, holidays);
-      setPayrollReport(report);
-    }
-    setReportLoading(false);
-  }, [karobUser, userAttendance, userAdvances, holidays, currentYear, currentMonth, calculateMonthlyPayrollDetails]);
-
-  const onSubmitAdvance: SubmitHandler<AdvanceRequestFormValues> = async (data) => {
-    if (!karobUser) return;
-    setIsSubmittingAdvance(true);
-    try {
-      await requestAdvance(karobUser.employeeId, data.amount, data.reason);
-      toast({
-        title: 'Advance Requested',
-        description: 'Your advance request has been submitted for approval.',
-      });
-      form.reset();
-    } catch (error) {
-      toast({
-        title: 'Error Requesting Advance',
-        description: (error as Error).message || 'Could not submit your advance request.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmittingAdvance(false);
-    }
-  };
-
-  const getStatusBadgeVariant = (status: Advance['status']) => {
-    switch (status) {
-      case 'approved': return 'default';
-      case 'pending': return 'secondary';
-      case 'rejected': return 'destructive';
-      default: return 'outline';
-    }
-  };
-
-  const renderPayslipContent = () => {
-    if (authLoading || reportLoading) {
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-8 w-1/2" />
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-8 w-1/2" />
-            </div>
-             <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-8 w-1/2" />
-                <Skeleton className="h-6 w-3/4" />
-                <Skeleton className="h-10 w-1/2" />
-            </div>
-        </div>
-      );
-    }
-
-    if (!payrollReport) {
-      return (
-         <div className="text-center py-10 text-muted-foreground flex flex-col items-center justify-center">
-            <AlertCircle className="w-12 h-12 mb-4 text-destructive" />
-            <p className="font-semibold">Could not calculate your payslip for the selected period.</p>
-            <p className="text-sm">This can happen if there is no attendance data for the month.</p>
-        </div>
-      );
-    }
     
+    calculatePayroll();
+
+  }, [karobUser, authLoading, calculateMonthlyPayrollDetails, attendanceLog, holidays, currentMonth, currentYear, companyId, leaveRequests, advanceRequests]);
+
+  if (authLoading || isCalculatingPayroll) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        <div className="space-y-3 p-4 bg-muted/30 rounded-lg border shadow-inner">
-          <div>
-            <Label className="text-sm text-muted-foreground">Base Monthly Salary</Label>
-            <p className="text-2xl font-semibold text-foreground">₹{payrollReport.baseSalary.toLocaleString('en-IN')}</p>
-          </div>
-          <div>
-            <Label className="text-sm text-muted-foreground">Hours Worked</Label>
-            <p className="text-2xl font-semibold text-foreground">{payrollReport.totalActualHoursWorked.toFixed(2)} / {payrollReport.totalStandardHoursForMonth.toFixed(2)}</p>
-          </div>
-          <div>
-            <Label className="text-sm text-muted-foreground">Deductions for hours missed</Label>
-            <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.calculatedDeductions.toLocaleString('en-IN')})</p>
-          </div>
+        <div className="flex flex-col items-center justify-center h-full py-10 space-y-2">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">
+                {authLoading ? "Loading your data..." : "Generating your payslip for the current month..."}
+            </p>
         </div>
-        <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20 shadow-inner">
-           <div>
-            <Label className="text-sm text-muted-foreground">Approved Advances (Deductions)</Label>
-            <p className="text-2xl font-semibold text-destructive">(₹{payrollReport.totalApprovedAdvances.toLocaleString('en-IN')})</p>
-          </div>
-          <div className="pt-2">
-            <Label className="text-sm text-primary/80">Net Payable Amount</Label>
-            <p className="text-3xl font-bold text-primary">₹{payrollReport.finalNetPayable.toLocaleString('en-IN')}</p>
-          </div>
-        </div>
-      </div>
     );
+  }
+  
+  if(!payrollData){
+      return (
+          <div className="text-center py-10">
+              <p className="text-lg text-muted-foreground">Could not generate your payslip at this time.</p>
+          </div>
+      )
   }
 
-  if (authLoading || !karobUser) {
-    return (
-        <div className="space-y-6">
-            <Skeleton className="h-12 w-1/2" />
-            <Card>
-                <CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader>
-                <CardContent>{renderPayslipContent()}</CardContent>
-            </Card>
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-40" /></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-40" /></CardContent></Card>
-            </div>
-        </div>
-    );
-  }
+  const salaryMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">My Payslip & Advances</h1>
-          <p className="text-muted-foreground">View your salary details and manage advance requests.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">My Payslip</h1>
+          <p className="text-muted-foreground">Your detailed payslip for {new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}.</p>
         </div>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center"><CreditCard className="mr-2 h-5 w-5 text-primary" />Payslip Summary</CardTitle>
+      <Card className="shadow-lg">
+        <CardHeader className="bg-muted/50">
+          <CardTitle className="flex items-center text-2xl"><IndianRupee className="mr-2 h-6 w-6 text-primary" />Payslip Summary</CardTitle>
           <CardDescription>
-            Your current salary breakdown.
+            Calculation Mode: <Badge variant="secondary">{salaryMode === 'hourly_deduction' ? 'Hourly Deduction' : 'Check-in/Checkout Based'}</Badge>
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {renderPayslipContent()}
+        <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Earnings Section */}
+                <div className="space-y-4">
+                    <h3 className="font-semibold text-lg border-b pb-2">Earnings</h3>
+                    <div className="flex justify-between">
+                        <span>Base Salary</span>
+                        <span>₹{payrollData.baseSalary.toLocaleString('en-IN')}</span>
+                    </div>
+                    {salaryMode === 'hourly_deduction' ? (
+                       <div className="flex justify-between text-sm text-muted-foreground">
+                            <span>Hours Worked ({payrollData.totalActualHoursWorked.toFixed(1)} / {payrollData.totalStandardHoursForMonth.toFixed(1)}h)</span>
+                            <span>+ ₹{(payrollData.salaryAfterDeductions + payrollData.calculatedDeductions).toLocaleString('en-IN')}</span>
+                        </div>
+                    ):(
+                        <div className="flex justify-between text-sm text-muted-foreground">
+                             <span>Days Worked ({payrollData.totalDaysWorked} / {payrollData.totalDaysInMonth} days)</span>
+                             <span>+ ₹{(payrollData.salaryAfterDeductions + payrollData.calculatedDeductions).toLocaleString('en-IN')}</span>
+                        </div>
+                    )}
+                     <Separator />
+                     <div className="flex justify-between font-semibold">
+                        <span>Gross Earnings</span>
+                        <span>₹{(payrollData.salaryAfterDeductions + payrollData.calculatedDeductions).toLocaleString('en-IN')}</span>
+                    </div>
+                </div>
+
+                 {/* Deductions Section */}
+                 <div className="space-y-4">
+                    <h3 className="font-semibold text-lg border-b pb-2">Deductions</h3>
+                    <div className="flex justify-between text-destructive">
+                        <span>Absence/Shortfall</span>
+                        <span>-₹{payrollData.calculatedDeductions.toLocaleString('en-IN')}</span>
+                    </div>
+                     <div className="flex justify-between text-destructive">
+                        <span>Approved Advances</span>
+                        <span>-₹{payrollData.totalApprovedAdvances.toLocaleString('en-IN')}</span>
+                    </div>
+                    <Separator />
+                     <div className="flex justify-between font-semibold text-destructive">
+                        <span>Total Deductions</span>
+                        <span>-₹{(payrollData.calculatedDeductions + payrollData.totalApprovedAdvances).toLocaleString('en-IN')}</span>
+                    </div>
+                </div>
+            </div>
+             <Separator className="my-6" />
+             <div className="flex justify-between items-center bg-green-100 dark:bg-green-900/30 p-4 rounded-lg">
+                <h3 className="font-bold text-xl text-green-800 dark:text-green-200">Net Payable Salary</h3>
+                <p className="font-bold text-2xl text-green-800 dark:text-green-200">₹{payrollData.finalNetPayable.toLocaleString('en-IN')}</p>
+             </div>
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center"><IndianRupee className="mr-2 h-5 w-5 text-primary" />Request Salary Advance</CardTitle>
-            <CardDescription>Need an advance? Fill out the form below.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={form.handleSubmit(onSubmitAdvance)} className="space-y-4">
-              <div>
-                <Label htmlFor="amount">Amount Requested (₹)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  placeholder="e.g., 5000"
-                  {...form.register("amount")}
-                  className={form.formState.errors.amount ? "border-destructive focus-visible:ring-destructive" : ""}
-                />
-                {form.formState.errors.amount && <p className="text-sm text-destructive mt-1">{form.formState.errors.amount.message}</p>}
-              </div>
-              <div>
-                <Label htmlFor="reason">Reason for Advance</Label>
-                <Textarea
-                  id="reason"
-                  placeholder="Briefly explain the reason for your request (min. 10 characters)"
-                  rows={3}
-                  {...form.register("reason")}
-                  className={form.formState.errors.reason ? "border-destructive focus-visible:ring-destructive" : ""}
-                />
-                 {form.formState.errors.reason && <p className="text-sm text-destructive mt-1">{form.formState.errors.reason.message}</p>}
-              </div>
-              <Button type="submit" disabled={isSubmittingAdvance || authLoading} className="w-full sm:w-auto">
-                {isSubmittingAdvance ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                Submit Advance Request
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center"><History className="mr-2 h-5 w-5 text-primary" />My Advance History</CardTitle>
-            <CardDescription>Track the status of your advance requests.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {(userAdvances && userAdvances.length > 0) ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Amount (₹)</TableHead>
-                    <TableHead>Date Requested</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="hidden sm:table-cell">Reason</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {userAdvances.map(advance => ( 
-                    <TableRow key={advance.id} className="hover:bg-muted/50 transition-colors">
-                      <TableCell className="font-medium">₹{advance.amount.toLocaleString('en-IN')}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(advance.dateRequested).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusBadgeVariant(advance.status)} className="capitalize">{advance.status}</Badge>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-xs text-muted-foreground truncate max-w-[150px]" title={advance.reason}>{advance.reason}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-muted-foreground text-center py-8">You have not made any advance requests.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
