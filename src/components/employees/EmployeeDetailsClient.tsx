@@ -45,6 +45,7 @@ interface EmployeeDetailsClientProps {
     employeeAttendance: AttendanceEvent[];
     employeeTasks: Task[];
     approvedLeaves: LeaveApplication[];
+    allLeaveApplications: LeaveApplication[]; // Expect all applications here
     approvedAdvances: Advance[];
   } | null;
   initialHolidays: Holiday[];
@@ -56,7 +57,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   const { calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
   const employeeId = params.employeeId as string;
 
-  const { employee, employeeAttendance, employeeTasks, approvedLeaves, approvedAdvances } = initialEmployeeData || {};
+  const { employee, employeeAttendance, employeeTasks, approvedLeaves, allLeaveApplications, approvedAdvances } = initialEmployeeData || {};
   
   const monthlyAttendance = useMemo(() => {
       const now = new Date();
@@ -67,10 +68,13 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   const payrollReport = useMemo(() => {
     if (employee && employeeAttendance && initialCompanySettings && approvedAdvances) {
       const now = new Date();
-      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays, approvedLeaves, approvedAdvances);
+      // Pass the correct approved leaves list
+      const currentMonthApprovedLeaves = approvedLeaves?.filter(l => l.startDate && new Date(l.startDate).getMonth() === now.getMonth() && new Date(l.startDate).getFullYear() === now.getFullYear()) || [];
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays, currentMonthApprovedLeaves, approvedAdvances);
     }
     return null;
   }, [employee, employeeAttendance, initialCompanySettings, calculateMonthlyPayrollDetails, initialHolidays, approvedLeaves, approvedAdvances]);
+
 
   const geofenceStats = useMemo(() => {
     const stats = { checkInInside: 0, checkOutInside: 0, checkInOutside: 0, checkOutOutside: 0 };
@@ -160,7 +164,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
             body: JSON.stringify({
                 employeeName: employee.name,
                 tasks: employeeTasks?.map(t => ({ title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate, description: t.description })),
-                leaveApplications: employee.leaves,
+                leaveApplications: allLeaveApplications,
                 attendanceFactor: employee.mockAttendanceFactor || 1.0,
                 baseSalary: employee.baseSalary
             }),
@@ -321,15 +325,15 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                             <TableRow>
                                 <TableHead>Leave Type</TableHead>
                                 <TableHead>Start Date</TableHead>
-
                                 <TableHead>End Date</TableHead>
                                 <TableHead>Reason</TableHead>
                                 <TableHead>Status</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {employee?.leaves?.map(leave => (
+                            {allLeaveApplications?.map(leave => (
                                 <TableRow key={leave.id}>
+                                    <TableCell>{leave.leaveType}</TableCell>
                                     <TableCell>{format(parseISO(leave.startDate), 'PP')}</TableCell>
                                     <TableCell>{format(parseISO(leave.endDate), 'PP')}</TableCell>
                                     <TableCell>
@@ -342,7 +346,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                                     </TableCell>
                                 </TableRow>
                             ))}
-                             {(employee?.leaves?.length || 0) === 0 && <TableRow><TableCell colSpan={5} className="text-center">No leave history found.</TableCell></TableRow>}
+                             {(allLeaveApplications?.length || 0) === 0 && <TableRow><TableCell colSpan={5} className="text-center">No leave history found.</TableCell></TableRow>}
                         </TableBody>
                      </Table>
                 </CardContent>

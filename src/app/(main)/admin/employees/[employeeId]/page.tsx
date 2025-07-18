@@ -22,7 +22,7 @@ export default function EmployeeDetailPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employeeTasks, setEmployeeTasks] = useState<Task[]>([]);
   const [employeeAttendance, setEmployeeAttendance] = useState<AttendanceEvent[]>([]);
-  const [approvedLeaves, setApprovedLeaves] = useState<LeaveApplication[]>([]);
+  const [allLeaveApplications, setAllLeaveApplications] = useState<LeaveApplication[]>([]);
   const [approvedAdvances, setApprovedAdvances] = useState<Advance[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
@@ -50,10 +50,7 @@ export default function EmployeeDetailPage() {
           setEmployee(employeeData);
           
           const subs: (() => void)[] = [];
-          const now = new Date();
-          const start = startOfMonth(now);
-          const end = endOfMonth(now);
-
+          
           // Now set up listeners
           const tasksQuery = query(collection(db, `companies/${companyId}/tasks`), where('assigneeId', '==', employeeId), orderBy('dueDate', 'desc'));
           subs.push(onSnapshot(tasksQuery, (snapshot) => {
@@ -65,18 +62,17 @@ export default function EmployeeDetailPage() {
             setEmployeeAttendance(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AttendanceEvent)));
           }));
 
+          // Fetch ALL leave applications for the employee, not just for the current month
           const leavesQuery = query(
             collection(db, `companies/${companyId}/leaveApplications`),
             where('employeeId', '==', employeeId),
-            where('status', '==', 'approved'),
-            where('startDate', '>=', Timestamp.fromDate(start)),
-            where('startDate', '<=', Timestamp.fromDate(end))
+            orderBy('appliedAt', 'desc')
           );
           subs.push(onSnapshot(leavesQuery, (snapshot) => {
-            setApprovedLeaves(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LeaveApplication)));
+            setAllLeaveApplications(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LeaveApplication)));
           }));
 
-          // Fetch ALL approved advances for the employee, not just for the current month
+          // Fetch ALL approved advances for the employee, not just from the current month
           const advancesQuery = query(
             collection(db, `companies/${companyId}/advances`),
             where('employeeId', '==', employeeId),
@@ -135,7 +131,8 @@ export default function EmployeeDetailPage() {
       employee: employee,
       employeeAttendance: employeeAttendance,
       employeeTasks: employeeTasks,
-      approvedLeaves: approvedLeaves,
+      approvedLeaves: allLeaveApplications.filter(l => l.status === 'approved'),
+      allLeaveApplications: allLeaveApplications, // Pass all applications
       approvedAdvances: approvedAdvances,
   };
 
