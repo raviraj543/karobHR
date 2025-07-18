@@ -170,7 +170,7 @@ export default function MyTasksPage() {
                 <TableRow>
                   <TableHead>Task Title</TableHead>
                   <TableHead className="hidden md:table-cell">Description</TableHead>
-                  <TableHead className="hidden sm:table-cell">Due Date</TableHead>
+                  <TableHead>Due Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Actions</TableHead> {/* Added for the Edit button */}
@@ -183,7 +183,7 @@ export default function MyTasksPage() {
                     <TableCell className="hidden md:table-cell text-muted-foreground">
                       <TruncatedText text={task.description} wordLimit={20} />
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                    <TableCell className="text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         {format(parseISO(task.dueDate), 'PPP')}
