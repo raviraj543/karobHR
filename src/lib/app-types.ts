@@ -134,6 +134,9 @@ export interface MonthlyPayrollReport {
   salaryAfterDeductions: number;
   totalApprovedAdvances: number;
   finalNetPayable: number;
+  // Fields for check_in_out mode
+  totalDaysWorked?: number;
+  totalDaysInMonth?: number;
 }
 
 export interface User {

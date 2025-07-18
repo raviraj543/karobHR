@@ -3,13 +3,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { collection, query, where, getDocs, onSnapshot, orderBy, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
-import { Employee, LeaveRequest, Advance, Task, AttendanceEvent, Holiday, CompanySettings } from '@/lib/app-types.ts';
+import { Employee, LeaveApplication, Advance, Task, AttendanceEvent, Holiday, CompanySettings } from '@/lib/app-types.ts';
 import EmployeeDetailsClient from '@/components/employees/EmployeeDetailsClient';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
+import { startOfMonth, endOfMonth } from 'date-fns';
 
 export default function EmployeeDetailPage() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function EmployeeDetailPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employeeTasks, setEmployeeTasks] = useState<Task[]>([]);
   const [employeeAttendance, setEmployeeAttendance] = useState<AttendanceEvent[]>([]);
+  const [approvedLeaves, setApprovedLeaves] = useState<LeaveApplication[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,6 +49,9 @@ export default function EmployeeDetailPage() {
           setEmployee(employeeData);
           
           const subs: (() => void)[] = [];
+          const now = new Date();
+          const start = startOfMonth(now);
+          const end = endOfMonth(now);
 
           // Now set up listeners
           const tasksQuery = query(collection(db, `companies/${companyId}/tasks`), where('assigneeId', '==', employeeId), orderBy('dueDate', 'desc'));
@@ -57,6 +62,17 @@ export default function EmployeeDetailPage() {
           const attendanceQuery = query(collection(db, `companies/${companyId}/attendanceLog`), where('employeeId', '==', employeeData.employeeId), orderBy('timestamp', 'desc'));
            subs.push(onSnapshot(attendanceQuery, (snapshot) => {
             setEmployeeAttendance(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AttendanceEvent)));
+          }));
+
+          const leavesQuery = query(
+            collection(db, `companies/${companyId}/leaveApplications`),
+            where('employeeId', '==', employeeId),
+            where('status', '==', 'approved'),
+            where('startDate', '>=', Timestamp.fromDate(start)),
+            where('startDate', '<=', Timestamp.fromDate(end))
+          );
+          subs.push(onSnapshot(leavesQuery, (snapshot) => {
+            setApprovedLeaves(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LeaveApplication)));
           }));
 
           const holidaysQuery = query(collection(db, `companies/${companyId}/holidays`));
@@ -108,6 +124,7 @@ export default function EmployeeDetailPage() {
       employee: employee,
       employeeAttendance: employeeAttendance,
       employeeTasks: employeeTasks,
+      approvedLeaves: approvedLeaves,
   };
 
   return (

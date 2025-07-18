@@ -52,7 +52,8 @@ export interface AuthContextType {
         year: number,
         month: number,
         employeeAttendanceForMonth: AttendanceEvent[],
-        holidaysForMonth: Holiday[]
+        holidaysForMonth: Holiday[],
+        approvedLeavesForMonth: LeaveApplication[]
     ) => MonthlyPayrollReport;
     // Admin-specific data
     allUsers: User[];
@@ -442,43 +443,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         year: number,
         month: number, // 0-11
         employeeAttendanceForMonth: AttendanceEvent[],
-        holidaysForMonth: Holiday[]
+        holidaysForMonth: Holiday[],
+        approvedLeavesForMonth: LeaveApplication[] = []
     ): MonthlyPayrollReport => {
-        
+    
+        const calculationMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
         const baseSalary = employee.baseSalary || 0;
         const standardDailyHours = employee.standardDailyHours || 8;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
         
-        const holidaysInThisMonth = holidaysForMonth
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+    
+        const allHolidayDates = new Set<number>();
+        holidaysForMonth
             .filter(h => h.date.getFullYear() === year && h.date.getMonth() === month)
-            .map(h => h.date.getDate());
-        
-        // Pass only the Date objects from the holidaysForMonth array
-        const workingDaysInMonth = getWorkingDaysInMonth(year, month, holidaysForMonth.map(h => h.date));
-          
-        const totalStandardHoursForMonth = workingDaysInMonth * standardDailyHours;
-
-        let totalActualHoursWorked = 0;
+            .forEach(h => allHolidayDates.add(h.date.getDate()));
+    
+        for (let day = 1; day <= daysInMonth; day++) {
+            const currentDate = new Date(year, month, day);
+            if (isSunday(currentDate)) {
+                allHolidayDates.add(day);
+            }
+        }
+    
+        const attendanceByDay = new Map<number, { minutes: number; checkedInAndOut: boolean }>();
         employeeAttendanceForMonth.forEach(log => {
-            if (log.checkOutTime && new Date(log.checkOutTime).getMonth() === month) {
-                totalActualHoursWorked += log.totalHours || 0;
+            if (log.checkInTime && log.checkOutTime) {
+                const checkInDate = new Date(log.checkInTime);
+                if (checkInDate.getFullYear() === year && checkInDate.getMonth() === month) {
+                    const dayOfMonth = checkInDate.getDate();
+                    if (allHolidayDates.has(dayOfMonth)) return;
+                    
+                    const minutesWorked = (new Date(log.checkOutTime).getTime() - checkInDate.getTime()) / (1000 * 60);
+                    const existingEntry = attendanceByDay.get(dayOfMonth) || { minutes: 0, checkedInAndOut: false };
+                    attendanceByDay.set(dayOfMonth, {
+                        minutes: existingEntry.minutes + minutesWorked,
+                        checkedInAndOut: true,
+                    });
+                }
             }
         });
-
-        const hourlyRate = totalStandardHoursForMonth > 0 ? baseSalary / totalStandardHoursForMonth : 0;
-        const totalHoursMissed = Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked);
-        
-        const calculatedDeductions = companySettings?.salaryCalculationMode === 'check_in_out' 
-            ? 0 // Logic for check-in based should be handled differently, simplified for now
-            : totalHoursMissed * hourlyRate;
+    
+        let calculatedSalary = 0;
+        let totalWorkedMinutes = 0;
+        let holidayHoursCredit = 0;
+        let pastHolidaysCount = 0;
+        let totalDaysWorked = 0;
+    
+        allHolidayDates.forEach(day => {
+            const holidayDate = new Date(year, month, day);
+            if (holidayDate.getTime() < today.getTime()) {
+                pastHolidaysCount++;
+                holidayHoursCredit += standardDailyHours;
+            }
+        });
+    
+        if (calculationMode === 'hourly_deduction') {
+            const workingDaysInMonth = daysInMonth - allHolidayDates.size;
+            const monthlyWorkHoursGoal = workingDaysInMonth * standardDailyHours;
+            const perMinuteSalary = monthlyWorkHoursGoal > 0 ? baseSalary / (monthlyWorkHoursGoal * 60) : 0;
+    
+            attendanceByDay.forEach(entry => {
+                totalWorkedMinutes += entry.minutes;
+            });
             
-        const salaryAfterDeductions = baseSalary - calculatedDeductions;
-
+            const workedSalary = totalWorkedMinutes * perMinuteSalary;
+            const holidaySalary = (holidayHoursCredit * 60) * perMinuteSalary;
+            calculatedSalary = workedSalary + holidaySalary;
+    
+        } else { // 'check_in_out' mode
+            const dailyRate = baseSalary / daysInMonth;
+            let checkedInAndOutDays = 0;
+            attendanceByDay.forEach(entry => {
+                if(entry.checkedInAndOut) {
+                    checkedInAndOutDays++;
+                }
+                totalWorkedMinutes += entry.minutes;
+            });
+            
+            totalDaysWorked = checkedInAndOutDays + pastHolidaysCount;
+            const unpaidLeaveDays = approvedLeavesForMonth.length;
+            const deductions = unpaidLeaveDays * dailyRate;
+            
+            const workedSalary = checkedInAndOutDays * dailyRate;
+            const holidaySalary = pastHolidaysCount * dailyRate;
+            calculatedSalary = (workedSalary + holidaySalary) - deductions;
+        }
+    
+        const totalActualHoursWorked = (totalWorkedMinutes / 60) + holidayHoursCredit;
+        const totalWorkingDaysInMonth = daysInMonth - allHolidayDates.size;
+        const totalStandardHoursForMonth = totalWorkingDaysInMonth * standardDailyHours;
+    
+        const salaryAfterDeductions = Math.min(calculatedSalary, baseSalary);
+    
         const totalApprovedAdvances = (employee.advances || [])
-            .filter(adv => adv.status === 'approved' && new Date(adv.dateProcessed!).getMonth() === month)
+            .filter(adv => {
+                if (adv.status !== 'approved' || !adv.dateProcessed) return false;
+                const processedDate = new Date(adv.dateProcessed);
+                return processedDate.getFullYear() === year && processedDate.getMonth() === month;
+            })
             .reduce((sum, adv) => sum + adv.amount, 0);
-            
+    
         const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
-        
+    
         return {
             employeeId: employee.employeeId,
             employeeName: employee.name || 'N/A',
@@ -486,17 +554,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             year,
             baseSalary,
             standardDailyHours,
-            totalWorkingDaysInMonth: workingDaysInMonth,
+            totalWorkingDaysInMonth,
             totalStandardHoursForMonth,
             totalActualHoursWorked,
-            totalHoursMissed,
-            hourlyRate,
-            calculatedDeductions,
+            totalHoursMissed: Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked),
+            hourlyRate: totalStandardHoursForMonth > 0 ? baseSalary / totalStandardHoursForMonth : 0,
+            calculatedDeductions: baseSalary - salaryAfterDeductions,
             salaryAfterDeductions,
             totalApprovedAdvances,
-            finalNetPayable: Math.max(0, finalNetPayable)
+            finalNetPayable: Math.max(0, finalNetPayable),
+            totalDaysWorked,
+            totalDaysInMonth: daysInMonth,
         };
-
+    
     }, [companySettings]);
 
 
@@ -540,5 +610,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         </AuthContext.Provider>
     );
 }
-
-    

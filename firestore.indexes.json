@@ -1,8 +1,7 @@
-
 {
   "indexes": [
     {
-      "collectionGroup": "attendanceLog",
+      "collectionGroup": "leaveApplications",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -10,91 +9,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "tasks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "assigneeId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "tasks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "assigneeId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dueDate",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "leaveRequests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "companyId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "advanceRequests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "companyId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "attendanceLog",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "employeeId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "advances",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "employeeId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dateRequested",
+          "fieldPath": "appliedAt",
           "order": "DESCENDING"
         }
       ]

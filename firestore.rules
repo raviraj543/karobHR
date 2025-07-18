@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -30,8 +29,11 @@ service cloud.firestore {
       // handled by a server-side Cloud Function.
       allow list: if true;
       
-      // CREATE: An admin can create a new user document in their own company.
-      allow create: if isAdmin(request.resource.data.companyId);
+      // CREATE:
+      // 1. A user can create their own document if their userId matches their auth.uid (for initial admin signup).
+      // 2. An existing admin can create new user documents within their company.
+      allow create: if request.auth.uid == userId
+                     || isAdmin(request.resource.data.companyId);
 
       // UPDATE: A user can update their own doc. An admin can update any user in their company.
       // This rule correctly handles admins approving leave requests on a user's document.
@@ -49,8 +51,10 @@ service cloud.firestore {
       // ONLY an admin of the company can update the settings.
       allow update: if isAdmin(companyId);
 
-      // Disallow client-side creation/deletion of companies.
-      allow create, delete: if false; 
+      // Allow an admin to create their own company document during initial signup.
+      allow create: if request.auth.uid == request.resource.data.adminUid
+                      && request.resource.data.companyId == companyId;
+      allow delete: if false; 
       
       // --- SUBCOLLECTIONS ---
       

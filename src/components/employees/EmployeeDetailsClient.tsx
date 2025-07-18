@@ -44,6 +44,7 @@ interface EmployeeDetailsClientProps {
     employee: User;
     employeeAttendance: AttendanceEvent[];
     employeeTasks: Task[];
+    approvedLeaves: LeaveApplication[];
   } | null;
   initialHolidays: Holiday[];
   initialCompanySettings: any; // Define a more specific type if possible
@@ -54,7 +55,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   const { calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
   const employeeId = params.employeeId as string;
 
-  const { employee, employeeAttendance, employeeTasks } = initialEmployeeData || {};
+  const { employee, employeeAttendance, employeeTasks, approvedLeaves } = initialEmployeeData || {};
   
   const monthlyAttendance = useMemo(() => {
       const now = new Date();
@@ -65,10 +66,10 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
   const payrollReport = useMemo(() => {
     if (employee && employeeAttendance && initialCompanySettings) {
       const now = new Date();
-      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays);
+      return calculateMonthlyPayrollDetails(employee, now.getFullYear(), now.getMonth(), employeeAttendance, initialHolidays, approvedLeaves);
     }
     return null;
-  }, [employee, employeeAttendance, initialCompanySettings, calculateMonthlyPayrollDetails, initialHolidays]);
+  }, [employee, employeeAttendance, initialCompanySettings, calculateMonthlyPayrollDetails, initialHolidays, approvedLeaves]);
 
   const geofenceStats = useMemo(() => {
     const stats = { checkInInside: 0, checkOutInside: 0, checkInOutside: 0, checkOutOutside: 0 };
@@ -390,7 +391,11 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                     {payrollReport ? (
                         <>
                             <p><strong>Base Salary:</strong> ₹{payrollReport.baseSalary.toFixed(2)}</p>
-                            <p><strong>Hours Worked:</strong> {payrollReport.totalActualHoursWorked.toFixed(2)} / {payrollReport.totalStandardHoursForMonth.toFixed(2)}</p>
+                            {initialCompanySettings?.salaryCalculationMode === 'check_in_out' ? (
+                                <p><strong>Work Days:</strong> {payrollReport.totalDaysWorked} / {payrollReport.totalDaysInMonth}</p>
+                            ) : (
+                                <p><strong>Hours Worked:</strong> {payrollReport.totalActualHoursWorked.toFixed(2)} / {payrollReport.totalStandardHoursForMonth.toFixed(2)}</p>
+                            )}
                             <p><strong>Deductions:</strong> <span className="text-red-500">-₹{payrollReport.calculatedDeductions.toFixed(2)}</span></p>
                             <p><strong>Advances:</strong> <span className="text-red-500">-₹{payrollReport.totalApprovedAdvances.toFixed(2)}</span></p>
                             <Separator className="my-2"/>
