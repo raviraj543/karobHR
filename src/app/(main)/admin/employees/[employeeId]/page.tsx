@@ -76,12 +76,11 @@ export default function EmployeeDetailPage() {
             setApprovedLeaves(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as LeaveApplication)));
           }));
 
+          // Fetch ALL approved advances for the employee, not just for the current month
           const advancesQuery = query(
             collection(db, `companies/${companyId}/advances`),
             where('employeeId', '==', employeeId),
-            where('status', '==', 'approved'),
-            where('dateRequested', '>=', Timestamp.fromDate(start)),
-            where('dateRequested', '<=', Timestamp.fromDate(end))
+            where('status', '==', 'approved')
           );
           subs.push(onSnapshot(advancesQuery, (snapshot) => {
             setApprovedAdvances(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Advance)));
