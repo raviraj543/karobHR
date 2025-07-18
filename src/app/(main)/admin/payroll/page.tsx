@@ -48,11 +48,10 @@ export default function AdminPayrollPage() {
                 where('startDate', '>=', Timestamp.fromDate(start)),
                 where('startDate', '<=', Timestamp.fromDate(end))
             );
+            // Fetch ALL approved advances, not just from the current month
             const advancesQuery = query(
                 collection(db, `companies/${companyId}/advances`),
-                where('status', '==', 'approved'),
-                where('dateRequested', '>=', Timestamp.fromDate(start)),
-                where('dateRequested', '<=', Timestamp.fromDate(end))
+                where('status', '==', 'approved')
             );
 
             const [leavesSnapshot, advancesSnapshot] = await Promise.all([
