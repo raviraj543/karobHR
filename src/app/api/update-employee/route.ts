@@ -17,7 +17,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Permission denied. Not an administrator.' }, { status: 403 });
     }
 
-    const updates: { [key: string]: any } = {};
     if (newPassword) {
       if (newPassword.length < 6) {
         return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
@@ -25,6 +24,7 @@ export async function POST(request: Request) {
       await authAdmin.updateUser(employeeUid, { password: newPassword });
     }
 
+    const updates: { [key: string]: any } = {};
     if (newSalary !== undefined) {
       const salary = Number(newSalary);
       if (isNaN(salary) || salary < 0) {
