@@ -54,7 +54,7 @@ service cloud.firestore {
     // Users can only manage their own links.
     match /links/{linkId} {
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
   }
 }
