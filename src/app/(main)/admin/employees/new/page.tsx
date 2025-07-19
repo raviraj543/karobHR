@@ -99,8 +99,8 @@ export default function AddNewEmployeePage() {
       if (newEmployee) {
         toast({
           title: "Employee Account Added",
-          description: `Account for ${data.name} (${data.employeeId}) has been added successfully.`,
-          duration: 7000,
+          description: `Account for ${data.name} created. The password is: ${data.password}`,
+          duration: 9000,
         });
         form.reset();
       }
