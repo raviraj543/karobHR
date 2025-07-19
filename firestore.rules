@@ -1,98 +1,60 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Admins have full access to everything.
+    function isAdmin(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+    }
 
-    // Helper function to check if the requester is an admin for a specific company
-    function isAdmin(companyId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-             && userDoc.role == 'admin'
-             && userDoc.companyId == companyId;
+    // Any authenticated user can read company-wide data like settings and announcements.
+    match /companies/{companyId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isAdmin(request.auth.uid);
+
+      match /announcements/{announcementId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && isAdmin(request.auth.uid);
+      }
+
+       match /holidays/{holidayId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && isAdmin(request.auth.uid);
+      }
+      
+      // Users can only access data within their own company.
+      function isUserInCompany() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId;
+      }
+      
+      match /attendanceLog/{logId} {
+          allow read, write: if request.auth != null && isUserInCompany();
+      }
+
+      match /tasks/{taskId} {
+         allow read, write: if request.auth != null && isUserInCompany();
+      }
+       match /leaveApplications/{leaveId} {
+         allow read, write: if request.auth != null && isUserInCompany();
+      }
+       match /advances/{advanceId} {
+         allow read, write: if request.auth != null && isUserInCompany();
+      }
+    }
+
+    // Users can only read their own user document, but admins can read any.
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId || isAdmin(request.auth.uid);
+      allow write: if request.auth.uid == userId || isAdmin(request.auth.uid);
+       // Allow new user creation for anyone (for signup)
+      allow create: if true;
     }
     
-    // Helper function to check if a user belongs to a company
-    function isCompanyMember(companyId) {
-        return request.auth != null
-               && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-               && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId;
-    }
-
-    // --- USERS ---
-    match /users/{userId} {
-      // READ: A user can get their own doc. An admin can get any doc in their company.
-      allow get: if request.auth.uid == userId || isAdmin(get(/databases/$(database)/documents/users/$(userId)).data.companyId);
-
-      // LIST: Allow anyone to query users. This is necessary for the login flow
-      // where the system looks up a user by employeeId.
-      // WARNING: This is permissive. For higher security, this lookup should be
-      // handled by a server-side Cloud Function.
-      allow list: if true;
-      
-      // CREATE:
-      // 1. A user can create their own document if their userId matches their auth.uid (for initial admin signup).
-      // 2. An existing admin can create new user documents within their company.
-      allow create: if request.auth.uid == userId
-                     || isAdmin(request.resource.data.companyId);
-
-      // UPDATE: A user can update their own doc. An admin can update any user in their company.
-      // This rule correctly handles admins approving leave requests on a user's document.
-      allow update: if request.auth.uid == userId || isAdmin(get(/databases/$(database)/documents/users/$(userId)).data.companyId);
-      
-      // DELETE: An admin can delete a user document in their company.
-      allow delete: if isAdmin(get(/databases/$(database)/documents/users/$(userId)).data.companyId);
-    }
-
-    // --- COMPANIES ---
-    match /companies/{companyId} {
-      // Any member of the company can read the settings.
-      allow read: if isCompanyMember(companyId);
-
-      // ONLY an admin of the company can update the settings.
-      allow update: if isAdmin(companyId);
-
-      // Allow an admin to create their own company document during initial signup.
-      allow create: if request.auth.uid == request.resource.data.adminUid
-                      && request.resource.data.companyId == companyId;
-      allow delete: if false; 
-      
-      // --- SUBCOLLECTIONS ---
-      
-      // Attendance: Users can create logs and update their own logs. Admins can manage all.
-      match /attendanceLog/{logId} {
-        allow create: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
-        allow read: if isCompanyMember(companyId);
-        // This rule fixes the checkout permission error for employees.
-        allow update: if isCompanyMember(companyId) && (isAdmin(companyId) || resource.data.userId == request.auth.uid);
-        allow delete: if isAdmin(companyId);
-      }
-      
-      // Advances: Users create requests. Admins can read, update (approve/reject), and delete.
-      match /advances/{advanceId} {
-        allow create: if isCompanyMember(companyId) && request.resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId;
-        // This rule fixes the advance approval permission error for admins.
-        allow read, update, delete: if isAdmin(companyId);
-      }
-      
-      // Leave Applications: Users create requests for themselves. Admins can manage all.
-      match /leaveApplications/{leaveId} {
-        allow create: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
-        allow read, update, delete: if isAdmin(companyId);
-      }
-      
-      // Tasks: Admins create tasks. Employees can update tasks assigned to them.
-      match /tasks/{taskId} {
-        allow create: if isAdmin(companyId);
-        allow read: if isCompanyMember(companyId);
-        allow update: if isCompanyMember(companyId) && (isAdmin(companyId) || request.resource.data.assigneeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId);
-        allow delete: if isAdmin(companyId);
-      }
-      
-      // Generic fallback for other subcollections like Announcements, Holidays.
-      match /{otherSubCollection}/{docId} {
-        allow read: if isCompanyMember(companyId);
-        allow create, update, delete: if isAdmin(companyId);
-      }
+    // Users can only manage their own links.
+    match /links/{linkId} {
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null;
     }
   }
 }
