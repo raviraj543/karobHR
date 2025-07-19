@@ -1,22 +1,27 @@
 
 import { NextResponse } from 'next/server';
 import { authAdmin, firestoreAdmin } from '@/lib/firebase/firebaseAdmin';
-import { getAuth } from 'firebase-admin/auth';
 
 export async function POST(request: Request) {
   try {
-    const { adminUid, employeeUid, newSalary, newPassword } = await request.json();
+    const { employeeUid, newSalary, newPassword } = await request.json();
+    const idToken = request.headers.get('Authorization')?.split('Bearer ')[1];
 
-    if (!adminUid || !employeeUid) {
-      return NextResponse.json({ error: 'Admin UID and Employee UID are required.' }, { status: 400 });
+    if (!idToken) {
+      return NextResponse.json({ error: 'Authorization token not provided.' }, { status: 401 });
+    }
+
+    if (!employeeUid) {
+      return NextResponse.json({ error: 'Employee UID is required.' }, { status: 400 });
     }
     
-    // In a real app, you'd get the token from the request headers and verify it
-    const adminUser = await getAuth().getUser(adminUid);
-    if (adminUser.customClaims?.role !== 'admin') {
+    // Verify the admin's token to ensure they are authenticated and have the correct role
+    const decodedToken = await authAdmin.verifyIdToken(idToken);
+    if (decodedToken.role !== 'admin') {
       return NextResponse.json({ error: 'Permission denied. Not an administrator.' }, { status: 403 });
     }
 
+    // Now proceed with the updates
     if (newPassword) {
       if (newPassword.length < 6) {
         return NextResponse.json({ error: 'Password must be at least 6 characters long.' }, { status: 400 });
@@ -42,6 +47,9 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error("Error updating employee details:", error);
+    if (error.code === 'auth/id-token-expired') {
+        return NextResponse.json({ error: 'Authentication token has expired. Please log in again.' }, { status: 401 });
+    }
     return NextResponse.json({ 
       error: 'An unknown error occurred on the server.',
       details: error.message,

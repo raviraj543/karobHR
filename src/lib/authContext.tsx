@@ -35,7 +35,7 @@ export interface AuthContextType {
     login: (loginId: string, password: string) => Promise<User>;
     logout: () => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeePayload, password: string) => Promise<User | null>;
-    updateEmployeeDetails: (payload: { adminUid: string, employeeUid: string, newSalary?: number, newPassword?: string }) => Promise<void>;
+    updateEmployeeDetails: (payload: { employeeUid: string, newSalary?: number, newPassword?: string }) => Promise<void>;
     addAnnouncement: (title: string, content: string) => Promise<void>;
     addAttendanceEvent: (location: LocationInfo) => Promise<string | null>;
     completeCheckout: (docId: string, workReport: string, location: LocationInfo) => Promise<void>;
@@ -295,10 +295,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
     };
     
-    const updateEmployeeDetails = async (payload: { adminUid: string, employeeUid: string, newSalary?: number, newPassword?: string }) => {
+    const updateEmployeeDetails = async (payload: { employeeUid: string, newSalary?: number, newPassword?: string }) => {
+        if (!auth.currentUser) {
+            throw new Error("Admin not authenticated.");
+        }
+        const token = await auth.currentUser.getIdToken(true);
+
         const response = await fetch('/api/update-employee', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify(payload),
         });
 

@@ -75,8 +75,7 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
     
     setIsUpdating(true);
     try {
-      const payload: { adminUid: string, employeeUid: string, newSalary?: number, newPassword?: string } = {
-        adminUid: adminUser.uid,
+      const payload: { employeeUid: string, newSalary?: number, newPassword?: string } = {
         employeeUid: employee.id,
       };
 
