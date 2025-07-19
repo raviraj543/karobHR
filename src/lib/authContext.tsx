@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -36,6 +35,7 @@ export interface AuthContextType {
     login: (loginId: string, password: string) => Promise<User>;
     logout: () => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeePayload, password: string) => Promise<User | null>;
+    updateEmployeeDetails: (payload: { adminUid: string, employeeUid: string, newSalary?: number, newPassword?: string }) => Promise<void>;
     addAnnouncement: (title: string, content: string) => Promise<void>;
     addAttendanceEvent: (location: LocationInfo) => Promise<string | null>;
     completeCheckout: (docId: string, workReport: string, location: LocationInfo) => Promise<void>;
@@ -285,11 +285,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
     
             await batch.commit();
+            
+            // Manually update state to prevent race condition on signup
+            setUser(newUser);
+            setKarobUser(newUserDocument);
+            
             return newUserDocument;
         }
         return null;
     };
     
+    const updateEmployeeDetails = async (payload: { adminUid: string, employeeUid: string, newSalary?: number, newPassword?: string }) => {
+        const response = await fetch('/api/update-employee', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update employee details.');
+        }
+    };
+
     const addAnnouncement = async (title: string, content: string) => {
         if (!karobUser || !karobUser.companyId) throw new Error("User or company not found.");
         const announcement: Omit<Announcement, 'id'> = {
@@ -455,7 +473,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         employeeAttendanceForMonth: AttendanceEvent[],
         holidaysForMonth: Holiday[],
         approvedLeavesForMonth: LeaveApplication[] = [],
-        allApprovedAdvances: Advance[] = []
+        approvedAdvancesForMonth: Advance[] = []
     ): MonthlyPayrollReport => {
     
         const calculationMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
@@ -548,11 +566,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
         const salaryAfterDeductions = Math.min(calculatedSalary, baseSalary);
     
-        const employeeApprovedAdvances = allApprovedAdvances
-            .filter(adv => adv.employeeId === employee.employeeId && adv.status === 'approved')
-            .reduce((sum, adv) => sum + adv.amount, 0);
+        const totalApprovedAdvances = approvedAdvancesForMonth.reduce((sum, adv) => sum + adv.amount, 0);
     
-        const finalNetPayable = salaryAfterDeductions - employeeApprovedAdvances;
+        const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
     
         return {
             employeeId: employee.employeeId,
@@ -568,7 +584,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             hourlyRate: totalStandardHoursForMonth > 0 ? baseSalary / totalStandardHoursForMonth : 0,
             calculatedDeductions: baseSalary - salaryAfterDeductions,
             salaryAfterDeductions,
-            totalApprovedAdvances: employeeApprovedAdvances,
+            totalApprovedAdvances,
             finalNetPayable: Math.max(0, finalNetPayable),
             totalDaysWorked,
             totalDaysInMonth: daysInMonth,
@@ -621,6 +637,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         addNewEmployee,
+        updateEmployeeDetails,
         addAnnouncement,
         addAttendanceEvent,
         completeCheckout,

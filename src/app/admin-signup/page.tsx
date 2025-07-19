@@ -82,11 +82,16 @@ export default function AdminSignupPage() {
       await addNewEmployee(adminDataForContext, data.password);
       toast({
         title: "Admin Account & Company Registered!",
-        description: `Admin '${data.adminId}' for company '${data.companyName}' created. You can now log in. Company ID: ${newCompanyId}`,
+        description: `Admin '${data.adminId}' for company '${data.companyName}' created. You will be redirected to the admin dashboard.`,
         duration: 9000,
       });
       form.reset();
-      router.push('/login');
+      
+      // Introduce a small delay to allow Firebase state to fully update.
+      setTimeout(() => {
+        router.push('/admin/dashboard');
+      }, 1000); // 1 second delay
+
     } catch (error) {
         toast({
             title: "Error Creating Admin Account",

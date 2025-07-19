@@ -12,12 +12,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee, CalendarOff, CalendarCheck } from 'lucide-react';
+import { Loader2, User as UserIcon, Mail, Clock, DollarSign, BarChart2, BrainCircuit, MapPin, FileText, IndianRupee, CalendarOff, CalendarCheck, Edit, KeyRound } from 'lucide-react';
 import { format, differenceInMinutes, differenceInSeconds, parseISO, formatDistanceToNow, isToday, startOfMonth, endOfMonth, eachDayOfInterval, isSunday, isSameMonth } from 'date-fns';
 import { Label } from '@/components/ui/label';
 import { Timestamp } from 'firebase/firestore';
 import { TruncatedText } from '@/components/ui/truncated-text';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import { Input } from '../ui/input';
 
 const safeParseISO = (dateString: string | Date | Timestamp | undefined | null): Date | null => {
   if (!dateString) return null;
@@ -54,10 +56,70 @@ interface EmployeeDetailsClientProps {
 
 export default function EmployeeDetailsClient({ initialEmployeeData, initialHolidays, initialCompanySettings }: EmployeeDetailsClientProps) {
   const params = useParams();
-  const { calculateMonthlyPayrollDetails, loading: authLoading } = useAuth();
+  const { calculateMonthlyPayrollDetails, loading: authLoading, updateEmployeeDetails, user: adminUser } = useAuth();
+  const { toast } = useToast();
   const employeeId = params.employeeId as string;
 
   const { employee, employeeAttendance, employeeTasks, approvedLeaves, allLeaveApplications, approvedAdvances } = initialEmployeeData || {};
+
+  const [newSalary, setNewSalary] = useState<string>(employee?.baseSalary?.toString() || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    setNewSalary(employee?.baseSalary?.toString() || '');
+  }, [employee]);
+
+  const handleUpdate = async (type: 'salary' | 'password') => {
+    if (!adminUser || !employee) return;
+    
+    setIsUpdating(true);
+    try {
+      const payload: { adminUid: string, employeeUid: string, newSalary?: number, newPassword?: string } = {
+        adminUid: adminUser.uid,
+        employeeUid: employee.id,
+      };
+
+      if (type === 'salary') {
+        const salaryValue = parseFloat(newSalary);
+        if (isNaN(salaryValue) || salaryValue < 0) {
+          toast({ title: 'Invalid Salary', description: 'Please enter a valid positive number for salary.', variant: 'destructive'});
+          setIsUpdating(false);
+          return;
+        }
+        payload.newSalary = salaryValue;
+      }
+
+      if (type === 'password') {
+        if (newPassword.length < 6) {
+           toast({ title: 'Invalid Password', description: 'Password must be at least 6 characters long.', variant: 'destructive'});
+           setIsUpdating(false);
+           return;
+        }
+        payload.newPassword = newPassword;
+      }
+      
+      await updateEmployeeDetails(payload);
+      
+      toast({
+        title: 'Update Successful',
+        description: `Employee's ${type} has been updated.`,
+      });
+
+      if (type === 'password') {
+        setNewPassword('');
+      }
+
+    } catch (error: any) {
+      toast({
+        title: 'Update Failed',
+        description: error.message || `Could not update the employee's ${type}.`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
   
   const monthlyAttendance = useMemo(() => {
       const now = new Date();
@@ -369,6 +431,35 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                     <p className="text-xs text-muted-foreground">Based on hours worked today and monthly salary.</p>
                 </CardContent>
             </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Edit className="mr-2"/>Admin Controls</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                        <Label htmlFor="salary" className="flex items-center"><IndianRupee className="mr-1"/>Update Base Salary</Label>
+                        <div className="flex gap-2">
+                            <Input id="salary" type="number" value={newSalary} onChange={(e) => setNewSalary(e.target.value)} disabled={isUpdating} placeholder="Enter new salary"/>
+                            <Button onClick={() => handleUpdate('salary')} disabled={isUpdating || newSalary === employee.baseSalary?.toString()}>
+                                {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Save
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="password" className="flex items-center"><KeyRound className="mr-1"/>Update Password</Label>
+                        <div className="flex gap-2">
+                            <Input id="password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={isUpdating} placeholder="New password"/>
+                            <Button onClick={() => handleUpdate('password')} disabled={isUpdating || newPassword.length < 6}>
+                                {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Set
+                            </Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader><CardTitle className="flex items-center"><MapPin className="mr-2" />Geofence Compliance</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">

@@ -12,6 +12,7 @@ import {
   doc,
   query,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -37,16 +38,15 @@ import {
   } from "@/components/ui/alert-dialog"
 import { Link as LinkType } from '@/lib/app-types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Globe, Link as LinkIcon, Trash2, Loader2 } from 'lucide-react';
+import { Globe, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 const LinksPage = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, karobUser } = useAuth();
   const { toast } = useToast();
   const [links, setLinks] = useState<LinkType[]>([]);
   const [newLink, setNewLink] = useState({ url: '', title: '', description: '' });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
   useEffect(() => {
     if (user && user.uid) {
@@ -63,7 +63,7 @@ const LinksPage = () => {
   };
 
   const handleAddLink = async () => {
-    if (!user || !user.uid || !newLink.url.trim() || !newLink.title.trim()) {
+    if (!user || !karobUser ||!newLink.url.trim() || !newLink.title.trim()) {
         toast({
             title: "Cannot Add Link",
             description: "Please fill out the URL and Title fields.",
@@ -71,24 +71,33 @@ const LinksPage = () => {
         });
         return;
     }
-    
-    setIsSubmitting(true);
-    try {
-      await addDoc(collection(firestoreDb, 'links'), { ...newLink, userId: user.uid });
-      setNewLink({ url: '', title: '', description: '' });
-      await fetchLinks(); // Await fetch to ensure list is updated
-      setIsDialogOpen(false); // Close dialog on success
-      toast({ title: "Link Added", description: "Your new link has been saved."});
-    } catch (error) {
-      console.error("Error adding link:", error);
-      toast({
-        title: "Error",
-        description: "Could not save the link. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
+
+    if (karobUser.role === 'admin') {
+        try {
+            const usersQuery = query(collection(firestoreDb, 'users'), where('companyId', '==', karobUser.companyId));
+            const usersSnapshot = await getDocs(usersQuery);
+            const batch = writeBatch(firestoreDb);
+            
+            usersSnapshot.forEach(userDoc => {
+                const newLinkRef = doc(collection(firestoreDb, 'links'));
+                batch.set(newLinkRef, { ...newLink, userId: userDoc.id });
+            });
+
+            await batch.commit();
+            toast({ title: "Links Distributed", description: "This link has been added for all users in the company." });
+
+        } catch(error) {
+            console.error("Error distributing link to all users:", error);
+            toast({ title: "Distribution Failed", description: "Could not add the link for all users.", variant: "destructive"});
+        }
+    } else {
+        await addDoc(collection(firestoreDb, 'links'), { ...newLink, userId: user.uid });
+        toast({ title: "Link Added", description: "Your new link has been saved."});
     }
+
+    setNewLink({ url: '', title: '', description: '' });
+    fetchLinks();
+    setIsDialogOpen(false);
   };
 
   const handleDeleteLink = async (linkId: string) => {
@@ -149,10 +158,7 @@ const LinksPage = () => {
                     value={newLink.description}
                     onChange={(e) => setNewLink({ ...newLink, description: e.target.value })}
                 />
-                <Button onClick={handleAddLink} disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Add Link
-                </Button>
+                <Button onClick={handleAddLink}>Add Link</Button>
                 </div>
             </DialogContent>
         </Dialog>
@@ -162,7 +168,19 @@ const LinksPage = () => {
         {links.map((link) => (
         <Card key={link.id} className="flex flex-col">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap.tsx
+[filepath]src/lib/app-types.ts
+export type UserRole = 'admin' | 'manager' | 'employee' | null;
+
+export type SalaryCalculationMode = 'hourly_deduction' | 'check_in_out';
+
+export interface CompanySettings {
+  companyId: string;
+  companyName: string;
+  adminUid: string;
+  createdAt: string; // ISO string or Firestore Timestamp
+  officeLocation?: {
+    name?: string; // e-2">
                     <Globe className="h-5 w-5 text-primary"/>
                     <span className="break-words">{link.title}</span>
                 </CardTitle>
