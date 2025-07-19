@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase/firebase'; // Corrected import
+import { db as firestoreDb } from '@/lib/firebase/firebase';
 import {
   collection,
   addDoc,
@@ -12,7 +12,6 @@ import {
   query,
   where,
   writeBatch,
-  // Firestore, // No longer needed
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -48,7 +47,6 @@ import { X, Globe, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 const LinksPage = () => {
-  // const [db, setDb] = useState<Firestore | null>(null); // Removed this state
   const { user, loading } = useAuth();
   const [links, setLinks] = useState<LinkType[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -56,26 +54,24 @@ const LinksPage = () => {
   const [newCategory, setNewCategory] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
-  // Removed the useEffect that was calling getFirebaseInstances and setting db state
-  
   useEffect(() => {
-    if (user && user.uid && db) {
+    if (user && user.uid) {
       fetchCategories();
       fetchLinks();
     }
-  }, [user, selectedCategory]); // Removed db from dependency array as it's directly imported
+  }, [user, selectedCategory]);
 
   const fetchCategories = async () => {
-    if (!user || !user.uid || !db) return;
-    const q = query(collection(db, 'categories'), where('userId', '==', user.uid));
+    if (!user || !user.uid) return;
+    const q = query(collection(firestoreDb, 'categories'), where('userId', '==', user.uid));
     const querySnapshot = await getDocs(q);
     const userCategories = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
     setCategories(userCategories);
   };
 
   const fetchLinks = async () => {
-    if (!user || !user.uid || !db) return;
-    let linksQuery = query(collection(db, 'links'), where('userId', '==', user.uid));
+    if (!user || !user.uid) return;
+    let linksQuery = query(collection(firestoreDb, 'links'), where('userId', '==', user.uid));
     if (selectedCategory) {
       linksQuery = query(linksQuery, where('categoryId', '==', selectedCategory));
     }
@@ -85,13 +81,13 @@ const LinksPage = () => {
   };
 
   const handleAddCategory = async () => {
-    if (!user || !user.uid || !newCategory.trim() || !db) {
+    if (!user || !user.uid || !newCategory.trim()) {
       console.error("Pre-condition failed for adding category.");
       return;
     }
   
     try {
-      await addDoc(collection(db, 'categories'), { name: newCategory, userId: user.uid });
+      await addDoc(collection(firestoreDb, 'categories'), { name: newCategory, userId: user.uid });
       setNewCategory('');
       fetchCategories();
     } catch (error) {
@@ -100,18 +96,18 @@ const LinksPage = () => {
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!db || !user || !user.uid) return;
+    if (!user || !user.uid) return;
 
     try {
-        const batch = writeBatch(db);
+        const batch = writeBatch(firestoreDb);
 
-        const linksQuery = query(collection(db, 'links'), where('userId', '==', user.uid), where('categoryId', '==', categoryId));
+        const linksQuery = query(collection(firestoreDb, 'links'), where('userId', '==', user.uid), where('categoryId', '==', categoryId));
         const linksSnapshot = await getDocs(linksQuery);
         linksSnapshot.forEach(doc => {
             batch.delete(doc.ref);
         });
 
-        const categoryRef = doc(db, 'categories', categoryId);
+        const categoryRef = doc(firestoreDb, 'categories', categoryId);
         batch.delete(categoryRef);
 
         await batch.commit();
@@ -129,15 +125,14 @@ const LinksPage = () => {
   };
 
   const handleAddLink = async () => {
-    if (!user || !user.uid || !newLink.url.trim() || !newLink.title.trim() || !newLink.categoryId || !db) return;
-    await addDoc(collection(db, 'links'), { ...newLink, userId: user.uid });
+    if (!user || !user.uid || !newLink.url.trim() || !newLink.title.trim() || !newLink.categoryId) return;
+    await addDoc(collection(firestoreDb, 'links'), { ...newLink, userId: user.uid });
     setNewLink({ url: '', title: '', description: '', categoryId: '' });
     fetchLinks();
   };
 
   const handleDeleteLink = async (linkId: string) => {
-    if(!db) return
-    await deleteDoc(doc(db, 'links', linkId));
+    await deleteDoc(doc(firestoreDb, 'links', linkId));
     fetchLinks();
   };
 
