@@ -14,7 +14,7 @@ export interface CompanySettings {
     radius: number; // in meters
   };
   salaryCalculationMode?: SalaryCalculationMode;
-  annualLeaveEntitlement?: number; // Added field for company-wide leave days
+  annualLeaveEntitlement?: number;
 }
 
 export interface Advance {
@@ -32,7 +32,7 @@ export interface LocationInfo {
   longitude: number;
   accuracy?: number;
   name?: string;
-  radius?: number; // Confirmed: This property exists
+  radius?: number;
 }
 
 export interface AttendanceEvent {
@@ -135,7 +135,6 @@ export interface MonthlyPayrollReport {
   salaryAfterDeductions: number;
   totalApprovedAdvances: number;
   finalNetPayable: number;
-  // Fields for check_in_out mode
   totalDaysWorked?: number;
   totalDaysInMonth?: number;
 }
@@ -172,17 +171,15 @@ export interface Link {
   url: string;
   title: string;
   description?: string;
-  categoryId: string;
-  userId: string; // The user who created the link
+  userId: string;
 }
 
 export interface Category {
   id: string;
   name: string;
-  userId: string; // The user who created the category
+  userId: string;
 }
 
-// Updated: Generic PageProps type for Next.js dynamic routes
 export type PageProps<T extends Record<string, string>> = {
   params: T;
 };
