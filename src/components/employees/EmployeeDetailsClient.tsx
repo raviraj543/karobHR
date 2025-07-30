@@ -366,13 +366,23 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
                 <CardContent>
                      <Table>
                         <TableHeader>
-                            <TableRow><TableHead>Task</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead></TableRow>
+                            <TableRow>
+                                <TableHead>Task</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Priority</TableHead>
+                                <TableHead>Description</TableHead>
+                            </TableRow>
                         </TableHeader>
                         <TableBody>
                             {employeeTasks?.slice(0, 5).map(task => (
-                                <TableRow key={task.id}><TableCell>{task.title}</TableCell><TableCell><Badge>{task.status}</Badge></TableCell><TableCell>{task.priority}</TableCell></TableRow>
+                                <TableRow key={task.id}>
+                                    <TableCell>{task.title}</TableCell>
+                                    <TableCell><Badge>{task.status}</Badge></TableCell>
+                                    <TableCell>{task.priority}</TableCell>
+                                    <TableCell><TruncatedText text={task.description} /></TableCell>
+                                </TableRow>
                             ))}
-                             {employeeTasks?.length === 0 && <TableRow><TableCell colSpan={3} className="text-center">No tasks assigned.</TableCell></TableRow>}
+                             {employeeTasks?.length === 0 && <TableRow><TableCell colSpan={4} className="text-center">No tasks assigned.</TableCell></TableRow>}
                         </TableBody>
                      </Table>
                 </CardContent>
