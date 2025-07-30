@@ -168,20 +168,19 @@ export default function MyTasksPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Task Title</TableHead>
-                  <TableHead className="hidden md:table-cell">Description</TableHead>
+                  <TableHead>Task Details</TableHead>
                   <TableHead>Due Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead>Actions</TableHead> {/* Added for the Edit button */}
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTasks.map(task => (
                   <TableRow key={task.id}>
-                    <TableCell className="font-medium">{task.title}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      <TruncatedText text={task.description} wordLimit={20} />
+                    <TableCell>
+                      <div className="font-medium">{task.title}</div>
+                      <div className="text-sm text-muted-foreground">{task.description}</div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       <div className="flex items-center gap-1">
