@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, AlertTriangle, RefreshCw, FileText } from 'lucide-react';
 import { formatDistanceToNow, differenceInMilliseconds, format, isToday, parseISO } from 'date-fns';
 import { formatDuration } from '@/lib/dateUtils';
+import { TruncatedText } from '@/components/ui/truncated-text';
 
 interface EmployeeAttendanceStatus {
   user: User;
@@ -102,7 +103,7 @@ export default function AdminLiveAttendancePage() {
        }
 
       // Find the latest checked-out event today to get the report
-      const latestCheckoutEventToday = userEventsToday.find(event => event.type === 'check-out' && event.workReport);
+      const latestCheckoutEventToday = userEvents.find(event => event.type === 'check-out' && event.workReport);
       if(latestCheckoutEventToday) {
           dailyWorkReport = latestCheckoutEventToday.workReport; // Extract the report
       }
@@ -213,7 +214,10 @@ export default function AdminLiveAttendancePage() {
                   </TableCell>
                    <TableCell className="text-sm">
                       {workReport ? (
-                          <div className="flex items-center"><FileText className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> {workReport}</div>
+                          <div className="flex items-start">
+                             <FileText className="mr-1.5 h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" /> 
+                             <TruncatedText text={workReport} wordLimit={10} />
+                          </div>
                       ) : (
                           <span className="text-muted-foreground text-xs">No report filed today.</span>
                       )}

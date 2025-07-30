@@ -279,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     companyName: finalCompanyName,
                     adminUid: newUser.uid,
                     createdAt: new Date().toISOString(),
+                    officeHours: { openingTime: '09:00', closingTime: '18:00'},
                     salaryCalculationMode: 'hourly_deduction',
                     annualLeaveEntitlement: 20,
                 });

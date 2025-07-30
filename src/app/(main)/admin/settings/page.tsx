@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, Loader2, LocateFixed, Settings } from 'lucide-react';
+import { MapPin, Loader2, LocateFixed, Settings, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { CompanySettings, LocationInfo, SalaryCalculationMode } from '@/lib/app-types.ts';
@@ -40,6 +40,17 @@ export default function AdminSettingsPage() {
             name: prevState.officeLocation?.name || "Main Office",
             [field]: value,
         },
+    }));
+  };
+
+  const handleTimeChange = (field: 'openingTime' | 'closingTime', value: string) => {
+    setFormState(prevState => ({
+      ...prevState,
+      officeHours: {
+        openingTime: prevState.officeHours?.openingTime || '09:00',
+        closingTime: prevState.officeHours?.closingTime || '18:00',
+        [field]: value,
+      }
     }));
   };
 
@@ -111,6 +122,7 @@ export default function AdminSettingsPage() {
           longitude: lon,
           radius: radius,
         },
+        officeHours: formState.officeHours,
         salaryCalculationMode: formState.salaryCalculationMode,
       };
       await updateCompanySettings(settingsToSave, karobUser.companyId);
@@ -137,6 +149,14 @@ export default function AdminSettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <Loader2 className="animate-spin" /> Loading geofence settings...
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center"><Clock className="mr-2 h-5 w-5 text-primary" />Office Hours</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Loader2 className="animate-spin" /> Loading office hours settings...
                 </CardContent>
             </Card>
             <Card>
@@ -188,6 +208,26 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
       
+       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center"><Clock className="mr-2 h-5 w-5 text-primary" /> Office Hours</CardTitle>
+          <CardDescription>Set the official opening and closing times for your office.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="openingTime">Opening Time</Label>
+              <Input id="openingTime" type="time" value={formState.officeHours?.openingTime || ''} onChange={(e) => handleTimeChange('openingTime', e.target.value)} disabled={isActionDisabled}/>
+            </div>
+            <div>
+              <Label htmlFor="closingTime">Closing Time</Label>
+              <Input id="closingTime" type="time" value={formState.officeHours?.closingTime || ''} onChange={(e) => handleTimeChange('closingTime', e.target.value)} disabled={isActionDisabled}/>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">The closing time will be used for the daily automatic checkout process.</p>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
             <CardTitle className="flex items-center"><Settings className="mr-2 h-5 w-5 text-primary" />Salary Calculation</CardTitle>

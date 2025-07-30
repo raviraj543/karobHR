@@ -1,3 +1,4 @@
+
 export type UserRole = 'admin' | 'manager' | 'employee' | null;
 
 export type SalaryCalculationMode = 'hourly_deduction' | 'check_in_out';
@@ -12,6 +13,10 @@ export interface CompanySettings {
     latitude: number;
     longitude: number;
     radius: number; // in meters
+  };
+  officeHours?: {
+    openingTime: string; // "HH:MM" format
+    closingTime: string; // "HH:MM" format
   };
   salaryCalculationMode?: SalaryCalculationMode;
   annualLeaveEntitlement?: number;

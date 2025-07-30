@@ -9,7 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose
 } from '@/components/ui/dialog';
+import { ScrollArea } from './scroll-area';
 
 interface TruncatedTextProps {
   text: string;
@@ -30,15 +32,20 @@ export function TruncatedText({ text, wordLimit = 4 }: TruncatedTextProps) {
       <span>{truncatedText}</span>
       <Dialog>
         <DialogTrigger asChild>
-          <Button variant="link" size="sm" className="p-0 h-auto">
+          <Button variant="link" size="sm" className="p-0 h-auto self-start">
             See More
           </Button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Full Text</DialogTitle>
           </DialogHeader>
-          <div className="py-4 whitespace-pre-wrap">{text}</div>
+          <ScrollArea className="h-48 my-4">
+             <div className="whitespace-pre-wrap p-1">{text}</div>
+          </ScrollArea>
+           <DialogClose asChild>
+             <Button type="button" variant="secondary">Close</Button>
+           </DialogClose>
         </DialogContent>
       </Dialog>
     </div>
