@@ -6,7 +6,7 @@ import type { AttendanceEvent, LocationInfo } from '@/lib/app-types.ts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { LogIn, LogOut, FileText, Loader2, AlertCircle, MapPin, LocateFixed } from 'lucide-react';
+import { LogIn, LogOut, FileText, Loader2, AlertCircle, MapPin, LocateFixed, Ban } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -32,6 +32,7 @@ export default function AttendancePage() {
   const [locationStatus, setLocationStatus] = useState<LocationStatus>('idle');
   const [currentLocation, setCurrentLocation] = useState<LocationInfo | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
+  const [isWithinGeofence, setIsWithinGeofence] = useState<boolean>(false);
 
   useEffect(() => {
     document.title = 'My Attendance - KarobHR';
@@ -114,6 +115,9 @@ export default function AttendancePage() {
                 officeLocation.longitude
             );
             setDistance(calculatedDist);
+            const isInside = calculatedDist <= (officeLocation.radius || 100);
+            setIsWithinGeofence(isInside);
+
             const friendlyDist = calculatedDist > 1000 ? `${(calculatedDist / 1000).toFixed(2)} km` : `${calculatedDist.toFixed(0)} m`;
             toast({
                 title: "Location Updated",
@@ -121,6 +125,7 @@ export default function AttendancePage() {
             });
         } else {
             setDistance(null);
+            setIsWithinGeofence(false); // Can't be within a geofence that doesn't exist
             toast({
                 variant: 'destructive',
                 title: "No Geofence Configured",
@@ -143,6 +148,7 @@ export default function AttendancePage() {
         setLocationStatus('error');
         setCurrentLocation(null);
         setDistance(null);
+        setIsWithinGeofence(false);
         let description = error.message;
         if (error.code === error.PERMISSION_DENIED) {
             description = "Location permission denied. Please enable it in your browser settings.";
@@ -174,6 +180,10 @@ export default function AttendancePage() {
       toast({ title: "Location Needed", description: "Please fetch your location before checking in.", variant: "destructive" });
       return;
     }
+    if (!isWithinGeofence) {
+        toast({ title: "Action Blocked", description: "You cannot check in because you are outside the office geofence.", variant: "destructive" });
+        return;
+    }
     if (!companySettings || !companySettings.officeLocation) {
         toast({
             title: "Missing Geofence Configuration",
@@ -188,7 +198,7 @@ export default function AttendancePage() {
       const newDocId = await addAttendanceEvent(currentLocation);
       if (newDocId) {
         toast({ title: "Check-In Successful!", description: "Your check-in has been recorded." });
-        setCurrentLocation(null); setDistance(null); setLocationStatus('idle');
+        setCurrentLocation(null); setDistance(null); setLocationStatus('idle'); setIsWithinGeofence(false);
       }
     } catch (error: any) {
       toast({ title: "Check-In Failed", description: error.message || "Could not record check-in.", variant: "destructive" });
@@ -200,6 +210,10 @@ export default function AttendancePage() {
      if (!currentLocation) {
       toast({ title: "Location Needed", description: "Please fetch your location before checking out.", variant: "destructive" });
       return;
+    }
+    if (!isWithinGeofence) {
+        toast({ title: "Action Blocked", description: "You cannot check out because you are outside the office geofence.", variant: "destructive" });
+        return;
     }
     if (!companySettings || !companySettings.officeLocation) {
         toast({
@@ -229,7 +243,7 @@ export default function AttendancePage() {
       await completeCheckout(currentDayDocId, workReport, currentLocation);
       toast({ title: "Check-Out Successful!", description: "Your work report and check-out have been recorded." });
       setWorkReport('');
-      setCurrentLocation(null); setDistance(null); setLocationStatus('idle');
+      setCurrentLocation(null); setDistance(null); setLocationStatus('idle'); setIsWithinGeofence(false);
     } catch (error: any) {
       toast({ title: "Check-Out Failed", description: error.message || "Could not record check-out.", variant: "destructive" });
       setAttendanceStatus('checked-in');
@@ -256,13 +270,12 @@ export default function AttendancePage() {
                 }
 
                 const geofenceRadius = officeLocation.radius ?? 0;
-                const isInside = distance <= geofenceRadius;
                 const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
 
                 return (
                   <div>
-                    <Alert variant={isInside ? 'default' : 'destructive'} className="text-center">
-                        <AlertTitle>{isInside ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
+                    <Alert variant={isWithinGeofence ? 'default' : 'destructive'} className="text-center">
+                        <AlertTitle>{isWithinGeofence ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
                         <AlertDescription>
                           Approx. {friendlyDist} away from the required location. (Max: {geofenceRadius}m)
                         </AlertDescription>
@@ -325,13 +338,15 @@ export default function AttendancePage() {
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-          <Button size="lg" className="w-full py-6 text-lg" onClick={handleCheckIn} disabled={isProcessing || locationStatus !== 'success' || isCheckedIn}>
-            {attendanceStatus === 'processing-check-in' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-            <LogIn className="mr-2 h-5 w-5" /> Check In
+          <Button size="lg" className="w-full py-6 text-lg" onClick={handleCheckIn} disabled={isProcessing || locationStatus !== 'success' || !isWithinGeofence || isCheckedIn}>
+            {isProcessing && attendanceStatus === 'processing-check-in' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+            {!isWithinGeofence && locationStatus === 'success' ? <Ban className="mr-2 h-5 w-5"/> : <LogIn className="mr-2 h-5 w-5" />}
+            Check In
           </Button>
-          <Button size="lg" variant="outline" className="w-full py-6 text-lg" onClick={handleCheckOut} disabled={isProcessing || locationStatus !== 'success' || !isCheckedIn}>
-            {attendanceStatus === 'processing-check-out' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-            <LogOut className="mr-2 h-5 w-5" /> Check Out
+          <Button size="lg" variant="outline" className="w-full py-6 text-lg" onClick={handleCheckOut} disabled={isProcessing || locationStatus !== 'success' || !isWithinGeofence || !isCheckedIn}>
+            {isProcessing && attendanceStatus === 'processing-check-out' && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+            {!isWithinGeofence && locationStatus === 'success' ? <Ban className="mr-2 h-5 w-5"/> : <LogOut className="mr-2 h-5 w-5" />}
+            Check Out
           </Button>
       </div>
       
