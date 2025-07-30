@@ -12,6 +12,7 @@ import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, AlertTriangle, 
 import { formatDistanceToNow, differenceInMilliseconds, format, isToday, parseISO } from 'date-fns';
 import { formatDuration } from '@/lib/dateUtils';
 import { TruncatedText } from '@/components/ui/truncated-text';
+import { useToast } from '@/hooks/use-toast';
 
 interface EmployeeAttendanceStatus {
   user: User;
@@ -21,7 +22,7 @@ interface EmployeeAttendanceStatus {
   location?: { latitude: number; longitude: number; accuracy?: number } | null;
   workingHoursToday: string;
   liveCheckInTime?: string;
-  workReport?: string | null; // Added work report field
+  workReport?: string | null;
 }
 
 const LiveDuration = ({ checkInTime }: { checkInTime: string }) => {
@@ -49,17 +50,42 @@ const LiveDuration = ({ checkInTime }: { checkInTime: string }) => {
 };
 
 export default function AdminLiveAttendancePage() {
-  const { allUsers, attendanceLog, loading: authLoading } = useAuth();
+  const { allUsers, attendanceLog, loading: authLoading, runAutoCheckout } = useAuth();
+  const { toast } = useToast();
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 
   useEffect(() => {
     document.title = 'Live Employee Attendance - Admin - KarobHR';
     const timer = setInterval(() => {
       setLastRefreshed(new Date());
-    }, 10000); // Auto-refresh every 10 seconds
+    }, 10000);
+
+    // Run auto-checkout logic when an admin visits this page
+    const performAutoCheckout = async () => {
+        try {
+            const checkoutCount = await runAutoCheckout();
+            if (checkoutCount > 0) {
+                toast({
+                    title: "Auto-Checkout Complete",
+                    description: `${checkoutCount} employee(s) who forgot to check out yesterday have been automatically checked out.`,
+                });
+            }
+        } catch (error) {
+            console.error("Auto-checkout failed:", error);
+            toast({
+                title: "Auto-Checkout Error",
+                description: "Could not perform the automatic checkout process.",
+                variant: "destructive",
+            });
+        }
+    };
+    
+    if (runAutoCheckout) {
+       performAutoCheckout();
+    }
 
     return () => clearInterval(timer);
-  }, []);
+  }, [runAutoCheckout, toast]);
 
   const employeeAttendanceData: EmployeeAttendanceStatus[] = useMemo(() => {
     if (authLoading) return [];
@@ -80,32 +106,29 @@ export default function AdminLiveAttendancePage() {
       let isWithinGeofence: boolean | null | undefined;
       let location: EmployeeAttendanceStatus['location'];
       let liveCheckInTime: string | undefined;
-      let totalHoursToday = 0;  // Track in total hours
-      let dailyWorkReport: string | null | undefined; // Variable for the report
+      let totalHoursToday = 0;
+      let dailyWorkReport: string | null | undefined;
 
-       // Add up totalHours from 'Checked Out' events and calculate live duration
        userEventsToday.forEach(event => {
           if (event.status === 'Checked Out' && event.totalHours !== undefined && event.totalHours !== null) {
              totalHoursToday += event.totalHours;
           }
        });
 
-       // Handle live check-in
        const liveEvent = userEventsToday.find(event => event.type === 'check-in' && event.status === 'Checked In');
        if (liveEvent && liveEvent.timestamp) {
           const checkInDate = parseISO(liveEvent.timestamp);
            if (isToday(checkInDate)) {
                const currentSessionDurationMs = todayDate.getTime() - checkInDate.getTime();
-               const currentSessionDurationHours = currentSessionDurationMs / (1000 * 60 * 60); // Convert to hours
-               totalHoursToday += currentSessionDurationHours; // Add live session duration
-               liveCheckInTime = liveEvent.timestamp; // Set for LiveDuration component
+               const currentSessionDurationHours = currentSessionDurationMs / (1000 * 60 * 60);
+               totalHoursToday += currentSessionDurationHours;
+               liveCheckInTime = liveEvent.timestamp;
            }
        }
-
-      // Find the latest checked-out event today to get the report
+      
       const latestCheckoutEventToday = userEvents.find(event => event.type === 'check-out' && event.workReport);
       if(latestCheckoutEventToday) {
-          dailyWorkReport = latestCheckoutEventToday.workReport; // Extract the report
+          dailyWorkReport = latestCheckoutEventToday.workReport;
       }
 
 
@@ -114,7 +137,10 @@ export default function AdminLiveAttendancePage() {
         lastActivityTime = latestEvent.timestamp;
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.checkInLocation;
-        // Note: liveCheckInTime and dailyWorkReport are already set above
+        // If the latest event is a checkout, its work report is the one we want to show
+        if (latestEvent.type === 'check-out' && latestEvent.workReport) {
+          dailyWorkReport = latestEvent.workReport;
+        }
       }
 
       return {
@@ -124,11 +150,11 @@ export default function AdminLiveAttendancePage() {
         isWithinGeofence,
         location,
         liveCheckInTime,
-        workingHoursToday: formatDuration(totalHoursToday * 60 * 60 * 1000), // Format total hours into a duration
-        workReport: dailyWorkReport, // Include the work report in the status object
+        workingHoursToday: formatDuration(totalHoursToday * 60 * 60 * 1000),
+        workReport: dailyWorkReport,
       };
     }).sort((a,b) => (a.user.name || "").localeCompare(b.user.name || ""));
-  }, [allUsers, attendanceLog, authLoading, lastRefreshed]); // Add attendanceLog as dependency
+  }, [allUsers, attendanceLog, authLoading, lastRefreshed]);
 
 
   if (authLoading) {
@@ -157,7 +183,7 @@ export default function AdminLiveAttendancePage() {
         <CardHeader>
           <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" />Employee Status</CardTitle>
           <CardDescription>
-            Current attendance status and activity for all employees and managers.
+            Current attendance status and activity for all employees and managers. Overdue check-ins are processed automatically on this page.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -170,11 +196,11 @@ export default function AdminLiveAttendancePage() {
                 <TableHead>Geofence</TableHead>
                 <TableHead>Live Session Duration</TableHead>
                 <TableHead>Total Hours (Today)</TableHead>
-                <TableHead>Daily Report</TableHead>{/* Added new table header */}
+                <TableHead>Daily Report</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employeeAttendanceData.map(({ user, status, lastActivityTime, isWithinGeofence, liveCheckInTime, workingHoursToday, workReport }) => ( // Destructure workReport
+              {employeeAttendanceData.map(({ user, status, lastActivityTime, isWithinGeofence, liveCheckInTime, workingHoursToday, workReport }) => (
                 <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell>
                     <div className="flex items-center space-x-3">
@@ -221,12 +247,12 @@ export default function AdminLiveAttendancePage() {
                       ) : (
                           <span className="text-muted-foreground text-xs">No report filed today.</span>
                       )}
-                   </TableCell>{/* Added new table cell */}
+                   </TableCell>
                 </TableRow>
               ))}
               {employeeAttendanceData.length === 0 && !authLoading && (
                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8"> {/* Updated colspan */}
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       No employee attendance data available for today.
                     </TableCell>
                  </TableRow>

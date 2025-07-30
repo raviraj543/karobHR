@@ -4,12 +4,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, writeBatch, Timestamp } from 'firebase/firestore';
 import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/app-types';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration } from '@/lib/dateUtils';
 import { calculateDistance } from './locationUtils';
-import { isToday, differenceInSeconds } from 'date-fns';
+import { isToday, differenceInSeconds, startOfYesterday, endOfYesterday } from 'date-fns';
 
 
 // Redefined NewEmployeeData to be more specific for clarity
@@ -49,6 +49,7 @@ export interface AuthContextType {
     approveAdvance: (advanceId: string) => Promise<void>;
     rejectAdvance: (advanceId: string) => Promise<void>;
     addHoliday: (holidayData: Omit<Holiday, 'id' | 'status'>) => Promise<void>;
+    runAutoCheckout: () => Promise<number>;
     calculateMonthlyPayrollDetails: (
         employee: User,
         year: number,
@@ -73,6 +74,28 @@ export interface AuthContextType {
     holidays: Holiday[];
     leaveRequests: LeaveApplication[];
     advanceRequests: Advance[];
+    // Links and Categories
+    links: Link[];
+    categories: Category[];
+    addLink: (link: Omit<Link, 'id' | 'userId'>) => Promise<void>;
+    deleteLink: (linkId: string) => Promise<void>;
+    addCategory: (name: string) => Promise<void>;
+    deleteCategory: (categoryId: string) => Promise<void>;
+}
+
+export interface Link {
+    id: string;
+    url: string;
+    title: string;
+    description?: string;
+    userId: string;
+    categoryId?: string;
+}
+  
+export interface Category {
+    id: string;
+    name: string;
+    userId: string;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [userLeaveRequests, setUserLeaveRequests] = useState<LeaveApplication[]>([]);
     const [userAdvances, setUserAdvances] = useState<Advance[]>([]);
     const [userAttendance, setUserAttendance] = useState<AttendanceEvent[]>([]);
+    const [links, setLinks] = useState<Link[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
     
     // Admin-specific data slices
     const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -130,6 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setAllAdvanceRequests([]);
                 setUserAdvances([]);
                 setUserAttendance([]);
+                setLinks([]);
+                setCategories([]);
                 setLoading(false);
             }
         });
@@ -203,13 +230,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
              setAllTasks([]);
         }
 
+        const linksQuery = query(collection(db, 'links'), where('userId', '==', karobUser.id));
+        unsubscribers.push(onSnapshot(linksQuery, (snapshot) => {
+            setLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Link)));
+        }));
+        
+        const categoriesQuery = query(collection(db, 'categories'), where('userId', '==', karobUser.id));
+        unsubscribers.push(onSnapshot(categoriesQuery, (snapshot) => {
+            setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
+        }));
+
         setLoading(false);
 
         return () => {
             unsubscribers.forEach(unsub => unsub());
         };
 
-    }, [karobUser, loading]); // Added loading to dependency array to re-run effect when loading state changes
+    }, [karobUser, loading]);
 
     const login = async (loginId: string, password: string): Promise<User> => {
         const usersRef = collection(db, "users");
@@ -287,9 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
             await batch.commit();
             
-            // Manually update state to prevent race condition on signup
-            setUser(newUser);
-            setKarobUser(newUserDocument);
+            // Cannot call setUser and setKarobUser here as it may interfere with onAuthStateChanged listener
             
             return newUserDocument;
         }
@@ -475,6 +510,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await addDoc(collection(db, `companies/${karobUser.companyId}/holidays`), holiday);
     };
 
+    const runAutoCheckout = useCallback(async (): Promise<number> => {
+        const currentCompanyId = karobUser?.companyId;
+        if (!currentCompanyId) return 0;
+    
+        const attendanceLogRef = collection(db, `companies/${currentCompanyId}/attendanceLog`);
+        const startOfYesterdayTimestamp = Timestamp.fromDate(startOfYesterday());
+        const endOfYesterdayTimestamp = Timestamp.fromDate(endOfYesterday());
+    
+        const q = query(
+            attendanceLogRef,
+            where('status', '==', 'Checked In'),
+            where('checkInTime', '>=', startOfYesterdayTimestamp),
+            where('checkInTime', '<=', endOfYesterdayTimestamp)
+        );
+    
+        const checkInsToProcess = await getDocs(q);
+        if (checkInsToProcess.empty) {
+            return 0;
+        }
+    
+        const batch = writeBatch(db);
+        let checkoutCount = 0;
+    
+        for (const docSnap of checkInsToProcess.docs) {
+            const checkInData = docSnap.data() as AttendanceEvent;
+            const employeeRef = doc(db, 'users', checkInData.userId);
+            const employeeSnap = await getDoc(employeeRef);
+    
+            if (employeeSnap.exists()) {
+                const employeeData = employeeSnap.data() as User;
+                const standardDailyHours = employeeData.standardDailyHours || 8;
+                const checkInTime = new Date(checkInData.checkInTime!);
+                const checkOutTime = new Date(checkInTime.getTime() + standardDailyHours * 60 * 60 * 1000);
+    
+                batch.update(docSnap.ref, {
+                    status: 'Checked Out',
+                    checkOutTime: checkOutTime.toISOString(),
+                    totalHours: standardDailyHours,
+                    workReport: 'System auto-checkout: Employee did not perform checkout.',
+                    type: 'check-out'
+                });
+                checkoutCount++;
+            }
+        }
+    
+        await batch.commit();
+        return checkoutCount;
+    }, [karobUser]);
+
     const calculateMonthlyPayrollDetails = useCallback((
         employee: User,
         year: number,
@@ -634,6 +718,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return totalMinutesWorkedToday * perMinuteRate;
         }
       }, []);
+    
+    // Link and Category Management
+    const addLink = async (linkData: Omit<Link, 'id' | 'userId'>) => {
+        if (!karobUser) throw new Error("User not authenticated");
+        await addDoc(collection(db, 'links'), { ...linkData, userId: karobUser.id });
+    };
+
+    const deleteLink = async (linkId: string) => {
+        await deleteDoc(doc(db, 'links', linkId));
+    };
+
+    const addCategory = async (name: string) => {
+        if (!karobUser) throw new Error("User not authenticated");
+        await addDoc(collection(db, 'categories'), { name, userId: karobUser.id });
+    };
+
+    const deleteCategory = async (categoryId: string) => {
+        await deleteDoc(doc(db, 'categories', categoryId));
+    };
 
 
     const value: AuthContextType = {
@@ -660,6 +763,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         approveAdvance,
         rejectAdvance,
         addHoliday,
+        runAutoCheckout,
         calculateMonthlyPayrollDetails,
         calculateTodayEstimatedEarning,
         allUsers,
@@ -670,6 +774,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userTasks,
         leaveRequests: karobUser?.role === 'admin' ? allLeaveRequests : userLeaveRequests,
         advanceRequests: karobUser?.role === 'admin' ? allAdvanceRequests : userAdvances,
+        links,
+        categories,
+        addLink,
+        deleteLink,
+        addCategory,
+        deleteCategory,
     };
 
     return (
