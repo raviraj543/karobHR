@@ -2,6 +2,24 @@
 import { differenceInMilliseconds, parseISO, getDay, getDaysInMonth, setDate, startOfMonth } from 'date-fns';
 
 /**
+ * Safely parses an ISO date string.
+ * @param dateString The ISO date string to parse.
+ * @returns A Date object if parsing is successful, otherwise null.
+ */
+export const safeParseISO = (dateString: string | Date): Date | null => {
+  if (dateString instanceof Date) {
+    return dateString;
+  }
+  try {
+    const parsed = parseISO(dateString);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  } catch (e) {
+    console.error("Error parsing date string:", dateString, e);
+    return null;
+  }
+};
+
+/**
  * Formats a duration in milliseconds into a string like "Xh Ym".
  * @param ms The duration in milliseconds.
  * @returns A string representation of the duration.

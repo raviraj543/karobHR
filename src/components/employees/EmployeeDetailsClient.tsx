@@ -56,7 +56,7 @@ interface EmployeeDetailsClientProps {
 
 export default function EmployeeDetailsClient({ initialEmployeeData, initialHolidays, initialCompanySettings }: EmployeeDetailsClientProps) {
   const params = useParams();
-  const { calculateMonthlyPayrollDetails, loading: authLoading, updateEmployeeDetails, user: adminUser } = useAuth();
+  const { calculateMonthlyPayrollDetails, loading: authLoading, updateEmployeeDetails, updateUserPassword, user: adminUser } = useAuth();
   const { toast } = useToast();
   const employeeId = params.employeeId as string;
 
@@ -75,10 +75,6 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
     
     setIsUpdating(true);
     try {
-      const payload: { employeeUid: string, newSalary?: number, newPassword?: string } = {
-        employeeUid: employee.id,
-      };
-
       if (type === 'salary') {
         const salaryValue = parseFloat(newSalary);
         if (isNaN(salaryValue) || salaryValue < 0) {
@@ -86,19 +82,15 @@ export default function EmployeeDetailsClient({ initialEmployeeData, initialHoli
           setIsUpdating(false);
           return;
         }
-        payload.newSalary = salaryValue;
-      }
-
-      if (type === 'password') {
+        await updateEmployeeDetails(employee.id, { baseSalary: salaryValue });
+      } else if (type === 'password') {
         if (newPassword.length < 6) {
            toast({ title: 'Invalid Password', description: 'Password must be at least 6 characters long.', variant: 'destructive'});
            setIsUpdating(false);
            return;
         }
-        payload.newPassword = newPassword;
+        await updateUserPassword(employee.id, newPassword);
       }
-      
-      await updateEmployeeDetails(payload);
       
       toast({
         title: 'Update Successful',

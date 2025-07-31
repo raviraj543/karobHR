@@ -80,9 +80,7 @@ export default function AdminLiveAttendancePage() {
         }
     };
     
-    if (runAutoCheckout) {
-       performAutoCheckout();
-    }
+    performAutoCheckout();
 
     return () => clearInterval(timer);
   }, [runAutoCheckout, toast]);

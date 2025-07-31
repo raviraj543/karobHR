@@ -3,17 +3,15 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase/firebase';
-import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, writeBatch, Timestamp } from 'firebase/firestore';
+import { onAuthStateChanged, User as FirebaseUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updatePassword } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, writeBatch, deleteDoc, Timestamp } from 'firebase/firestore';
 import type { CompanySettings, User, Task, AttendanceEvent, Announcement, LeaveApplication, Advance, LocationInfo, MonthlyPayrollReport, Holiday, SalaryCalculationMode } from '@/lib/app-types';
 import { v4 as uuidv4 } from 'uuid';
-import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration } from '@/lib/dateUtils';
+import { getWorkingDaysInMonth, isSunday, formatHoursAndMinutes, formatDuration, safeParseISO } from '@/lib/dateUtils';
 import { calculateDistance } from './locationUtils';
-import { isToday, differenceInSeconds, startOfYesterday, endOfYesterday } from 'date-fns';
+import { isToday, differenceInSeconds, subDays, startOfDay, endOfDay, setHours, eachDayOfInterval, startOfMonth, endOfMonth } from 'date-fns';
 
-
-// Redefined NewEmployeeData to be more specific for clarity
-export interface NewEmployeePayload { // Added export here
+export interface NewEmployeePayload {
     name: string;
     employeeId: string;
     email?: string;
@@ -25,6 +23,7 @@ export interface NewEmployeePayload { // Added export here
     baseSalary?: number;
     standardDailyHours?: number;
 }
+
 export interface AuthContextType {
     user: FirebaseUser | null;
     karobUser: User | null;
@@ -35,7 +34,6 @@ export interface AuthContextType {
     login: (loginId: string, password: string) => Promise<User>;
     logout: () => Promise<void>;
     addNewEmployee: (employeeData: NewEmployeePayload, password: string) => Promise<User | null>;
-    updateEmployeeDetails: (payload: { employeeUid: string, newSalary?: number, newPassword?: string }) => Promise<void>;
     addAnnouncement: (title: string, content: string) => Promise<void>;
     addAttendanceEvent: (location: LocationInfo) => Promise<string | null>;
     completeCheckout: (docId: string, workReport: string, location: LocationInfo) => Promise<void>;
@@ -49,7 +47,6 @@ export interface AuthContextType {
     approveAdvance: (advanceId: string) => Promise<void>;
     rejectAdvance: (advanceId: string) => Promise<void>;
     addHoliday: (holidayData: Omit<Holiday, 'id' | 'status'>) => Promise<void>;
-    runAutoCheckout: () => Promise<number>;
     calculateMonthlyPayrollDetails: (
         employee: User,
         year: number,
@@ -65,37 +62,18 @@ export interface AuthContextType {
         liveAttendanceEvent: AttendanceEvent | null,
         companySettings: CompanySettings | null
       ) => number;
+    runAutoCheckout: () => Promise<number>;
+    updateEmployeeDetails: (userId: string, updates: Partial<User>) => Promise<void>;
+    updateUserPassword: (userId: string, newPassword: string) => Promise<void>;
     // Admin-specific data
     allUsers: User[];
     attendanceLog: AttendanceEvent[]; 
-    allTasks: Task[]; // Renamed for clarity, all tasks for admin
-    userTasks: Task[]; // Tasks specific to the logged-in user
+    allTasks: Task[];
+    userTasks: Task[];
     announcements: Announcement[];
     holidays: Holiday[];
     leaveRequests: LeaveApplication[];
     advanceRequests: Advance[];
-    // Links and Categories
-    links: Link[];
-    categories: Category[];
-    addLink: (link: Omit<Link, 'id' | 'userId'>) => Promise<void>;
-    deleteLink: (linkId: string) => Promise<void>;
-    addCategory: (name: string) => Promise<void>;
-    deleteCategory: (categoryId: string) => Promise<void>;
-}
-
-export interface Link {
-    id: string;
-    url: string;
-    title: string;
-    description?: string;
-    userId: string;
-    categoryId?: string;
-}
-  
-export interface Category {
-    id: string;
-    name: string;
-    userId: string;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -106,17 +84,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // App-wide data slices
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [userTasks, setUserTasks] = useState<Task[]>([]);
     const [userLeaveRequests, setUserLeaveRequests] = useState<LeaveApplication[]>([]);
     const [userAdvances, setUserAdvances] = useState<Advance[]>([]);
     const [userAttendance, setUserAttendance] = useState<AttendanceEvent[]>([]);
-    const [links, setLinks] = useState<Link[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
     
-    // Admin-specific data slices
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [allAttendance, setAllAttendance] = useState<AttendanceEvent[]>([]);
     const [allTasks, setAllTasks] = useState<Task[]>([]);
@@ -155,15 +129,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setAllAdvanceRequests([]);
                 setUserAdvances([]);
                 setUserAttendance([]);
-                setLinks([]);
-                setCategories([]);
                 setLoading(false);
             }
         });
         return () => unsubscribe();
     }, []);
 
-    // Effect to fetch company-wide and role-specific data *after* karobUser is set
     useEffect(() => {
         if (!karobUser || !karobUser.companyId) {
             if (!loading) {
@@ -179,7 +150,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const companyId = karobUser.companyId;
         const unsubscribers: (() => void)[] = [];
 
-        // --- GLOBAL LISTENERS (for all roles) ---
         const companyDocRef = doc(db, 'companies', companyId);
         unsubscribers.push(onSnapshot(companyDocRef, (snap) => setCompanySettings(snap.exists() ? (snap.data() as CompanySettings) : null)));
         
@@ -194,7 +164,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const advancesRef = collection(db, `companies/${companyId}/advances`);
         const attendanceRef = collection(db, `companies/${companyId}/attendanceLog`);
 
-        // --- ROLE-BASED LISTENERS ---
         if (karobUser.role === 'admin') {
             const usersRef = collection(db, 'users');
             unsubscribers.push(onSnapshot(query(usersRef, where('companyId', '==', companyId)), (snap) => setAllUsers(snap.docs.map(d => ({ ...d.data(), id: d.id } as User)))));
@@ -203,26 +172,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             unsubscribers.push(onSnapshot(query(advancesRef, orderBy('dateRequested', 'desc')), (snap) => setAllAdvanceRequests(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)))));
             unsubscribers.push(onSnapshot(query(leaveRequestsRef, orderBy('appliedAt', 'desc')), (snap) => setAllLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id } as LeaveApplication)))));
             
-            // Clear user-specific data for admin
             setUserTasks([]); 
             setUserLeaveRequests([]);
             setUserAdvances([]);
             setUserAttendance([]);
-
-        } else { // For 'employee' and 'manager'
+        } else {
             const userTasksQuery = query(tasksRef, where('assigneeId', '==', karobUser.employeeId || ''), orderBy('createdAt', 'desc'));
             unsubscribers.push(onSnapshot(userTasksQuery, (snap) => setUserTasks(snap.docs.map(d => ({ ...d.data(), id: d.id } as Task)))));
-
             const userLeaveRequestsQuery = query(leaveRequestsRef, where('userId', '==', karobUser.id), orderBy('appliedAt', 'desc'));
             unsubscribers.push(onSnapshot(userLeaveRequestsQuery, (snap) => setUserLeaveRequests(snap.docs.map(d => ({...d.data(), id: d.id} as LeaveApplication)))));
-            
             const userAdvancesQuery = query(advancesRef, where('employeeId', '==', karobUser.employeeId || ''), orderBy('dateRequested', 'desc'));
             unsubscribers.push(onSnapshot(userAdvancesQuery, (snap) => setUserAdvances(snap.docs.map(d => ({...d.data(), id: d.id } as Advance)))));
-
             const userAttendanceQuery = query(attendanceRef, where('userId', '==', karobUser.id), orderBy('timestamp', 'desc'));
-            unsubscribers.push(onSnapshot(userAttendanceQuery, (snap) => setUserAttendance(snap.docs.map(d => ({...d.data(), id: d.id } as AttendanceEvent)))));
+unsubscribers.push(onSnapshot(userAttendanceQuery, (snap) => setUserAttendance(snap.docs.map(d => ({...d.data(), id: d.id } as AttendanceEvent)))));
 
-             // Clear admin-specific states for non-admins
              setAllUsers([]);
              setAllAttendance([]);
              setAllLeaveRequests([]);
@@ -230,22 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
              setAllTasks([]);
         }
 
-        const linksQuery = query(collection(db, 'links'), where('userId', '==', karobUser.id));
-        unsubscribers.push(onSnapshot(linksQuery, (snapshot) => {
-            setLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Link)));
-        }));
-        
-        const categoriesQuery = query(collection(db, 'categories'), where('userId', '==', karobUser.id));
-        unsubscribers.push(onSnapshot(categoriesQuery, (snapshot) => {
-            setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
-        }));
-
         setLoading(false);
-
-        return () => {
-            unsubscribers.forEach(unsub => unsub());
-        };
-
+        return () => unsubscribers.forEach(unsub => unsub());
     }, [karobUser, loading]);
 
     const login = async (loginId: string, password: string): Promise<User> => {
@@ -253,15 +202,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const q = query(usersRef, where("employeeId", "==", loginId));
         const querySnapshot = await getDocs(q);
 
-        if (querySnapshot.empty) {
-            throw new Error("No user found with that Login ID.");
-        }
+        if (querySnapshot.empty) throw new Error("No user found with that Login ID.");
+        
         const userDoc = querySnapshot.docs[0];
         const userData = userDoc.data() as User;
 
-        if (!userData.email) {
-            throw new Error("User document does not contain an email address.");
-        }
+        if (!userData.email) throw new Error("User document does not contain an email address.");
+        
         await signInWithEmailAndPassword(auth, userData.email, password);
         return { ...userData, id: userDoc.id };
     };
@@ -271,19 +218,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const addNewEmployee = async (employeeData: NewEmployeePayload, password: string): Promise<User | null> => {
-        const { email, employeeId, companyId, role } = employeeData;
+        const { email, employeeId, companyId, role, companyName } = employeeData;
         
-        let finalCompanyName = employeeData.companyName;
-        if (!finalCompanyName && companyId) {
-            const companyDocRef = doc(db, "companies", companyId);
-            const companyDocSnap = await getDoc(companyDocRef);
-            if (companyDocSnap.exists()) {
-                finalCompanyName = companyDocSnap.data().companyName;
-            } else if (role !== 'admin') {
-                 throw new Error("Cannot add employee: Company does not exist.");
-            }
-        }
-
         const finalEmail = email || `${employeeId}@${companyId}.karobhr.com`;
     
         const userCredential = await createUserWithEmailAndPassword(auth, finalEmail, password);
@@ -310,13 +246,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
             const companyDocRef = doc(db, "companies", companyId);
             const companyDocSnap = await getDoc(companyDocRef);
+
             if (!companyDocSnap.exists() && role === 'admin') {
                 batch.set(companyDocRef, {
                     companyId: companyId,
-                    companyName: finalCompanyName,
+                    companyName: companyName,
                     adminUid: newUser.uid,
                     createdAt: new Date().toISOString(),
-                    officeHours: { openingTime: '09:00', closingTime: '18:00'},
                     salaryCalculationMode: 'hourly_deduction',
                     annualLeaveEntitlement: 20,
                 });
@@ -324,366 +260,273 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
             await batch.commit();
             
-            // Cannot call setUser and setKarobUser here as it may interfere with onAuthStateChanged listener
+            setUser(newUser);
+            setKarobUser(newUserDocument);
             
             return newUserDocument;
         }
         return null;
     };
     
-    const updateEmployeeDetails = async (payload: { employeeUid: string, newSalary?: number, newPassword?: string }) => {
-        if (!auth.currentUser) {
-            throw new Error("Admin not authenticated.");
-        }
-        const token = await auth.currentUser.getIdToken(true);
-
-        const response = await fetch('/api/update-employee', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to update employee details.');
-        }
-    };
-
     const addAnnouncement = async (title: string, content: string) => {
-        if (!karobUser || !karobUser.companyId) throw new Error("User or company not found.");
-        const announcement: Omit<Announcement, 'id'> = {
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can add announcements.");
+        }
+        const announcementsRef = collection(db, `companies/${karobUser.companyId}/announcements`);
+        await addDoc(announcementsRef, {
             title,
             content,
-            postedByUid: karobUser.id,
-            postedByName: karobUser.name || karobUser.employeeId,
-            postedAt: new Date().toISOString(),
-        };
-        await addDoc(collection(db, `companies/${karobUser.companyId}/announcements`), announcement);
+            postedAt: Timestamp.now(),
+            adminId: karobUser.id,
+            adminName: karobUser.name,
+        });
     };
 
-    const addAttendanceEvent = async (location: LocationInfo) => {
-        if (!karobUser || !karobUser.companyId || !companySettings) return null;
-        
-        let isWithin = null;
-        if(companySettings.officeLocation && companySettings.officeLocation.latitude && companySettings.officeLocation.longitude) {
-            const dist = calculateDistance(
-                location.latitude,
-                location.longitude,
-                companySettings.officeLocation.latitude,
-                companySettings.officeLocation.longitude
-            );
-            isWithin = dist <= (companySettings.officeLocation.radius || 100);
+    const addAttendanceEvent = async (location: LocationInfo): Promise<string | null> => {
+        if (!karobUser || !karobUser.companyId) {
+            throw new Error("User not authenticated or company not found.");
         }
 
-        const newEvent: Omit<AttendanceEvent, 'id'> = {
-            userId: karobUser.id,
-            employeeId: karobUser.employeeId,
-            userName: karobUser.name || karobUser.employeeId,
-            type: 'check-in',
-            status: 'Checked In',
-            timestamp: new Date().toISOString(),
-            checkInTime: new Date().toISOString(),
-            checkInLocation: location,
-            isWithinGeofence: isWithin,
-            checkOutTime: null,
-            checkOutLocation: null,
-            workReport: null,
-            totalHours: 0,
-        };
-        const docRef = await addDoc(collection(db, `companies/${karobUser.companyId}/attendanceLog`), newEvent);
-        return docRef.id;
+        const attendanceRef = collection(db, `companies/${karobUser.companyId}/attendanceLog`);
+        const q = query(attendanceRef, where('userId', '==', karobUser.id), where('status', '==', 'Checked In'));
+        const querySnapshot = await getDocs(q);
+
+        const isWithinGeofence = companySettings?.officeLocation && companySettings.officeLocation.radius
+            ? calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude) <= companySettings.officeLocation.radius
+            : true; // If no geofence set, always true
+
+        if (querySnapshot.empty) {
+            // No active check-in, create a new one
+            const newDocRef = await addDoc(attendanceRef, {
+                userId: karobUser.id,
+                employeeId: karobUser.employeeId,
+                name: karobUser.name,
+                type: 'check-in',
+                timestamp: Timestamp.now(),
+                checkInTime: new Date().toISOString(),
+                status: 'Checked In',
+                locationCheckIn: location,
+                isWithinGeofence,
+            });
+            return newDocRef.id;
+        } else {
+            throw new Error("Already checked in.");
+        }
     };
 
     const completeCheckout = async (docId: string, workReport: string, location: LocationInfo) => {
-        if (!karobUser || !karobUser.companyId || !companySettings) return;
+        if (!karobUser || !karobUser.companyId) {
+            throw new Error("User not authenticated or company not found.");
+        }
+        const attendanceDocRef = doc(db, `companies/${karobUser.companyId}/attendanceLog`, docId);
+        const attendanceDocSnap = await getDoc(attendanceDocRef);
 
-        const eventRef = doc(db, `companies/${karobUser.companyId}/attendanceLog`, docId);
-        const eventSnap = await getDoc(eventRef);
-        if (!eventSnap.exists()) throw new Error("Check-in record not found.");
+        if (!attendanceDocSnap.exists() || attendanceDocSnap.data().status !== 'Checked In') {
+            throw new Error("No active check-in found for this ID.");
+        }
 
-        const checkInData = eventSnap.data() as AttendanceEvent;
-        const checkInTime = new Date(checkInData.checkInTime!);
+        const checkInTime = safeParseISO(attendanceDocSnap.data().checkInTime);
+        if (!checkInTime) {
+            throw new Error("Invalid check-in time recorded.");
+        }
         const checkOutTime = new Date();
         const totalHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
 
-        let isWithin = null;
-        if (companySettings.officeLocation && companySettings.officeLocation.latitude && companySettings.officeLocation.longitude) {
-             const dist = calculateDistance(
-                location.latitude,
-                location.longitude,
-                companySettings.officeLocation.latitude,
-                companySettings.officeLocation.longitude
-            );
-            isWithin = dist <= (companySettings.officeLocation.radius || 100);
-        }
-        
-        await updateDoc(eventRef, {
+        const isWithinGeofenceCheckout = companySettings?.officeLocation && companySettings.officeLocation.radius
+            ? calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude) <= companySettings.officeLocation.radius
+            : true; // If no geofence set, always true
+
+        await updateDoc(attendanceDocRef, {
             type: 'check-out',
-            status: 'Checked Out',
+            timestamp: Timestamp.now(),
             checkOutTime: checkOutTime.toISOString(),
-            checkOutLocation: location,
-            isWithinGeofenceCheckout: isWithin,
+            status: 'Checked Out',
             workReport,
             totalHours,
+            locationCheckOut: location,
+            isWithinGeofenceCheckout,
         });
     };
 
     const updateCompanySettings = async (settings: Partial<CompanySettings>, companyId: string) => {
-        if (!companyId) throw new Error("No company ID provided to update settings.");
-        const companyRef = doc(db, 'companies', companyId);
-        await setDoc(companyRef, settings, { merge: true });
+        if (!karobUser || karobUser.role !== 'admin' || karobUser.companyId !== companyId) {
+            throw new Error("Unauthorized to update company settings.");
+        }
+        const companyDocRef = doc(db, 'companies', companyId);
+        await updateDoc(companyDocRef, settings);
     };
 
-    const addTask = async (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const task: Omit<Task, 'id'> = {
-            ...taskData,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
-        await addDoc(collection(db, `companies/${karobUser.companyId}/tasks`), task);
+    const addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized to add tasks.");
+        }
+        const tasksRef = collection(db, `companies/${karobUser.companyId}/tasks`);
+        await addDoc(tasksRef, {
+            ...task,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+        });
     };
 
     const updateTask = async (task: Task) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const taskRef = doc(db, `companies/${karobUser.companyId}/tasks`, task.id);
-        await updateDoc(taskRef, { ...task, updatedAt: new Date().toISOString() });
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized to update tasks.");
+        }
+        const taskDocRef = doc(db, `companies/${karobUser.companyId}/tasks`, task.id);
+        await updateDoc(taskDocRef, {
+            ...task,
+            updatedAt: Timestamp.now(),
+        });
     };
-    
+
     const addLeaveApplication = async (leaveData: Omit<LeaveApplication, 'id' | 'userId' | 'employeeId' | 'status' | 'appliedAt'>) => {
-        if (!karobUser || !karobUser.companyId) throw new Error("User or company not found.");
-        const newLeave: Omit<LeaveApplication, 'id'> = {
+        if (!karobUser || !karobUser.companyId) {
+            throw new Error("User not authenticated or company not found.");
+        }
+        const leaveApplicationsRef = collection(db, `companies/${karobUser.companyId}/leaveApplications`);
+        await addDoc(leaveApplicationsRef, {
             ...leaveData,
             userId: karobUser.id,
             employeeId: karobUser.employeeId,
             status: 'pending',
-            appliedAt: new Date().toISOString(),
-        };
-        await addDoc(collection(db, `companies/${karobUser.companyId}/leaveApplications`), newLeave);
+            appliedAt: Timestamp.now(),
+        });
     };
 
     const approveLeaveApplication = async (applicantUid: string, leaveId: string) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const leaveRef = doc(db, `companies/${karobUser.companyId}/leaveApplications`, leaveId);
-        await updateDoc(leaveRef, { status: 'approved' });
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can approve leave applications.");
+        }
+        const leaveDocRef = doc(db, `companies/${karobUser.companyId}/leaveApplications`, leaveId);
+        await updateDoc(leaveDocRef, { status: 'approved' });
     };
-    
+
     const rejectLeaveApplication = async (applicantUid: string, leaveId: string) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const leaveRef = doc(db, `companies/${karobUser.companyId}/leaveApplications`, leaveId);
-        await updateDoc(leaveRef, { status: 'rejected' });
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can reject leave applications.");
+        }
+        const leaveDocRef = doc(db, `companies/${karobUser.companyId}/leaveApplications`, leaveId);
+        await updateDoc(leaveDocRef, { status: 'rejected' });
     };
 
     const requestAdvance = async (employeeId: string, amount: number, reason: string) => {
-        if (!karobUser || !karobUser.companyId) throw new Error("User or company not found.");
-        const newAdvance: Omit<Advance, 'id'> = {
-            employeeId: karobUser.employeeId,
+        if (!karobUser || !karobUser.companyId) {
+            throw new Error("User not authenticated or company not found.");
+        }
+        const advancesRef = collection(db, `companies/${karobUser.companyId}/advances`);
+        await addDoc(advancesRef, {
+            employeeId,
+            userId: karobUser.id,
             amount,
             reason,
-            dateRequested: new Date().toISOString(),
             status: 'pending',
-        };
-        await addDoc(collection(db, `companies/${karobUser.companyId}/advances`), newAdvance);
+            dateRequested: Timestamp.now(),
+        });
     };
-    
+
     const approveAdvance = async (advanceId: string) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const advanceRef = doc(db, `companies/${karobUser.companyId}/advances`, advanceId);
-        await updateDoc(advanceRef, { status: 'approved', dateProcessed: new Date().toISOString() });
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can approve advances.");
+        }
+        const advanceDocRef = doc(db, `companies/${karobUser.companyId}/advances`, advanceId);
+        await updateDoc(advanceDocRef, { status: 'approved' });
     };
 
     const rejectAdvance = async (advanceId: string) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const advanceRef = doc(db, `companies/${karobUser.companyId}/advances`, advanceId);
-        await updateDoc(advanceRef, { status: 'rejected', dateProcessed: new Date().toISOString() });
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can reject advances.");
+        }
+        const advanceDocRef = doc(db, `companies/${karobUser.companyId}/advances`, advanceId);
+        await updateDoc(advanceDocRef, { status: 'rejected' });
     };
 
     const addHoliday = async (holidayData: Omit<Holiday, 'id' | 'status'>) => {
-        if (!karobUser?.companyId) throw new Error("No company associated with user.");
-        const holiday: Omit<Holiday, 'id'> = {
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can add holidays.");
+        }
+        const holidaysRef = collection(db, `companies/${karobUser.companyId}/holidays`);
+        await addDoc(holidaysRef, {
             ...holidayData,
-            status: 'approved',
-        };
-        await addDoc(collection(db, `companies/${karobUser.companyId}/holidays`), holiday);
+            status: 'active', // Default status for new holidays
+        });
     };
 
-    const runAutoCheckout = useCallback(async (): Promise<number> => {
-        const currentCompanyId = karobUser?.companyId;
-        if (!currentCompanyId) return 0;
-    
-        const attendanceLogRef = collection(db, `companies/${currentCompanyId}/attendanceLog`);
-        const startOfYesterdayTimestamp = Timestamp.fromDate(startOfYesterday());
-        const endOfYesterdayTimestamp = Timestamp.fromDate(endOfYesterday());
-    
-        const q = query(
-            attendanceLogRef,
-            where('status', '==', 'Checked In'),
-            where('checkInTime', '>=', startOfYesterdayTimestamp),
-            where('checkInTime', '<=', endOfYesterdayTimestamp)
-        );
-    
-        const checkInsToProcess = await getDocs(q);
-        if (checkInsToProcess.empty) {
-            return 0;
-        }
-    
-        const batch = writeBatch(db);
-        let checkoutCount = 0;
-    
-        for (const docSnap of checkInsToProcess.docs) {
-            const checkInData = docSnap.data() as AttendanceEvent;
-            const employeeRef = doc(db, 'users', checkInData.userId);
-            const employeeSnap = await getDoc(employeeRef);
-    
-            if (employeeSnap.exists()) {
-                const employeeData = employeeSnap.data() as User;
-                const standardDailyHours = employeeData.standardDailyHours || 8;
-                const checkInTime = new Date(checkInData.checkInTime!);
-                const checkOutTime = new Date(checkInTime.getTime() + standardDailyHours * 60 * 60 * 1000);
-    
-                batch.update(docSnap.ref, {
-                    status: 'Checked Out',
-                    checkOutTime: checkOutTime.toISOString(),
-                    totalHours: standardDailyHours,
-                    workReport: 'System auto-checkout: Employee did not perform checkout.',
-                    type: 'check-out'
-                });
-                checkoutCount++;
-            }
-        }
-    
-        await batch.commit();
-        return checkoutCount;
-    }, [karobUser]);
-
-    const calculateMonthlyPayrollDetails = useCallback((
+    const calculateMonthlyPayrollDetails = useCallback(
+      (
         employee: User,
         year: number,
-        month: number, // 0-11
+        month: number,
         employeeAttendanceForMonth: AttendanceEvent[],
         holidaysForMonth: Holiday[],
-        approvedLeavesForMonth: LeaveApplication[] = [],
-        approvedAdvancesForMonth: Advance[] = []
-    ): MonthlyPayrollReport => {
-    
-        const calculationMode = companySettings?.salaryCalculationMode || 'hourly_deduction';
-        const baseSalary = employee.baseSalary || 0;
-        const standardDailyHours = employee.standardDailyHours || 8;
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-    
-        const allHolidayDates = new Set<number>();
-        holidaysForMonth
-            .filter(h => h.date.getFullYear() === year && h.date.getMonth() === month)
-            .forEach(h => allHolidayDates.add(h.date.getDate()));
-    
-        for (let day = 1; day <= daysInMonth; day++) {
-            const currentDate = new Date(year, month, day);
-            if (isSunday(currentDate)) {
-                allHolidayDates.add(day);
-            }
-        }
-    
-        const attendanceByDay = new Map<number, { minutes: number; checkedInAndOut: boolean }>();
-        employeeAttendanceForMonth.forEach(log => {
-            if (log.checkInTime && log.checkOutTime) {
-                const checkInDate = new Date(log.checkInTime);
-                if (checkInDate.getFullYear() === year && checkInDate.getMonth() === month) {
-                    const dayOfMonth = checkInDate.getDate();
-                    if (allHolidayDates.has(dayOfMonth)) return;
-                    
-                    const minutesWorked = (new Date(log.checkOutTime).getTime() - checkInDate.getTime()) / (1000 * 60);
-                    const existingEntry = attendanceByDay.get(dayOfMonth) || { minutes: 0, checkedInAndOut: false };
-                    attendanceByDay.set(dayOfMonth, {
-                        minutes: existingEntry.minutes + minutesWorked,
-                        checkedInAndOut: true,
-                    });
-                }
-            }
+        approvedLeavesForMonth: LeaveApplication[],
+        approvedAdvancesForMonth: Advance[],
+      ): MonthlyPayrollReport => {
+        const { baseSalary = 0, standardDailyHours = 8, employeeId, name = 'N/A' } = employee;
+  
+        const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+        const daysInMonth = eachDayOfInterval({
+          start: startOfMonth(new Date(year, month)),
+          end: endOfMonth(new Date(year, month)),
         });
-    
-        let calculatedSalary = 0;
-        let totalWorkedMinutes = 0;
-        let holidayHoursCredit = 0;
-        let pastHolidaysCount = 0;
-        let totalDaysWorked = 0;
-    
-        allHolidayDates.forEach(day => {
-            const holidayDate = new Date(year, month, day);
-            if (holidayDate.getTime() < today.getTime()) {
-                pastHolidaysCount++;
-                holidayHoursCredit += standardDailyHours;
-            }
+  
+        let totalWorkingDaysInMonth = 0;
+        daysInMonth.forEach((date) => {
+          const isHoliday = holidaysForMonth.some(
+            (h) => new Date(h.date).toDateString() === date.toDateString(),
+          );
+          if (!isSunday(date) && !isHoliday) {
+            totalWorkingDaysInMonth++;
+          }
         });
-    
-        if (calculationMode === 'hourly_deduction') {
-            const workingDaysInMonth = daysInMonth - allHolidayDates.size;
-            const monthlyWorkHoursGoal = workingDaysInMonth * standardDailyHours;
-            const perMinuteSalary = monthlyWorkHoursGoal > 0 ? baseSalary / (monthlyWorkHoursGoal * 60) : 0;
-    
-            attendanceByDay.forEach(entry => {
-                totalWorkedMinutes += entry.minutes;
-            });
-            
-            const workedSalary = totalWorkedMinutes * perMinuteSalary;
-            const holidaySalary = (holidayHoursCredit * 60) * perMinuteSalary;
-            calculatedSalary = workedSalary + holidaySalary;
-    
-        } else { // 'check_in_out' mode
-            const dailyRate = baseSalary / daysInMonth;
-            let checkedInAndOutDays = 0;
-            attendanceByDay.forEach(entry => {
-                if(entry.checkedInAndOut) {
-                    checkedInAndOutDays++;
-                }
-                totalWorkedMinutes += entry.minutes;
-            });
-            
-            totalDaysWorked = checkedInAndOutDays + pastHolidaysCount;
-            const unpaidLeaveDays = approvedLeavesForMonth.length;
-            const deductions = unpaidLeaveDays * dailyRate;
-            
-            const workedSalary = checkedInAndOutDays * dailyRate;
-            const holidaySalary = pastHolidaysCount * dailyRate;
-            calculatedSalary = (workedSalary + holidaySalary) - deductions;
-        }
-    
-        const totalActualHoursWorked = (totalWorkedMinutes / 60) + holidayHoursCredit;
-        const totalWorkingDaysInMonth = daysInMonth - allHolidayDates.size;
+  
         const totalStandardHoursForMonth = totalWorkingDaysInMonth * standardDailyHours;
-    
-        const salaryAfterDeductions = Math.min(calculatedSalary, baseSalary);
-    
-        const totalApprovedAdvances = approvedAdvancesForMonth.reduce((sum, adv) => sum + adv.amount, 0);
-    
+  
+        const totalActualHoursWorked = employeeAttendanceForMonth
+          .filter((event) => event.status === 'Checked Out' && event.totalHours)
+          .reduce((sum, event) => sum + event.totalHours!, 0);
+  
+        const totalHoursMissed = Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked);
+  
+        const hourlyRate =
+          totalWorkingDaysInMonth > 0 ? baseSalary / totalWorkingDaysInMonth / standardDailyHours : 0;
+  
+        let calculatedDeductions = 0;
+        if (companySettings?.salaryCalculationMode === 'hourly_deduction') {
+          calculatedDeductions = totalHoursMissed * hourlyRate;
+        }
+  
+        const salaryAfterDeductions = baseSalary - calculatedDeductions;
+        const totalApprovedAdvances = approvedAdvancesForMonth.reduce(
+          (sum, advance) => sum + advance.amount,
+          0,
+        );
         const finalNetPayable = salaryAfterDeductions - totalApprovedAdvances;
-    
+  
         return {
-            employeeId: employee.employeeId,
-            employeeName: employee.name || 'N/A',
-            month,
-            year,
-            baseSalary,
-            standardDailyHours,
-            totalWorkingDaysInMonth,
-            totalStandardHoursForMonth,
-            totalActualHoursWorked,
-            totalHoursMissed: Math.max(0, totalStandardHoursForMonth - totalActualHoursWorked),
-            hourlyRate: totalStandardHoursForMonth > 0 ? baseSalary / totalStandardHoursForMonth : 0,
-            calculatedDeductions: baseSalary - salaryAfterDeductions,
-            salaryAfterDeductions,
-            totalApprovedAdvances,
-            finalNetPayable: Math.max(0, finalNetPayable),
-            totalDaysWorked,
-            totalDaysInMonth: daysInMonth,
+          employeeId,
+          employeeName: name,
+          month: month + 1,
+          year,
+          baseSalary,
+          standardDailyHours,
+          totalWorkingDaysInMonth,
+          totalStandardHoursForMonth,
+          totalActualHoursWorked,
+          totalHoursMissed,
+          hourlyRate,
+          calculatedDeductions,
+          salaryAfterDeductions,
+          totalApprovedAdvances,
+          finalNetPayable,
+          totalDaysWorked: employeeAttendanceForMonth.filter(
+            (e) => e.status === 'Checked Out' && e.totalHours && e.totalHours > 0,
+          ).length,
+          totalDaysInMonth,
         };
-    
-    }, [companySettings]);
+      },
+      [companySettings?.salaryCalculationMode],
+    );
+
 
     const calculateTodayEstimatedEarning = useCallback((
         employee: User,
@@ -691,53 +534,115 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         liveAttendanceEvent: AttendanceEvent | null,
         companySettings: CompanySettings | null
       ): number => {
-        if (!employee?.baseSalary || !companySettings || !employee.standardDailyHours) {
-          return 0;
+        if (!employee.baseSalary || !companySettings || !employee.standardDailyHours) {
+            return 0;
         }
-      
-        const { salaryCalculationMode, annualLeaveEntitlement } = companySettings;
-        const baseSalary = employee.baseSalary;
-        const standardDailyHours = employee.standardDailyHours;
-      
-        const hasCheckedInOrOutToday = liveAttendanceEvent != null || todaysAttendance.some(e => e.status === 'Checked Out');
-      
-        if (salaryCalculationMode === 'check_in_out') {
-          return hasCheckedInOrOutToday ? baseSalary / 30 : 0;
-        } else { // hourly_deduction
-          const liveDurationSeconds = liveAttendanceEvent
-            ? differenceInSeconds(new Date(), new Date(liveAttendanceEvent.checkInTime!))
-            : 0;
-      
-          const completedMinutesToday = todaysAttendance
-            .filter(e => e.status === 'Checked Out' && e.totalHours)
-            .reduce((total, event) => total + (event.totalHours! * 60), 0);
-      
-          const totalMinutesWorkedToday = completedMinutesToday + (liveDurationSeconds / 60);
-          const perMinuteRate = baseSalary / (30 * standardDailyHours * 60);
-          
-          return totalMinutesWorkedToday * perMinuteRate;
+    
+        const isCheckedIn = liveAttendanceEvent != null;
+        const hasWorkedToday = isCheckedIn || (todaysAttendance?.some(e => isToday(safeParseISO(e.timestamp)!) && e.status === 'Checked Out'));
+    
+        if (companySettings.salaryCalculationMode === 'check_in_out') {
+            return hasWorkedToday ? employee.baseSalary / 30 : 0;
+        } else {
+            const totalMinutesWorkedToday = todaysAttendance.filter(e => e.status === 'Checked Out' && isToday(safeParseISO(e.timestamp)!))
+                .reduce((total, event) => total + (event.totalHours ? event.totalHours * 60 : 0), 0);
+            
+            let liveMinutes = 0;
+            if (liveAttendanceEvent) {
+                const checkInTime = safeParseISO(liveAttendanceEvent.checkInTime || liveAttendanceEvent.timestamp);
+                if (checkInTime) {
+                    liveMinutes = differenceInSeconds(new Date(), checkInTime) / 60;
+                }
+            }
+            const overallMinutesWorked = totalMinutesWorkedToday + liveMinutes;
+            const perMinuteRate = employee.baseSalary / (30 * employee.standardDailyHours * 60);
+            return overallMinutesWorked * perMinuteRate;
         }
       }, []);
-    
-    // Link and Category Management
-    const addLink = async (linkData: Omit<Link, 'id' | 'userId'>) => {
-        if (!karobUser) throw new Error("User not authenticated");
-        await addDoc(collection(db, 'links'), { ...linkData, userId: karobUser.id });
+
+    const runAutoCheckout = async (): Promise<number> => {
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            console.log("Auto-checkout condition not met (not an admin or no companyId).");
+            return 0;
+        }
+
+        const yesterday = subDays(new Date(), 1);
+        const startOfYesterday = startOfDay(yesterday);
+        const endOfYesterday = endOfDay(yesterday);
+
+        const attendanceRef = collection(db, `companies/${karobUser.companyId}/attendanceLog`);
+        const q = query(
+            attendanceRef,
+            where('status', '==', 'Checked In'),
+            where('timestamp', '>=', Timestamp.fromDate(startOfYesterday)),
+            where('timestamp', '<=', Timestamp.fromDate(endOfYesterday))
+        );
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            return 0;
+        }
+
+        const batch = writeBatch(db);
+        snapshot.forEach(docSnap => {
+            const event = docSnap.data() as AttendanceEvent;
+            const employee = allUsers.find(u => u.id === event.userId);
+            const standardHours = employee?.standardDailyHours || 8;
+            
+            let checkInTime = new Date(event.checkInTime!);
+            let checkOutTime = setHours(checkInTime, checkInTime.getHours() + standardHours);
+            // Cap checkout time at the end of the day
+            if (checkOutTime > endOfYesterday) {
+                checkOutTime = endOfYesterday;
+            }
+
+            const totalHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+
+            batch.update(docSnap.ref, {
+                status: 'Checked Out',
+                type: 'check-out',
+                checkOutTime: checkOutTime.toISOString(),
+                workReport: 'System: Automatically checked out.',
+                totalHours: totalHours
+            });
+        });
+
+        await batch.commit();
+        return snapshot.size;
     };
 
-    const deleteLink = async (linkId: string) => {
-        await deleteDoc(doc(db, 'links', linkId));
+    const updateEmployeeDetails = async (userId: string, updates: Partial<User>) => {
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can update employee details.");
+        }
+        const userDocRef = doc(db, 'users', userId);
+        await updateDoc(userDocRef, updates);
+        
+        // If the updated user is the currently logged-in karobUser, update the state
+        if (karobUser.id === userId) {
+            setKarobUser((prevUser) => ({ ...prevUser!, ...updates }));
+        }
     };
 
-    const addCategory = async (name: string) => {
-        if (!karobUser) throw new Error("User not authenticated");
-        await addDoc(collection(db, 'categories'), { name, userId: karobUser.id });
-    };
+    const updateUserPassword = async (userId: string, newPassword: string) => {
+        if (!karobUser || karobUser.role !== 'admin' || !karobUser.companyId) {
+            throw new Error("Unauthorized: Only admins can update employee passwords.");
+        }
 
-    const deleteCategory = async (categoryId: string) => {
-        await deleteDoc(doc(db, 'categories', categoryId));
-    };
+        // Find the FirebaseUser object for the target userId
+        // This is a simplification. In a real app, you'd likely use Cloud Functions
+        // or re-authenticate the admin user with elevated privileges to update another user's password.
+        // Direct client-side updatePassword only works for the currently authenticated user.
+        // For demonstration, we'll assume the admin is trying to update their own password
+        // or this function is called from a secure server environment.
+        const targetUser = auth.currentUser; 
 
+        if (targetUser && targetUser.uid === userId) {
+            await updatePassword(targetUser, newPassword);
+        } else {
+            throw new Error("Cannot update another user's password directly from client-side. Please use appropriate re-authentication or server-side logic.");
+        }
+    };
 
     const value: AuthContextType = {
         user,
@@ -749,7 +654,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         addNewEmployee,
-        updateEmployeeDetails,
         addAnnouncement,
         addAttendanceEvent,
         completeCheckout,
@@ -763,9 +667,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         approveAdvance,
         rejectAdvance,
         addHoliday,
-        runAutoCheckout,
         calculateMonthlyPayrollDetails,
         calculateTodayEstimatedEarning,
+        runAutoCheckout,
+        updateEmployeeDetails,
+        updateUserPassword,
         allUsers,
         announcements,
         holidays,
@@ -774,12 +680,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userTasks,
         leaveRequests: karobUser?.role === 'admin' ? allLeaveRequests : userLeaveRequests,
         advanceRequests: karobUser?.role === 'admin' ? allAdvanceRequests : userAdvances,
-        links,
-        categories,
-        addLink,
-        deleteLink,
-        addCategory,
-        deleteCategory,
     };
 
     return (
