@@ -96,6 +96,8 @@ export default function AttendancePage() {
     toast({ title: "Getting your location..." });
 
     const processPosition = (position: GeolocationPosition) => {
+        console.log("Raw Geolocation Position:", position.coords);
+
         const userLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -105,6 +107,7 @@ export default function AttendancePage() {
         setLocationStatus('success');
 
         const officeLocation = companySettings?.officeLocation;
+        const geofenceRadius = officeLocation?.radius || 100; // Default to 100m if not set
 
         if (officeLocation?.latitude && officeLocation?.longitude) {
             const calculatedDist = calculateDistance(
@@ -114,17 +117,18 @@ export default function AttendancePage() {
                 officeLocation.longitude
             );
             setDistance(calculatedDist);
-            const isInside = calculatedDist <= (officeLocation.radius || 100);
+            console.log("Calculated Distance:", calculatedDist);
+            const isInside = calculatedDist <= geofenceRadius;
             setIsWithinGeofence(isInside);
 
             const friendlyDist = calculatedDist > 1000 ? `${(calculatedDist / 1000).toFixed(2)} km` : `${calculatedDist.toFixed(0)} m`;
             toast({
                 title: "Location Updated",
-                description: `You are approx. ${friendlyDist} from the office geofence.`,
+                description: `You are approx. ${friendlyDist} from the office geofence. Accuracy: ${userLocation.accuracy?.toFixed(0) || 'N/A'}m`,
             });
         } else {
             setDistance(null);
-            setIsWithinGeofence(true); 
+            setIsWithinGeofence(true); // If no geofence set, always consider inside.
             toast({
                 variant: 'default',
                 title: "No Geofence Configured",
@@ -134,6 +138,7 @@ export default function AttendancePage() {
     };
 
     const handleError = (error: GeolocationPositionError, isHighAccuracyAttempt: boolean) => {
+        console.error("Geolocation error:", error);
         if (isHighAccuracyAttempt && error.code === error.TIMEOUT) {
             toast({ title: "Location accuracy timeout", description: "Trying to get location with lower accuracy..."});
             navigator.geolocation.getCurrentPosition(
@@ -179,14 +184,28 @@ export default function AttendancePage() {
       toast({ title: "Location Needed", description: "Please fetch your location before checking in.", variant: "destructive" });
       return;
     }
+    const geofenceRadius = companySettings?.officeLocation?.radius || 100;
+    if (companySettings?.officeLocation && currentLocation && currentLocation.accuracy && currentLocation.accuracy > geofenceRadius) { 
+        toast({
+            title: "Low GPS Accuracy",
+            description: `Your GPS accuracy (${currentLocation.accuracy.toFixed(0)}m) is worse than the geofence radius (${geofenceRadius}m). Please move to an open area or refresh your location.`, 
+            variant: "destructive"
+        });
+        return; // BLOCK check-in due to low accuracy
+    }
+    if (companySettings?.officeLocation && !isWithinGeofence) {
+      toast({ title: "Action Blocked", description: "You cannot check in because you are outside the office geofence.", variant: "destructive" });
+      return;
+    }
+
     
     setAttendanceStatus('processing-check-in');
     try {
       const newDocId = await addAttendanceEvent(currentLocation);
       if (newDocId) {
         toast({ title: "Check-In Successful!", description: "Your check-in has been recorded." });
-        setCurrentDayDocId(newDocId); // Set the document ID
-        setAttendanceStatus('checked-in'); // Update status to checked-in
+        setCurrentDayDocId(newDocId); 
+        setAttendanceStatus('checked-in');
         setCurrentLocation(null); 
         setDistance(null); 
         setLocationStatus('idle'); 
@@ -207,6 +226,20 @@ export default function AttendancePage() {
        toast({ title: "Not Checked In", description: "You cannot check out because there is no active check-in record found for you.", variant: "destructive" });
        return;
     }
+    const geofenceRadius = companySettings?.officeLocation?.radius || 100;
+    if (companySettings?.officeLocation && currentLocation && currentLocation.accuracy && currentLocation.accuracy > geofenceRadius) { 
+        toast({
+            title: "Low GPS Accuracy",
+            description: `Your GPS accuracy (${currentLocation.accuracy.toFixed(0)}m) is worse than the geofence radius (${geofenceRadius}m). Please move to an open area or refresh your location.`, 
+            variant: "destructive"
+        });
+        return; // BLOCK check-out due to low accuracy
+    }
+    if (companySettings?.officeLocation && !isWithinGeofence) {
+        toast({ title: "Action Blocked", description: "You cannot check out because you are outside the office geofence.", variant: "destructive" });
+        return;
+    }
+
     setIsReportModalOpen(true);
   };
 
@@ -240,17 +273,10 @@ export default function AttendancePage() {
         case 'success':
             if (distance !== null) {
                 const officeLocation = companySettings?.officeLocation;
-
-                if (!officeLocation) {
-                    return (
-                        <Alert variant="default" className="text-center">
-                            <AlertDescription>Location fetched, but no geofence is configured. Check-in/out is allowed.</AlertDescription>
-                        </Alert>
-                    );
-                }
-
-                const geofenceRadius = officeLocation.radius ?? 0;
+                const geofenceRadius = officeLocation?.radius ?? 0;
                 const friendlyDist = distance > 1000 ? `${(distance / 1000).toFixed(2)} km` : `${distance.toFixed(0)} m`;
+
+                const accuracyPoor = (currentLocation?.accuracy || 0) > geofenceRadius; 
 
                 return (
                   <div>
@@ -258,11 +284,17 @@ export default function AttendancePage() {
                         <AlertTitle>{isWithinGeofence ? 'You are within the Geofence' : 'You are outside the Geofence'}</AlertTitle>
                         <AlertDescription>
                           Approx. {friendlyDist} away from the required location. (Max: {geofenceRadius}m)
+                          {currentLocation?.accuracy && <p className="text-xs mt-1">GPS Accuracy: {currentLocation.accuracy.toFixed(0)}m</p>}
                         </AlertDescription>
                     </Alert>
+                    {accuracyPoor && (
+                        <Alert variant="destructive" className="text-center mt-2">
+                            <AlertDescription>GPS Accuracy too low for reliable geofence check. Please move to an open area.</AlertDescription>
+                        </Alert>
+                    )}
                     <div className="text-xs text-muted-foreground mt-2 text-center space-y-1">
                         <p><b>Your Location:</b> {currentLocation?.latitude.toFixed(5)}, {currentLocation?.longitude.toFixed(5)} (Accuracy: {currentLocation?.accuracy?.toFixed(0)}m)</p>
-                        <p><b>Company Office:</b> {officeLocation.latitude.toFixed(5)}, {officeLocation.longitude.toFixed(5)}</p>
+                        <p><b>Company Office:</b> {officeLocation?.latitude.toFixed(5)}, {officeLocation?.longitude.toFixed(5)}</p>
                     </div>
                   </div>
                 );
@@ -282,7 +314,7 @@ export default function AttendancePage() {
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center">
             <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-            <p className="text-muted-foreground">Loading attendance status...</p>
+            <p className="ml-2 text-muted-foreground">Loading attendance status...</p>
         </div>
     );
   }
