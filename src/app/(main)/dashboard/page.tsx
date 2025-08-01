@@ -9,7 +9,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect, useMemo } from 'react';
-import { format, startOfMonth, getDaysInMonth, isSameDay, parseISO, eachDayOfInterval, isSunday, endOfMonth, isToday } from 'date-fns';
+import { format, startOfMonth, getDaysInMonth, isSameDay, eachDayOfInterval, isSunday, endOfMonth, isToday } from 'date-fns';
+import { safeParseISO } from '@/lib/dateUtils'; // Import safeParseISO
 
 export default function EmployeeDashboardPage() {
   const { 
@@ -29,11 +30,11 @@ export default function EmployeeDashboardPage() {
   }, [user?.name]);
 
   const liveAttendanceEvent = useMemo(() => 
-    attendanceLog?.find(e => e.status === 'Checked In' && e.timestamp && isToday(parseISO(e.timestamp))),
+    attendanceLog?.find(e => e.status === 'Checked In' && e.timestamp && isToday(safeParseISO(e.timestamp)!)),
   [attendanceLog]);
 
   const todaysAttendance = useMemo(() => 
-    attendanceLog?.filter(e => e.timestamp && isToday(parseISO(e.timestamp))),
+    attendanceLog?.filter(e => e.timestamp && isToday(safeParseISO(e.timestamp)!)),
   [attendanceLog]);
 
   const todaysEarnings = useMemo(() => {
@@ -59,10 +60,10 @@ export default function EmployeeDashboardPage() {
     const uniqueDaysAttended = new Set(
       attendanceLog
         .filter(event => {
-          const eventDate = parseISO(event.timestamp);
-          return eventDate >= monthStart && eventDate <= today;
+          const eventDate = safeParseISO(event.timestamp); // Use safeParseISO here as well
+          return eventDate && eventDate >= monthStart && eventDate <= today;
         })
-        .map(event => format(parseISO(event.timestamp), 'yyyy-MM-dd'))
+        .map(event => format(safeParseISO(event.timestamp)!, 'yyyy-MM-dd')) // Use safeParseISO
     ).size;
     const attendance = `${uniqueDaysAttended}/${totalDaysInMonth} Days`;
 
@@ -168,7 +169,7 @@ export default function EmployeeDashboardPage() {
             {announcements && announcements.length > 0 ? (
               <ScrollArea className="h-64 border rounded-md p-4 bg-background"> 
                 <ul className="space-y-4">
-                  {announcements.slice(0, 5).map((ann) => ( 
+                  {announcements.slice(0, 5).map((ann) => (
                     <li key={ann.id} className="p-3 border-l-4 border-primary bg-primary/5 rounded-r-md shadow-sm">
                       <h4 className="font-semibold text-foreground">{ann.title}</h4>
                       <p className="text-xs text-muted-foreground">

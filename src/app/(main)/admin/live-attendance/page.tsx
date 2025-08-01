@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Wifi, WifiOff, Clock, UserCheck, UserX, Users, Loader2, AlertTriangle, RefreshCw, FileText } from 'lucide-react';
-import { formatDistanceToNow, differenceInMilliseconds, format, isToday, parseISO } from 'date-fns';
-import { formatDuration } from '@/lib/dateUtils';
+import { formatDistanceToNow, differenceInMilliseconds, format, isToday } from 'date-fns';
+import { formatDuration, safeParseISO } from '@/lib/dateUtils';
 import { TruncatedText } from '@/components/ui/truncated-text';
 import { useToast } from '@/hooks/use-toast';
 
@@ -26,21 +26,23 @@ interface EmployeeAttendanceStatus {
 }
 
 const LiveDuration = ({ checkInTime }: { checkInTime: string }) => {
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState<number | null>(null);
 
   useEffect(() => {
-    try {
-      const checkInDate = parseISO(checkInTime);
-      const interval = setInterval(() => {
-        setDuration(differenceInMilliseconds(new Date(), checkInDate));
-      }, 1000);
-      return () => clearInterval(interval);
-    } catch (e) {
+    const checkInDate = safeParseISO(checkInTime);
+    if (!checkInDate) {
+      setDuration(null);
       return;
     }
+
+    const interval = setInterval(() => {
+      setDuration(differenceInMilliseconds(new Date(), checkInDate));
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, [checkInTime]);
 
-  if (duration < 0) return <span>-</span>;
+  if (duration === null || duration < 0) return <span className="text-xs text-muted-foreground">-</span>;
 
   const h = Math.floor(duration / (1000 * 60 * 60));
   const m = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
@@ -58,9 +60,8 @@ export default function AdminLiveAttendancePage() {
     document.title = 'Live Employee Attendance - Admin - KarobHR';
     const timer = setInterval(() => {
       setLastRefreshed(new Date());
-    }, 10000);
+    }, 10000); // Refresh data context every 10 seconds
 
-    // Run auto-checkout logic when an admin visits this page
     const performAutoCheckout = async () => {
         try {
             const checkoutCount = await runAutoCheckout();
@@ -94,10 +95,24 @@ export default function AdminLiveAttendancePage() {
     return displayableUsers.map(user => {
       const userEvents = attendanceLog
         .filter(event => event.userId === user.id && event.timestamp)
-        .sort((a, b) => parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime());
+        .sort((a, b) => {
+            const timestampA = (a.timestamp as any)?.toDate ? (a.timestamp as any).toDate().toISOString() : a.timestamp;
+            const timestampB = (b.timestamp as any)?.toDate ? (b.timestamp as any).toDate().toISOString() : b.timestamp;
+            const dateA = safeParseISO(timestampA);
+            const dateB = safeParseISO(timestampB);
+            if (!dateA && !dateB) return 0;
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+            return dateB.getTime() - dateA.getTime();
+        });
 
       const latestEvent = userEvents[0];
-      const userEventsToday = userEvents.filter(event => event.timestamp && isToday(parseISO(event.timestamp)));
+      const userEventsToday = userEvents.filter(event => {
+          if (!event.timestamp) return false;
+          const timestamp = (event.timestamp as any)?.toDate ? (event.timestamp as any).toDate().toISOString() : event.timestamp;
+          const eventDate = safeParseISO(timestamp);
+          return eventDate ? isToday(eventDate) : false;
+      });
 
       let status: EmployeeAttendanceStatus['status'] = 'Away';
       let lastActivityTime: string | undefined;
@@ -115,27 +130,35 @@ export default function AdminLiveAttendancePage() {
 
        const liveEvent = userEventsToday.find(event => event.type === 'check-in' && event.status === 'Checked In');
        if (liveEvent && liveEvent.timestamp) {
-          const checkInDate = parseISO(liveEvent.timestamp);
-           if (isToday(checkInDate)) {
+          const checkInTimestamp = (liveEvent.timestamp as any)?.toDate ? (liveEvent.timestamp as any).toDate().toISOString() : liveEvent.timestamp;
+          const checkInDate = safeParseISO(checkInTimestamp);
+           if (checkInDate && isToday(checkInDate)) {
                const currentSessionDurationMs = todayDate.getTime() - checkInDate.getTime();
                const currentSessionDurationHours = currentSessionDurationMs / (1000 * 60 * 60);
                totalHoursToday += currentSessionDurationHours;
-               liveCheckInTime = liveEvent.timestamp;
+               liveCheckInTime = liveEvent.checkInTime; // Use checkInTime from event as it's already ISO string
            }
        }
       
-      const latestCheckoutEventToday = userEvents.find(event => event.type === 'check-out' && event.workReport);
+      const latestCheckoutEventToday = userEventsToday.find(event => event.type === 'check-out' && event.workReport);
       if(latestCheckoutEventToday) {
           dailyWorkReport = latestCheckoutEventToday.workReport;
       }
 
-
       if (latestEvent) {
-        status = latestEvent.type === 'check-in' ? 'Checked In' : 'Checked Out';
-        lastActivityTime = latestEvent.timestamp;
+        status = latestEvent.status === 'Checked In' ? 'Checked In' : 'Checked Out';
+        if (latestEvent.status !== 'Checked In') {
+            const latestCheckInToday = userEventsToday.find(e => e.status === 'Checked In');
+            if(latestCheckInToday) { // User has checked out, but has a check-in event today
+                 status = 'Checked Out';
+            } else { // User has not checked-in today at all
+                status = 'Away';
+            }
+        }
+
+        lastActivityTime = (latestEvent.timestamp as any)?.toDate ? (latestEvent.timestamp as any).toDate().toISOString() : latestEvent.timestamp;
         isWithinGeofence = latestEvent.isWithinGeofence;
         location = latestEvent.checkInLocation;
-        // If the latest event is a checkout, its work report is the one we want to show
         if (latestEvent.type === 'check-out' && latestEvent.workReport) {
           dailyWorkReport = latestEvent.workReport;
         }
@@ -221,7 +244,10 @@ export default function AdminLiveAttendancePage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {lastActivityTime ? formatDistanceToNow(parseISO(lastActivityTime), { addSuffix: true }) : 'N/A'}
+                    {lastActivityTime ? (() => {
+                        const date = safeParseISO(lastActivityTime);
+                        return date ? formatDistanceToNow(date, { addSuffix: true }) : "Invalid Date";
+                    })() : 'N/A'}
                   </TableCell>
                   <TableCell>
                     {isWithinGeofence === undefined || isWithinGeofence === null ? <Badge variant="outline">N/A</Badge> :

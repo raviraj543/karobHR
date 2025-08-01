@@ -31,7 +31,7 @@ import {
   Link as LinkIcon,
   FileCheck,
 } from 'lucide-react';
-import { useMobile } from '@/hooks/use-mobile';
+import useMobile from '@/hooks/use-mobile';
 
 interface NavItem {
   href: string;

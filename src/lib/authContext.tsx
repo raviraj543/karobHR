@@ -286,33 +286,50 @@ unsubscribers.push(onSnapshot(userAttendanceQuery, (snap) => setUserAttendance(s
         if (!karobUser || !karobUser.companyId) {
             throw new Error("User not authenticated or company not found.");
         }
-
+    
         const attendanceRef = collection(db, `companies/${karobUser.companyId}/attendanceLog`);
-        const q = query(attendanceRef, where('userId', '==', karobUser.id), where('status', '==', 'Checked In'));
+    
+        const q = query(
+            attendanceRef,
+            where('userId', '==', karobUser.id),
+            orderBy('timestamp', 'desc')
+        );
+    
         const querySnapshot = await getDocs(q);
-
-        const isWithinGeofence = companySettings?.officeLocation && companySettings.officeLocation.radius
-            ? calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude) <= companySettings.officeLocation.radius
-            : true; // If no geofence set, always true
-
-        if (querySnapshot.empty) {
-            // No active check-in, create a new one
-            const newDocRef = await addDoc(attendanceRef, {
-                userId: karobUser.id,
-                employeeId: karobUser.employeeId,
-                name: karobUser.name,
-                type: 'check-in',
-                timestamp: Timestamp.now(),
-                checkInTime: new Date().toISOString(),
-                status: 'Checked In',
-                locationCheckIn: location,
-                isWithinGeofence,
-            });
-            return newDocRef.id;
-        } else {
-            throw new Error("Already checked in.");
+        const latestDoc = querySnapshot.docs[0];
+    
+        if (latestDoc && latestDoc.data().status === 'Checked In') {
+            throw new Error("You are already checked in. Please check out before checking in again.");
         }
+    
+        const isWithinGeofence = companySettings?.officeLocation && companySettings.officeLocation.radius
+            ? calculateDistance(
+                location.latitude,
+                location.longitude,
+                companySettings.officeLocation.latitude,
+                companySettings.officeLocation.longitude
+            ) <= companySettings.officeLocation.radius
+            : true;
+    
+        if (!isWithinGeofence) {
+            throw new Error("You are outside the allowed geofence. Please move inside the office premises to check in.");
+        }
+    
+        const newDocRef = await addDoc(attendanceRef, {
+            userId: karobUser.id,
+            employeeId: karobUser.employeeId,
+            name: karobUser.name,
+            type: 'check-in',
+            timestamp: Timestamp.now(),
+            checkInTime: new Date().toISOString(),
+            status: 'Checked In',
+            locationCheckIn: location,
+            isWithinGeofence,
+        });
+    
+        return newDocRef.id;
     };
+    
 
     const completeCheckout = async (docId: string, workReport: string, location: LocationInfo) => {
         if (!karobUser || !karobUser.companyId) {
@@ -325,16 +342,20 @@ unsubscribers.push(onSnapshot(userAttendanceQuery, (snap) => setUserAttendance(s
             throw new Error("No active check-in found for this ID.");
         }
 
+        const isWithinGeofenceCheckout = companySettings?.officeLocation && companySettings.officeLocation.radius
+            ? calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude) <= companySettings.officeLocation.radius
+            : true;
+
+        if (!isWithinGeofenceCheckout) {
+            throw new Error("You are outside the allowed geofence. Please move inside the office premises to check out.");
+        }
+
         const checkInTime = safeParseISO(attendanceDocSnap.data().checkInTime);
         if (!checkInTime) {
             throw new Error("Invalid check-in time recorded.");
         }
         const checkOutTime = new Date();
         const totalHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
-
-        const isWithinGeofenceCheckout = companySettings?.officeLocation && companySettings.officeLocation.radius
-            ? calculateDistance(location.latitude, location.longitude, companySettings.officeLocation.latitude, companySettings.officeLocation.longitude) <= companySettings.officeLocation.radius
-            : true; // If no geofence set, always true
 
         await updateDoc(attendanceDocRef, {
             type: 'check-out',

@@ -45,7 +45,6 @@ export default function AttendancePage() {
       return;
     }
 
-    // This query now correctly and reliably finds the latest event ONLY for the logged-in user.
     const q = query(
       collection(db, `companies/${karobUser.companyId}/attendanceLog`),
       where('userId', '==', user.uid),
@@ -125,11 +124,11 @@ export default function AttendancePage() {
             });
         } else {
             setDistance(null);
-            setIsWithinGeofence(false); // Can't be within a geofence that doesn't exist
+            setIsWithinGeofence(true); 
             toast({
-                variant: 'destructive',
+                variant: 'default',
                 title: "No Geofence Configured",
-                description: "The company office location has not been set by the admin."
+                description: "The company office location has not been set by the admin. Geofence check is not enforced."
             });
         }
     };
@@ -180,25 +179,18 @@ export default function AttendancePage() {
       toast({ title: "Location Needed", description: "Please fetch your location before checking in.", variant: "destructive" });
       return;
     }
-    if (!isWithinGeofence) {
-        toast({ title: "Action Blocked", description: "You cannot check in because you are outside the office geofence.", variant: "destructive" });
-        return;
-    }
-    if (!companySettings || !companySettings.officeLocation) {
-        toast({
-            title: "Missing Geofence Configuration",
-            description: "The company office location is not set up by the admin. Cannot check in.",
-            variant: "destructive"
-        });
-        return;
-    }
-
+    
     setAttendanceStatus('processing-check-in');
     try {
       const newDocId = await addAttendanceEvent(currentLocation);
       if (newDocId) {
         toast({ title: "Check-In Successful!", description: "Your check-in has been recorded." });
-        setCurrentLocation(null); setDistance(null); setLocationStatus('idle'); setIsWithinGeofence(false);
+        setCurrentDayDocId(newDocId); // Set the document ID
+        setAttendanceStatus('checked-in'); // Update status to checked-in
+        setCurrentLocation(null); 
+        setDistance(null); 
+        setLocationStatus('idle'); 
+        setIsWithinGeofence(false);
       }
     } catch (error: any) {
       toast({ title: "Check-In Failed", description: error.message || "Could not record check-in.", variant: "destructive" });
@@ -210,18 +202,6 @@ export default function AttendancePage() {
      if (!currentLocation) {
       toast({ title: "Location Needed", description: "Please fetch your location before checking out.", variant: "destructive" });
       return;
-    }
-    if (!isWithinGeofence) {
-        toast({ title: "Action Blocked", description: "You cannot check out because you are outside the office geofence.", variant: "destructive" });
-        return;
-    }
-    if (!companySettings || !companySettings.officeLocation) {
-        toast({
-            title: "Missing Geofence Configuration",
-            description: "The company office location is not set up by the admin. Cannot check out.",
-            variant: "destructive"
-        });
-        return;
     }
     if (!currentDayDocId) {
        toast({ title: "Not Checked In", description: "You cannot check out because there is no active check-in record found for you.", variant: "destructive" });
@@ -263,8 +243,8 @@ export default function AttendancePage() {
 
                 if (!officeLocation) {
                     return (
-                        <Alert variant="destructive" className="text-center">
-                            <AlertDescription>Location fetched, but no geofence is configured for your account.</AlertDescription>
+                        <Alert variant="default" className="text-center">
+                            <AlertDescription>Location fetched, but no geofence is configured. Check-in/out is allowed.</AlertDescription>
                         </Alert>
                     );
                 }
